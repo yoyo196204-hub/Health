@@ -73,11 +73,37 @@ function watchAct(a) {
     S.meta.watch = last || null; watchPreview = null; save(); toast('Watch data imported'); return render();
   }
 }
+// Data handed over by the Health Sync Android app in the URL fragment: {v:1, d:{date:[steps, deep, light, rem, awake, onset, restingHr]}}.
+// It is treated like any other outside file: size-capped, range-checked, and previewed before anything is saved.
+function hcReceive(b64) {
+  try {
+    if (b64.length > 200000) throw new Error('too large');
+    const bin = atob(b64.replace(/-/g, '+').replace(/_/g, '/'));
+    const data = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))));
+    const f = { name: 'Health Connect', kind: 'health connect', steps: {}, sleep: {}, sleepx: {}, hr: {} }, today = dk(new Date());
+    if (!data || typeof data.d !== 'object' || !data.d) throw new Error('bad shape');
+    for (const k of Object.keys(data.d).slice(0, 400)) {
+      const a = data.d[k];
+      if (!DATE.test(k) || k > today || !Array.isArray(a)) continue;
+      const st = num(a[0], ...LIMITS.steps);
+      if (st != null) f.steps[k] = Math.round(st);
+      const d = num(a[1], 0, 1440) || 0, l = num(a[2], 0, 1440) || 0, r = num(a[3], 0, 1440) || 0, total = d + l + r;
+      if (total >= 30 && total <= 1440) { f.sleep[k] = Math.round(total / 6) / 10; f.sleepx[k] = { d, l, r, w: num(a[4], 0, 1440) || 0, on: num(a[5], -720, 720) }; }
+      const h = num(a[6], ...LIMITS.rhr);
+      if (h != null) f.hr[k] = Math.round(h);
+    }
+    watchPreview = [f];
+  } catch (e) { watchPreview = null; toast('The sync data could not be read'); }
+}
 function vWatch() {
-  const body = watchPreview ? `<ul class="evid">${watchPreview.map(f => `<li><span class="nm">${esc(f.name)}</span><span class="sub">${f.kind ? `${f.kind}: ${span(f.kind === 'steps' ? f.steps : f.kind === 'sleep' ? f.sleep : f.hr)}` : `not recognised${f.note ? ', ' + f.note : ''}`}</span></li>`).join('')}</ul>
+  const n = o => Object.keys(o).length, here = location.origin + location.pathname.replace(/[^/]*$/, '');
+  const sync = `intent://sync?days=30#Intent;scheme=healthsync;package=app.healthsync;S.browser_fallback_url=${encodeURIComponent(here + 'healthsync.apk')};end`;
+  const body = watchPreview ? `<ul class="evid">${watchPreview.map(f => `<li><span class="nm">${esc(f.name)}</span><span class="sub">${f.kind === 'health connect' ? `steps ${n(f.steps)} days · sleep ${n(f.sleep)} nights · resting heart rate ${n(f.hr)} days` : f.kind ? `${f.kind}: ${span(f.kind === 'steps' ? f.steps : f.kind === 'sleep' ? f.sleep : f.hr)}` : `not recognised${f.note ? ', ' + f.note : ''}`}</span></li>`).join('')}</ul>
       <div class="rowb" style="margin-top:12px">${watchPreview.some(f => f.kind) ? '<button class="solid" data-act="wsave">Import</button>' : ''}<button class="ghost" data-act="wcancel">Cancel</button></div>`
     : `<p class="sub">${S.meta.watch ? `Watch data in the app up to ${S.meta.watch}.` : 'No watch data yet.'}</p>
-      <ol class="sub steps"><li>Zepp app → Profile → Settings → Account → Export data. Pick activity, sleep and heart rate.</li><li>Zepp emails a zip and shows a password. Unzip it in your Files app.</li><li>Tap below and select the CSV files together.</li></ol>
-      <button class="solid" data-act="wpick">Choose Zepp files</button><input type="file" id="wfile" accept=".csv,text/csv,text/comma-separated-values" multiple hidden>`;
+      <div class="rowb"><a class="solid link" href="${sync}">Sync from Health Connect</a><a class="ghost link" href="healthsync.apk" download>Get the sync app</a></div>
+      <ol class="sub steps"><li>Once: tap “Get the sync app”, open the download and install Health Sync.</li><li>Once: in Zepp, Profile → Health Connect (under third-party or app settings). Allow steps, sleep and heart rate.</li><li>Then tap Sync whenever you want fresh data. It reads 30 days and returns here.</li></ol>
+      <details class="inner"><summary>Or import a Zepp export</summary><ol class="sub steps"><li>Zepp app → Profile → Settings → Account → Export data. Pick activity, sleep and heart rate.</li><li>Zepp emails a zip and shows a password. Unzip it in your Files app.</li><li>Tap below and select the CSV files together.</li></ol>
+      <button class="ghost" data-act="wpick">Choose Zepp files</button></details><input type="file" id="wfile" accept=".csv,text/csv,text/comma-separated-values" multiple hidden>`;
   return `<section class="block"><h2>Amazfit data</h2>${body}</section>`;
 }

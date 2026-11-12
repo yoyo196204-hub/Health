@@ -1,5 +1,5 @@
 // Network first, so updates show up immediately; cache is the offline fallback.
-const CACHE = 'health-v3';
+const CACHE = 'health-v4';
 const SHELL = ['./', 'index.html', 'styles.css', 'data.js', 'store.js', 'heart.js', 'review.js', 'watch.js', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -13,7 +13,7 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     fetch(e.request)
       .then(r => {
-        if (!r.ok || new URL(e.request.url).origin !== location.origin) return r;
+        if (!r.ok || new URL(e.request.url).origin !== location.origin || e.request.url.endsWith('.apk')) return r;
         const copy = r.clone();
         caches.open(CACHE).then(c => c.put(e.request, copy));
         return r;

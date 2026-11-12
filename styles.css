@@ -163,3 +163,7 @@ td:first-child { font-size: 14.5px; padding-right: 10px; }
 .banner { padding: 10px 12px; border: 1px solid var(--alarm); border-radius: 10px; }
 ol.steps { padding-left: 18px; margin: 8px 0 14px; }
 ol.steps li { margin-bottom: 4px; }
+a.link { text-decoration: none; display: inline-block; margin: 0; }
+a.solid.link { color: var(--bg); }
+details.inner { border: 0; padding: 6px 0 0; }
+details.inner summary { font: 400 14px system-ui, sans-serif; color: var(--soft); text-decoration: underline dotted; }

@@ -263,6 +263,7 @@ function render() {
   document.querySelectorAll('#tabs a').forEach(a => a.classList.toggle('on', a.hash === '#' + tab));
 }
 function route() {
+  if (location.hash.startsWith('#sync=')) { hcReceive(location.hash.slice(6)); history.replaceState(null, '', '#me'); }
   const [a, b] = (location.hash.slice(1) || 'today').split('-');
   const was = overlay;
   if (a === 'add' || a === 'why') overlay = { type: a, key: b };
