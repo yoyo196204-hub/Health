@@ -1,6 +1,8 @@
-// Network first, so updates show up immediately; cache is the offline fallback.
-const CACHE = 'health-v4';
-const SHELL = ['./', 'index.html', 'styles.css', 'data.js', 'store.js', 'heart.js', 'review.js', 'watch.js', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+// Network first, so updates show up immediately; the cache is the offline fallback.
+// The Android app bundles these files itself and does not use this worker.
+const CACHE = 'health-v5';
+const SHELL = ['./', 'index.html', 'styles.css', 'lib.js', 'data.js', 'store.js', 'model.js', 'native.js', 'ui.js', 'h9.js', 'watch.js',
+  'view-today.js', 'view-train.js', 'view-recovery.js', 'view-review.js', 'view-me.js', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -1,4 +1,9 @@
 .gradle/
 build/
+app/build/
 local.properties
 *.jks
+*.p12
+*.keystore
+# Web files are copied in from the repository root at build time.
+app/src/main/assets/www/

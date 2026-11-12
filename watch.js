@@ -1,11 +1,11 @@
 'use strict';
-// Amazfit / Zepp data arrives as the CSV files from the Zepp app's own "Export data".
-// Files are recognised by their column names, not their file names, and only daily
-// summaries are kept: steps, sleep stages and bedtime, and a resting heart-rate estimate.
+// Amazfit / Zepp data from the CSV files of the Zepp app's own "Export data": the fallback when Health Connect
+// is not available. Files are recognised by their column names, reduced to daily figures, previewed, then
+// merged exactly like a Health Connect sync.
 let watchPreview = null;
 
 function csvRows(text) {
-  const lines = text.replace(/^﻿/, '').split(/\r?\n/);
+  const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim());
   const head = (lines.shift() || '').split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
   return { head, lines };
 }
@@ -16,24 +16,31 @@ function when(v) {
   return isNaN(d) ? null : d;
 }
 function parseWatch(name, text) {
-  const { head, lines } = csvRows(text), col = n => head.indexOf(n), out = { name, kind: null, steps: {}, sleep: {}, sleepx: {}, hr: {} };
-  const iDate = col('date');
+  const { head, lines } = csvRows(text), col = n => head.indexOf(n), days = {}, out = { name, kind: null, P: { days } };
+  const iDate = col('date'), day = k => (days[k] ||= {});
   if (col('steps') >= 0 && iDate >= 0 && col('time') < 0) {
     out.kind = 'steps';
-    const iS = col('steps');
-    for (const l of lines) { const c = l.split(','), s = num(c[iS], ...LIMITS.steps); if (DATE.test(c[iDate]) && s != null) out.steps[c[iDate]] = Math.round(s); }
-  } else if (col('deepsleeptime') >= 0 && iDate >= 0) {
-    out.kind = 'sleep';
-    const iD = col('deepsleeptime'), iL = col('shallowsleeptime'), iR = col('remtime'), iW = col('waketime'), iOn = col('start');
+    const iS = col('steps'), iDi = col('distance'), iC = col('calories');
     for (const l of lines) {
       const c = l.split(','), k = c[iDate];
-      const d = num(c[iD], 0, 1440) || 0, li = num(c[iL], 0, 1440) || 0, r = num(c[iR], 0, 1440) || 0, total = d + li + r;
-      if (!DATE.test(k) || total < 30 || total > 1440) continue;
-      const on = iOn >= 0 ? when(c[iOn]) : null;
+      if (!DATE.test(k)) continue;
+      const s = num(c[iS], ...LIMITS.steps); if (s != null) day(k).st = Math.round(s);
+      if (iDi >= 0 && num(c[iDi], 0, 200000) != null) day(k).di = +c[iDi];
+      if (iC >= 0 && num(c[iC], 0, 10000) != null) day(k).ak = +c[iC];
+    }
+  } else if (col('deepsleeptime') >= 0 && iDate >= 0) {
+    out.kind = 'sleep';
+    const iD = col('deepsleeptime'), iL = col('shallowsleeptime'), iR = col('remtime'), iW = col('waketime'), iOn = col('start'), iOff = col('stop');
+    for (const l of lines) {
+      const c = l.split(','), k = c[iDate];
+      const d = num(c[iD], 0, 1440) || 0, li = num(c[iL], 0, 1440) || 0, r = num(c[iR], 0, 1440) || 0;
+      if (!DATE.test(k) || d + li + r < 30) continue;
+      const on = iOn >= 0 ? when(c[iOn]) : null, off = iOff >= 0 ? when(c[iOff]) : null;
       let m = on ? on.getHours() * 60 + on.getMinutes() : null;
-      if (m != null && m > 720) m -= 1440; // minutes from midnight; before midnight is negative
-      out.sleep[k] = Math.round(total / 6) / 10;
-      out.sleepx[k] = { d, l: li, r, w: num(c[iW], 0, 1440) || 0, on: m };
+      if (m != null && m > 720) m -= 1440;   // minutes from midnight; the evening before is negative
+      const sl = { d, l: li, r, w: num(c[iW], 0, 1440) || 0, on: m };
+      if (on && off && off > on) sl.bed = Math.round((off - on) / 6e4);
+      day(k).sl = sl;
     }
   } else if (col('heartrate') >= 0 && col('time') >= 0) {
     out.kind = 'heart rate';
@@ -45,9 +52,10 @@ function parseWatch(name, text) {
       if (!k) { const d = when(c[iT]); k = d ? dk(d) : null; }
       if (k && DATE.test(k)) (byDay[k] ||= []).push(h);
     }
-    // Resting estimate: the 5th percentile of the day's readings, which sits in deep sleep or quiet rest.
-    for (const k in byDay) if (byDay[k].length >= 30) { const a = byDay[k].sort((x, y) => x - y); out.hr[k] = a[Math.floor(a.length * 0.05)]; }
+    // Resting estimate: the 5th percentile of the day's readings, which falls in sleep or quiet rest.
+    for (const k in byDay) if (byDay[k].length >= 30) day(k).rp = Math.round(quantile(byDay[k], 0.05));
   }
+  out.counts = countDays(days);
   return out;
 }
 async function watchRead(files) {
@@ -59,51 +67,21 @@ async function watchRead(files) {
   watchPreview = found;
   render();
 }
-function span(o) { const k = Object.keys(o).sort(); return k.length ? `${k.length} days, ${k[0]} to ${k[k.length - 1]}` : 'no usable rows'; }
 function watchAct(a) {
   if (a === 'wpick') return $('#wfile').click();
   if (a === 'wcancel') { watchPreview = null; return render(); }
   if (a === 'wsave') {
-    let last = S.meta.watch || '';
-    for (const f of watchPreview) {
-      if (!f.kind) continue;
-      Object.assign(S.steps, f.steps); Object.assign(S.sleep, f.sleep); Object.assign(S.sleepx, f.sleepx); Object.assign(S.rhr, f.hr);
-      for (const k of [...Object.keys(f.steps), ...Object.keys(f.sleep), ...Object.keys(f.hr)]) if (k > last && k <= dk(new Date())) last = k;
-    }
-    S.meta.watch = last || null; watchPreview = null; save(); toast('Watch data imported'); return render();
+    const days = {};
+    for (const f of watchPreview) if (f.kind) for (const [k, d] of Object.entries(f.P.days)) Object.assign(days[k] ||= {}, d);
+    const got = mergeSync({ days });
+    watchPreview = null; save();
+    toast(`Imported ${plural(got.days, 'day')}`);
+    return render();
   }
 }
-// Data handed over by the Health Sync Android app in the URL fragment: {v:1, d:{date:[steps, deep, light, rem, awake, onset, restingHr]}}.
-// It is treated like any other outside file: size-capped, range-checked, and previewed before anything is saved.
-function hcReceive(b64) {
-  try {
-    if (b64.length > 200000) throw new Error('too large');
-    const bin = atob(b64.replace(/-/g, '+').replace(/_/g, '/'));
-    const data = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))));
-    const f = { name: 'Health Connect', kind: 'health connect', steps: {}, sleep: {}, sleepx: {}, hr: {} }, today = dk(new Date());
-    if (!data || typeof data.d !== 'object' || !data.d) throw new Error('bad shape');
-    for (const k of Object.keys(data.d).slice(0, 400)) {
-      const a = data.d[k];
-      if (!DATE.test(k) || k > today || !Array.isArray(a)) continue;
-      const st = num(a[0], ...LIMITS.steps);
-      if (st != null) f.steps[k] = Math.round(st);
-      const d = num(a[1], 0, 1440) || 0, l = num(a[2], 0, 1440) || 0, r = num(a[3], 0, 1440) || 0, total = d + l + r;
-      if (total >= 30 && total <= 1440) { f.sleep[k] = Math.round(total / 6) / 10; f.sleepx[k] = { d, l, r, w: num(a[4], 0, 1440) || 0, on: num(a[5], -720, 720) }; }
-      const h = num(a[6], ...LIMITS.rhr);
-      if (h != null) f.hr[k] = Math.round(h);
-    }
-    watchPreview = [f];
-  } catch (e) { watchPreview = null; toast('The sync data could not be read'); }
-}
-function vWatch() {
-  const n = o => Object.keys(o).length, here = location.origin + location.pathname.replace(/[^/]*$/, '');
-  const sync = `intent://sync?days=30#Intent;scheme=healthsync;package=app.healthsync;S.browser_fallback_url=${encodeURIComponent(here + 'healthsync.apk')};end`;
-  const body = watchPreview ? `<ul class="evid">${watchPreview.map(f => `<li><span class="nm">${esc(f.name)}</span><span class="sub">${f.kind === 'health connect' ? `steps ${n(f.steps)} days · sleep ${n(f.sleep)} nights · resting heart rate ${n(f.hr)} days` : f.kind ? `${f.kind}: ${span(f.kind === 'steps' ? f.steps : f.kind === 'sleep' ? f.sleep : f.hr)}` : `not recognised${f.note ? ', ' + f.note : ''}`}</span></li>`).join('')}</ul>
-      <div class="rowb" style="margin-top:12px">${watchPreview.some(f => f.kind) ? '<button class="solid" data-act="wsave">Import</button>' : ''}<button class="ghost" data-act="wcancel">Cancel</button></div>`
-    : `<p class="sub">${S.meta.watch ? `Watch data in the app up to ${S.meta.watch}.` : 'No watch data yet.'}</p>
-      <div class="rowb"><a class="solid link" href="${sync}">Sync from Health Connect</a><a class="ghost link" href="healthsync.apk" download>Get the sync app</a></div>
-      <ol class="sub steps"><li>Once: tap “Get the sync app”, open the download and install Health Sync.</li><li>Once: in Zepp, Profile → Health Connect (under third-party or app settings). Allow steps, sleep and heart rate.</li><li>Then tap Sync whenever you want fresh data. It reads 30 days and returns here.</li></ol>
-      <details class="inner"><summary>Or import a Zepp export</summary><ol class="sub steps"><li>Zepp app → Profile → Settings → Account → Export data. Pick activity, sleep and heart rate.</li><li>Zepp emails a zip and shows a password. Unzip it in your Files app.</li><li>Tap below and select the CSV files together.</li></ol>
-      <button class="ghost" data-act="wpick">Choose Zepp files</button></details><input type="file" id="wfile" accept=".csv,text/csv,text/comma-separated-values" multiple hidden>`;
-  return `<section class="block"><h2>Amazfit data</h2>${body}</section>`;
+function watchPreviewBlock() {
+  const span = d => { const k = Object.keys(d).sort(); return k.length ? `${k.length} days, ${dateLabel(k[0])} to ${dateLabel(k[k.length - 1])}` : 'no usable rows'; };
+  return `<ul class="list">${watchPreview.map(f => `<li><span class="nm">${esc(f.name)}</span><span class="sub">${f.kind === 'health connect' ? `steps ${f.counts.steps} days · sleep ${f.counts.sleep} nights · resting heart rate ${f.counts.hr} days` : f.kind ? `${f.kind}: ${span(f.P.days)}` : `not recognised${f.note ? ', ' + f.note : ''}`}</span></li>`).join('')}</ul>
+    <p class="sub">Days you typed in yourself are kept as they are.</p>
+    <div class="rowb">${watchPreview.some(f => f.kind) ? '<button class="solid" data-act="wsave">Import</button>' : ''}<button class="ghost" data-act="wcancel">Cancel</button></div>`;
 }
