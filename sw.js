@@ -1,6 +1,6 @@
 // Network first, so updates show up immediately; cache is the offline fallback.
-const CACHE = 'health-v1';
-const SHELL = ['./', 'index.html', 'styles.css', 'foods.js', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const CACHE = 'health-v2';
+const SHELL = ['./', 'index.html', 'styles.css', 'data.js', 'heart.js', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

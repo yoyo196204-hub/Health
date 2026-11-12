@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0f766e">
+<meta name="theme-color" content="#f5efe3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14110d" media="(prefers-color-scheme: dark)">
 <title>Health</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
@@ -12,15 +13,17 @@
 </head>
 <body>
 <main id="view"></main>
+<div id="sheet"></div>
 <nav id="tabs">
-  <button data-tab="today">Today</button>
-  <button data-tab="food">Food</button>
-  <button data-tab="train">Train</button>
-  <button data-tab="trend">Trend</button>
-  <button data-tab="me">Me</button>
+  <a href="#today"><svg viewBox="0 0 24 24"><path d="M4 17a8 8 0 0 1 16 0"/><path d="M12 17l4-5"/></svg>Today</a>
+  <a href="#train"><svg viewBox="0 0 24 24"><path d="M3 12h18M6 8v8M18 8v8M3.5 10v4M20.5 10v4"/></svg>Train</a>
+  <a href="#heart"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/></svg>Heart</a>
+  <a href="#trend"><svg viewBox="0 0 24 24"><path d="M4 7l5 5 4-3 7 8"/><path d="M4 20h16"/></svg>Trend</a>
+  <a href="#me"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Me</a>
 </nav>
 <div id="toast"></div>
-<script src="foods.js"></script>
+<script src="data.js"></script>
+<script src="heart.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
