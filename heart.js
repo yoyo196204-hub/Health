@@ -30,7 +30,7 @@ async function hrConnect() {
     await ch.startNotifications();
     Object.assign(HR, { dev, msg: '' });
   } catch (e) {
-    HR.msg = e.name === 'NotFoundError' ? '' : `Could not connect: ${e.message}`;
+    HR.msg = e.name === 'NotFoundError' ? '' : `Could not connect: ${esc(e.message)}`;
   }
   render();
 }
@@ -97,8 +97,8 @@ function hrMorningDone() {
   hrEnd(); render();
 }
 // Today against the rolling baseline of up to 7 earlier readings, on the log scale.
-function readiness() {
-  const today = dk(new Date()), now = S.hrv[today];
+function readiness(today = dk(new Date())) {
+  const now = S.hrv[today];
   const prev = Object.keys(S.hrv).filter(k => k < today).sort().slice(-7).map(k => Math.log(S.hrv[k].rmssd));
   if (!now) return { now: null, n: prev.length };
   if (prev.length < 5) return { now, n: prev.length };

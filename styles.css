@@ -141,3 +141,25 @@ tr.strong td:last-child { color: var(--haldi); font-size: 20px; }
 #tabs a.on svg { stroke: var(--haldi); stroke-width: 2.1; }
 #toast { position: fixed; left: 50%; bottom: 110px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 18px; border-radius: 999px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 9; white-space: nowrap; }
 #toast.show { opacity: 1; }
+
+/* Review */
+.block.first { padding-top: 6px; }
+.mx { display: grid; grid-template-columns: minmax(74px, 1.5fr) repeat(7, 1fr) 46px; gap: 5px 4px; align-items: center; }
+.mx .dh { text-align: center; font-size: 11px; color: var(--soft); letter-spacing: .06em; text-transform: uppercase; }
+.mx .rl { font-weight: 600; font-size: 14px; text-decoration: none; line-height: 1.15; }
+.mx .rl i { display: block; font: 400 11.5px system-ui, sans-serif; color: var(--soft); }
+.c { display: grid; place-items: center; height: 32px; border-radius: 7px; background: var(--track); font: 600 11px system-ui, sans-serif; font-style: normal; font-variant-numeric: tabular-nums; color: var(--ink); }
+.c.s2 { background: var(--leaf); color: var(--bg); }
+.c.s1 { background: color-mix(in srgb, var(--haldi) 45%, var(--track)); }
+.c.s0 { background: var(--alarm); color: var(--bg); }
+.mx .av { text-align: right; font: 600 15px var(--serif); }
+.key { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--soft); margin: 12px 0 0; }
+.key .c { width: 14px; height: 14px; border-radius: 4px; margin-left: 8px; }
+.key .c:first-child { margin-left: 0; }
+.dec a { display: block; padding: 11px 0 11px 12px; border-left: 3px solid var(--haldi); margin-top: 10px; text-decoration: none; }
+.dec .sig { display: block; font: 600 16px var(--serif); }
+.dec .act { display: block; color: var(--soft); font-size: 14.5px; }
+td:first-child { font-size: 14.5px; padding-right: 10px; }
+.banner { padding: 10px 12px; border: 1px solid var(--alarm); border-radius: 10px; }
+ol.steps { padding-left: 18px; margin: 8px 0 14px; }
+ol.steps li { margin-bottom: 4px; }

@@ -1,22 +1,10 @@
 'use strict';
 
 // ---------- state ----------
-const KEY = 'health.v1';
-const BLANK = { profile: null, weights: {}, waist: {}, food: {}, steps: {}, sleep: {}, lifts: {}, prehab: {}, custom: [], freq: {}, hrv: {}, cardio: {} };
 let S = load();
 let tab = 'today', overlay = null;
 let day = dk(new Date());
 let trainDay = null, cat = 'usual', query = '', installEvt = null;
-
-function load() {
-  let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { /* start fresh */ }
-  const s = Object.assign(JSON.parse(JSON.stringify(BLANK)), saved);
-  s.profile = Object.assign({}, ME, s.profile || {});
-  for (const k in s.food) for (const e of s.food[k]) e.m ||= 'lunch';
-  return s;
-}
-function save() { localStorage.setItem(KEY, JSON.stringify(S)); }
 
 // ---------- helpers ----------
 const $ = s => document.querySelector(s);
@@ -83,7 +71,7 @@ function targets() {
   const ref = 25 * (p.h / 100) ** 2;
   const adj = wt > ref ? ref + 0.25 * (wt - ref) : wt;
   return {
-    wt, bmr, tdee, measured, loggedDays: logged.length, deficit, kcal, adj, slope: sl,
+    wt, bmr, formula, tdee, measured, loggedDays: logged.length, deficit, kcal, adj, slope: sl,
     protein: Math.round(1.6 * adj / 5) * 5,
     fibre: Math.max(30, Math.round(15 * kcal / 1000)),
     stepGoal: Math.min(8000, Math.max(3000, Math.round((steps + 1000) / 500) * 500)),
@@ -220,37 +208,6 @@ function vTrain() {
     <p class="note">Grey numbers are your last session. Stop each set 1–3 reps short of failure. ${why('lift', 'Why this plan')}</p>`;
 }
 
-// ---------- trend ----------
-function chart(ser) {
-  if (ser.length < 2) return '<p class="sub">Weigh in on two mornings and the trend line starts here.</p>';
-  const W = 340, H = 170, P = 30;
-  const xs = ser.map(s => Date.parse(s.k)), ys = ser.flatMap(s => [s.w, s.t]);
-  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.floor(Math.min(...ys) - 0.5), y1 = Math.ceil(Math.max(...ys) + 0.5);
-  const X = x => P + (x - x0) / (x1 - x0 || 1) * (W - P - 8), Y = y => H - 14 - (y - y0) / (y1 - y0) * (H - 26);
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}">${[y0, (y0 + y1) / 2, y1].map(y => `<line x1="${P}" x2="${W - 8}" y1="${Y(y)}" y2="${Y(y)}"/><text x="0" y="${Y(y) + 4}">${r1(y)}</text>`).join('')}
-    ${ser.map((s, i) => `<circle cx="${X(xs[i]).toFixed(1)}" cy="${Y(s.w).toFixed(1)}" r="2.5"/>`).join('')}
-    <path d="${ser.map((s, i) => `${i ? 'L' : 'M'}${X(xs[i]).toFixed(1)},${Y(s.t).toFixed(1)}`).join('')}"/></svg>`;
-}
-function vTrend() {
-  const T = targets(), p = S.profile, wk = T.slope == null ? null : T.slope * 7;
-  const waist = latest(S.waist) ?? p.waist0, week = lastDays(7);
-  const kc = week.map(k => totals(k)).filter(t => t.k >= 1000);
-  const avg = obj => { const v = week.map(k => obj[k]).filter(x => x != null); return v.length ? mean(v) : null; };
-  const st = avg(S.steps), sl = avg(S.sleep), cut = p.sex === 'm' ? 90 : 80;
-  const stat = (v, label) => `<div><b class="num">${v}</b><span class="sub">${label}</span></div>`;
-  return `<header class="top left"><div><div class="eyebrow">Started at ${p.w0} kg, ${p.waist0} cm waist</div><h1>Trend</h1></div></header>
-    <section class="block">${chart(series())}
-      <div class="stats">${stat(r1(T.wt), 'trend, kg')}${stat(wk == null ? '–' : (wk > 0 ? '+' : '') + wk.toFixed(2), 'kg a week')}${stat(r1(T.bmi), 'BMI')}</div>
-      ${wk == null ? `<p class="sub">Weekly rate needs 6 weigh-ins across 2 weeks. Weigh on waking, after the toilet. ${why('rate', 'Why slow')}</p>`
-      : wk < -0.01 * T.wt ? `<p class="flag">Dropping faster than 1% a week. Eat a little more to protect muscle. ${why('rate', 'Why')}</p>` : ''}</section>
-    <section class="block"><div class="mh"><h2>Waist</h2>${why('waist', 'Why it leads')}</div>
-      <div class="stats">${stat(waist, 'cm, latest')}${stat((waist / p.h).toFixed(2), 'waist ÷ height')}${stat(`${Math.max(0, r1(waist - cut))}`, `cm above ${cut}`)}</div>
-      <label class="line">This week, at the navel<span><input type="number" inputmode="decimal" step="0.5" data-log="waist" value="${S.waist[day] ?? ''}" placeholder="${waist}"><i>cm</i></span></label></section>
-    <section class="block"><div class="mh"><h2>Last 7 days</h2><span class="sub">daily average</span></div>
-      <div class="stats four">${stat(kc.length ? Math.round(mean(kc.map(t => t.k))) : '–', `kcal of ${T.kcal}`)}${stat(kc.length ? Math.round(mean(kc.map(t => t.p))) : '–', `g protein of ${T.protein}`)}
-        ${stat(st == null ? '–' : Math.round(st), `steps of ${T.stepGoal}`)}${stat(sl == null ? '–' : r1(sl), 'h sleep of 7–9')}</div></section>`;
-}
-
 // ---------- me ----------
 function vMe() {
   const p = S.profile, T = targets();
@@ -268,6 +225,7 @@ function vMe() {
       <tr><td>${why('fibre', 'Fibre')}</td><td>${T.fibre} g</td></tr>
       <tr><td>${why('waist', 'BMI, Indian cut-offs')}</td><td>${r1(T.bmi)}, ${cls}</td></tr></table></section>
     <section class="block"><h2>The evidence</h2><ul class="evid">${Object.entries(EVID).map(([k, e]) => `<li><a href="#why-${k}"><span class="nm">${e.t}</span><span class="sub">${e.g}</span></a></li>`).join('')}</ul></section>
+    ${vWatch()}
     <details><summary>Settings</summary><div class="fgrid">
       <label>Sex<select id="p_sex"><option value="m" ${p.sex === 'm' ? 'selected' : ''}>Male</option><option value="f" ${p.sex === 'f' ? 'selected' : ''}>Female</option></select></label>
       <label>Height, cm<input id="p_h" type="number" inputmode="decimal" value="${p.h}"></label>
@@ -275,7 +233,7 @@ function vMe() {
       <label>Equipment<select id="p_equip"><option value="gym" ${p.equip === 'gym' ? 'selected' : ''}>Gym</option><option value="home" ${p.equip === 'home' ? 'selected' : ''}>Dumbbells</option></select></label></div>
       <label class="check"><input type="checkbox" id="p_sh" ${p.shoulder ? 'checked' : ''}><span>Daily shoulder routine</span></label>
       <button class="solid" data-act="profile">Save</button></details>
-    <details><summary>Backup</summary><p class="sub">Everything lives in this browser on this device. Export before changing phones.</p>
+    <details><summary>Backup</summary><p class="sub">Everything lives in this browser on this device, with an automatic copy of the previous day. ${S.meta.exported ? `Last export ${S.meta.exported}.` : 'Never exported.'} Export before changing phones.</p>
       <div class="rowb"><button class="ghost" data-act="export">Export</button><button class="ghost" data-act="import">Import</button><input type="file" id="imp" accept="application/json" hidden></div></details>`;
 }
 
@@ -288,11 +246,19 @@ function vWhy(key) {
 }
 
 // ---------- routing and events ----------
-const VIEWS = { today: vToday, train: vTrain, heart: () => vHeart(), trend: vTrend, me: vMe };
+const VIEWS = { today: vToday, train: vTrain, heart: () => vHeart(), trend: () => vReview(), me: vMe };
+// A failure in one screen must never blank the app or touch stored data.
 function render() {
-  const adding = overlay?.type === 'add';
-  $('#view').innerHTML = adding ? vAdd(overlay.key) : VIEWS[tab]();
-  $('#sheet').innerHTML = overlay?.type === 'why' ? vWhy(overlay.key) : '';
+  const adding = overlay?.type === 'add' && MEALS.some(m => m[0] === overlay.key);
+  try {
+    $('#view').innerHTML = (loadNote ? `<p class="flag banner">${loadNote}</p>` : '') + (adding ? vAdd(overlay.key) : VIEWS[tab]());
+    $('#sheet').innerHTML = overlay?.type === 'why' ? vWhy(overlay.key) : '';
+  } catch (err) {
+    console.error(err);
+    $('#sheet').innerHTML = '';
+    $('#view').innerHTML = `<header class="top left"><div><div class="eyebrow">Your data is untouched</div><h1>This screen failed</h1></div></header>
+      <p class="sub">${esc(err.message)}</p><div class="rowb"><button class="solid" data-act="export">Export backup</button><a class="ghost" href="#today" style="margin:0;text-decoration:none">Go to Today</a></div>`;
+  }
   document.body.classList.toggle('adding', adding);
   document.querySelectorAll('#tabs a').forEach(a => a.classList.toggle('on', a.hash === '#' + tab));
 }
@@ -319,19 +285,20 @@ document.addEventListener('click', e => {
   if (a === 'thali') { const [name, parts] = THALI[+el.dataset.i]; for (const [id, n] of parts) bump(m, food(id), n); toast(`${name} added`); return refreshAdd(); }
   if (a === 'cat') { cat = el.dataset.c; query = ''; return render(); }
   if (a === 'custom') {
-    const n = $('#c_n').value.trim(), k = parseFloat($('#c_k').value);
-    if (!n || !(k >= 0)) return toast('Name and kcal are needed');
-    const f = { id: 'x' + Date.now(), n, u: $('#c_u').value.trim() || '1 serving', k, p: parseFloat($('#c_p').value) || 0, fb: parseFloat($('#c_fb').value) || 0, cat: 'mine' };
+    const f = cleanFood({ id: 'x' + Date.now(), n: $('#c_n').value, u: $('#c_u').value.trim(), k: $('#c_k').value, p: $('#c_p').value, fb: $('#c_fb').value, cat: 'mine' }, false);
+    if (!f) return toast('Name and kcal are needed');
+    if (S.custom.length >= 300) return toast('Limit of 300 own foods reached');
     S.custom.push(f); bump(m, f, 1); return render();
   }
   if (a === 'copy') { for (const x of S.food[shift(day, -1)].filter(x => x.m === m)) (S.food[day] ||= []).push({ ...x }); }
   else if (a === 'day') { day = shift(day, +el.dataset.d); trainDay = null; }
   else if (a === 'tday') trainDay = el.dataset.d;
-  else if (a === 'profile') { Object.assign(S.profile, { sex: $('#p_sex').value, h: parseFloat($('#p_h').value) || S.profile.h, days: +$('#p_days').value, equip: $('#p_equip').value, shoulder: $('#p_sh').checked }); toast('Saved'); }
+  else if (a === 'profile') { Object.assign(S.profile, { sex: $('#p_sex').value, h: num($('#p_h').value, 120, 230) ?? S.profile.h, days: +$('#p_days').value, equip: $('#p_equip').value, shoulder: $('#p_sh').checked }); toast('Saved'); }
   else if (a === 'install') { installEvt.prompt(); installEvt = null; }
-  else if (a === 'export') { const url = URL.createObjectURL(new Blob([JSON.stringify(S)], { type: 'application/json' })); Object.assign(document.createElement('a'), { href: url, download: `health-${dk(new Date())}.json` }).click(); return; }
+  else if (a === 'export') { S.meta.exported = dk(new Date()); save(); const url = URL.createObjectURL(new Blob([JSON.stringify(S)], { type: 'application/json' })); Object.assign(document.createElement('a'), { href: url, download: `health-${dk(new Date())}.json` }).click(); return; }
   else if (a === 'import') return $('#imp').click();
   else if (a.startsWith('hr')) return hrAct(a);
+  else if (a.startsWith('w')) return watchAct(a);
   save(); render();
 });
 
@@ -342,20 +309,33 @@ document.addEventListener('input', e => {
 // Saved without re-rendering, so the keyboard and focus stay put between fields.
 document.addEventListener('change', e => {
   const el = e.target, v = parseFloat(el.value);
-  if (el.dataset.log) { if (v > 0) S[el.dataset.log][day] = v; else delete S[el.dataset.log][day]; save(); }
+  if (el.dataset.log) {
+    const ok = num(el.value, ...LIMITS[el.dataset.log]);
+    if (ok != null) S[el.dataset.log][day] = ok;
+    else { delete S[el.dataset.log][day]; if (el.value !== '') { el.value = ''; toast('That value is out of range'); } }
+    save();
+  }
   else if (el.dataset.lift) {
     const entry = S.lifts[day] ||= { day: trainDay || nextDay(), ex: {} };
     const s = (entry.ex[el.dataset.lift] ||= [])[+el.dataset.set] ||= [null, null];
-    s[+el.dataset.f] = isNaN(v) ? null : v; save();
+    s[+el.dataset.f] = num(el.value, 0, +el.dataset.f ? 600 : 500); save();
   }
   else if (el.dataset.act === 'prehab') { if (el.checked) S.prehab[day] = true; else delete S.prehab[day]; save(); }
+  else if (el.id === 'wfile' && el.files.length) watchRead(el.files);
   else if (el.id === 'imp' && el.files[0]) el.files[0].text().then(txt => {
+    if (el.files[0].size > 20e6) throw new Error('too large');
     const data = JSON.parse(txt);
-    if (!data.weights || !data.food) throw new Error('bad file');
+    if (!data || typeof data !== 'object' || !data.profile || !data.food) throw new Error('bad file');
     if (!confirm('Replace everything on this device with this backup?')) return;
-    localStorage.setItem(KEY, JSON.stringify(data)); S = load(); render(); toast('Imported');
+    S = sanitize(data); save(); render(); toast('Imported');
   }).catch(() => toast('That file is not a Health backup'));
 });
 
+// Another tab changed the data: reload it rather than overwrite it.
+addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } });
+addEventListener('error', () => toast('Something went wrong. Your data is safe.'));
+addEventListener('unhandledrejection', () => toast('Something went wrong. Your data is safe.'));
+dailyBackup();
+navigator.storage?.persist?.().catch(() => {});
 route();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');
