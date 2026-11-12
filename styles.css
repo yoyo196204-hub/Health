@@ -1,0 +1,79 @@
+:root {
+  --bg: #f4f6f5; --card: #ffffff; --text: #14201d; --muted: #5f6f6a;
+  --line: #dde4e1; --accent: #0f766e; --accent-soft: #d6efeb;
+  --warn: #b45309; --bad: #b91c1c; --track: #e6ecea;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1513; --card: #18211f; --text: #e6efec; --muted: #93a39e;
+    --line: #2a3633; --accent: #2dd4bf; --accent-soft: #123f3a;
+    --warn: #fbbf24; --bad: #f87171; --track: #25302d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding-bottom: calc(72px + env(safe-area-inset-bottom));
+}
+main { max-width: 640px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 22px; margin: 4px 0 12px; }
+h2 { font-size: 15px; margin: 0 0 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+p { margin: 0 0 8px; }
+.muted { color: var(--muted); font-size: 14px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+.row { display: flex; align-items: center; gap: 10px; }
+.row.between { justify-content: space-between; }
+.grow { flex: 1; min-width: 0; }
+.big { font-size: 30px; font-weight: 700; line-height: 1.1; }
+.bar { height: 10px; background: var(--track); border-radius: 6px; overflow: hidden; margin: 6px 0 12px; }
+.bar > i { display: block; height: 100%; background: var(--accent); border-radius: 6px; }
+.bar > i.over { background: var(--bad); }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+input, select {
+  width: 100%; padding: 10px; font: inherit; color: var(--text);
+  background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+}
+input[type=checkbox] { width: 20px; height: 20px; flex: none; accent-color: var(--accent); }
+button {
+  font: inherit; color: var(--text); background: var(--card);
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; cursor: pointer;
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+@media (prefers-color-scheme: dark) { button.primary { color: #04201c; } }
+button.small { padding: 4px 10px; min-width: 36px; }
+button.chip { border-radius: 999px; padding: 6px 14px; }
+button.chip.on { background: var(--accent-soft); border-color: var(--accent); }
+.list > div { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.list > div:last-child { border-bottom: 0; }
+.food { cursor: pointer; }
+.name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stat { text-align: center; }
+.stat b { display: block; font-size: 20px; }
+.tag { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); }
+.tag.warn { background: transparent; border: 1px solid var(--warn); color: var(--warn); }
+.sets { display: grid; grid-template-columns: 28px 1fr 1fr; gap: 6px; align-items: center; margin-top: 8px; }
+.sets span { color: var(--muted); font-size: 13px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+td { padding: 6px 0; border-bottom: 1px solid var(--line); }
+td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+details summary { cursor: pointer; font-weight: 600; }
+details ol { padding-left: 20px; font-size: 14px; color: var(--muted); }
+svg.chart { width: 100%; height: auto; display: block; }
+#tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; display: flex;
+  background: var(--card); border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+#tabs button { flex: 1; border: 0; border-radius: 0; background: none; padding: 16px 0; color: var(--muted); }
+#tabs button.on { color: var(--accent); font-weight: 700; }
+#toast {
+  position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
+  background: var(--text); color: var(--bg); padding: 8px 16px; border-radius: 999px;
+  font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none;
+}
+#toast.show { opacity: 1; }
