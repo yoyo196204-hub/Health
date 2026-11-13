@@ -154,3 +154,5 @@ function strapBlock(purpose) {
     <button class="solid wide" data-act="hrworkout">Start ${(KINDS.find(x => x[0] === HR.kind) || KINDS[KINDS.length - 1])[1].toLowerCase()}</button>`;
 }
 function strapMsg() { return HR.msg ? `<p class="${/^Saved/.test(HR.msg) ? 'sub' : 'flag'} msg">${esc(HR.msg)}</p>` : ''; }
+// Loaded: this file ran to the end.
+(self.LOADED ||= []).push('h9.js');

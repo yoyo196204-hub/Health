@@ -74,7 +74,7 @@ function sheetEntered() {
     if (!sh || y0 == null) return;
     const v = dy / Math.max(1, performance.now() - t0), s = sh;
     s.style.transition = ''; y0 = null; sh = null;
-    if (dy > 110 || (dy > 40 && v > 0.6)) { s.style.transform = 'translateY(100%)'; buzz('tick'); setTimeout(() => (pop ? closePop() : close()), 160); }
+    if (dy > 110 || (dy > 40 && v > 0.6)) { s.style.transform = 'translateY(100%)'; buzz('tick'); setTimeout(() => (pop ? closePop() : goBack()), 160); }
     else s.style.transform = '';
   };
   document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
@@ -141,3 +141,5 @@ function settle() {
 }
 let FLASH = '';
 function flash(id) { FLASH = id; }
+// Loaded: this file ran to the end.
+(self.LOADED ||= []).push('feel.js');

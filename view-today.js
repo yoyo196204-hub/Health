@@ -182,3 +182,5 @@ function foodAct(a, el) {
   undoable(`${e.n} removed`, () => { (S.food[k] ||= []).splice(i, 0, e); });
   return true;
 }
+// Loaded: this file ran to the end.
+(self.LOADED ||= []).push('view-today.js');

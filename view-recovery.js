@@ -64,3 +64,5 @@ function vRecovery() {
     ${sec('Morning check', strapBlock('morning') + strapMsg(), { why: ['hrv', 'Why mornings'] })}
     ${hrvSection()}${rhrSection()}${sleepSection()}${devicesSection()}`;
 }
+// Loaded: this file ran to the end.
+(self.LOADED ||= []).push('view-recovery.js');

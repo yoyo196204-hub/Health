@@ -274,15 +274,18 @@ function restStart(sec, id) {
   clearInterval(REST.t); REST.t = setInterval(restTick, 250);
   restTick();
 }
-function restStop() { clearInterval(REST.t); REST.t = null; REST.end = 0; nat('restCancel'); const r = $('#rest'); if (r) r.classList.remove('show'); }
+function restStop() { clearInterval(REST.t); REST.t = null; REST.end = 0; nat('restCancel'); const r = $('#rest'); if (r) { r.classList.remove('show'); setTimeout(() => { if (!REST.end) r.hidden = true; }, 400); } }
 function restAdd(s) { if (!REST.end) return; REST.end += s * 1000; REST.total += s; nat('restAlarm', REST.end - Date.now()); buzz('tick'); restTick(); }
 function restTick() {
   const r = $('#rest');
   if (!r || !REST.end) return;
   const left = (REST.end - Date.now()) / 1000;
   if (left <= 0) { restStop(); buzz('done'); toast('Rest over · next set'); return; }
+  if (r.hidden) { r.hidden = false; void r.offsetWidth; }
   r.classList.add('show');
   r.querySelector('b').textContent = clock(Math.ceil(left));
   r.querySelector('circle.fg').setAttribute('stroke-dasharray', `${(left / REST.total * 100).toFixed(2)} 100`);
   r.querySelector('.what').textContent = exName(REST.id);
 }
+// Loaded: this file ran to the end.
+(self.LOADED ||= []).push('view-train.js');

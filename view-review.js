@@ -89,3 +89,5 @@ function vReview() {
       <label class="line">Waist this week, at the navel<span class="f"><input type="number" inputmode="decimal" step="0.5" data-log="waist" value="${S.waist[day] ?? ''}" placeholder="${waist}"><i>cm</i></span></label>`, { why: ['comp', 'How to read it'] })}
     ${sec('Links in your own data', table(Lk.map(l => trow(l.label, l.n < 14 ? `${l.n} of 14 days` : l.r == null ? `no variation · n ${l.n}` : `<span class="${Math.abs(l.r) >= 0.35 && l.n >= 20 ? '' : 'muted'}">r ${sign(l.r, 2)}</span> · n ${l.n}`))), { why: ['links', 'Read with care'] })}`;
 }
+// Loaded: this file ran to the end.
+(self.LOADED ||= []).push('view-review.js');

@@ -92,7 +92,12 @@ Plain JavaScript, no build step. Scripts load in this order:
 | `view-*.js` | One file per screen |
 | `app.js` | State, routing, events |
 
-Exercise demonstrations are in `media/`. Engine tests: `node test/run.js`.
+Exercise demonstrations are in `media/`. Tests: `node test/run.js`.
+
+After changing any web file, run `node test/stamp.js`. It stamps every file in `index.html` and `sw.js` with a
+version (`?v=…`), so a phone can never mix a new page with old files it still holds from before; the tests fail
+if the stamp is out of date. If files from two versions ever do meet, the app stops before starting, says so,
+and offers a clean reload instead of showing broken screens.
 
 The Android project is in `android/`. Its build copies the web files and `media/` from the repository root
 into the app, so there is one copy of the code.

@@ -380,3 +380,5 @@ const PREHAB = [
 const BARS = [20, 15, 10, 0], PLATES = [25, 20, 15, 10, 5, 2.5, 1.25];
 const CARDIO_KINDS = [['walk', 'Walk'], ['run', 'Run'], ['cycle', 'Cycle'], ['incline', 'Incline walk'], ['row', 'Rower'], ['sport', 'Sport'], ['cardio', 'Other']];
 const KINDS = CARDIO_KINDS;
+// Loaded: this file ran to the end.
+(self.LOADED ||= []).push('exercises.js');

@@ -188,3 +188,5 @@ function sessionStats(k, plan) {
   }
   return { done, total, load, prs, complete: total > 0 && done >= total };
 }
+// Loaded: this file ran to the end.
+(self.LOADED ||= []).push('train.js');

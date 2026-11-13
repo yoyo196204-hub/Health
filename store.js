@@ -334,3 +334,5 @@ function halftoneMerge(conv) {
 // Derived figures are recomputed at most once per render; save() clears them.
 const memo = new Map();
 function cached(key, fn) { if (!memo.has(key)) memo.set(key, fn()); return memo.get(key); }
+// Loaded: this file ran to the end.
+(self.LOADED ||= []).push('store.js');

@@ -158,3 +158,5 @@ function countDays(days) {
   for (const d of Object.values(days)) { if (d.st != null) c.steps++; if (d.sl) c.sleep++; if (d.rp != null || d.rh != null) c.hr++; }
   return c;
 }
+// Loaded: this file ran to the end.
+(self.LOADED ||= []).push('native.js');

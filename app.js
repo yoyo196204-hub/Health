@@ -2,6 +2,26 @@
 // State, routing and events. Screens are in view-*.js; the maths in model.js and train.js; storage in store.js;
 // haptics, motion and sheets in feel.js.
 
+// Every script ends by adding itself to LOADED. If any is missing, the files on this phone are from two
+// different versions (an update that arrived halfway, or a file that failed to load). Starting anyway would
+// show broken screens, so the app stops here, says why, and offers a clean reload. Stored data is not touched.
+(function boot() {
+  const want = [...document.scripts].map(s => (s.getAttribute('src') || '').split('?')[0]).filter(Boolean);
+  const missing = want.filter(f => f !== 'app.js' && !(self.LOADED || []).includes(f));
+  if (!missing.length) return;
+  document.body.className = '';
+  document.getElementById('view').innerHTML = '<div style="max-width:30rem;margin:18vh auto 0;padding:0 20px;font:16px/1.5 system-ui,sans-serif;color:#1f1a14;text-align:center">' +
+    '<h1 style="font:600 26px Georgia,serif;margin:0 0 10px">Health didn’t load completely</h1>' +
+    '<p style="color:#6f6557">An update arrived halfway, so some files on this phone are from the old version. Your data is safe; nothing has been changed.</p>' +
+    '<button id="reboot" style="font:600 16px system-ui,sans-serif;border:0;border-radius:999px;padding:14px 26px;background:#1f1a14;color:#f5efe3;margin-top:10px">Reload</button>' +
+    '<p style="color:#6f6557;font-size:13px;margin-top:18px">Not loaded: ' + missing.join(', ') + '</p></div>';
+  document.getElementById('reboot').onclick = () => {
+    const go = () => location.replace(location.pathname + '?r=' + Date.now() + location.hash);
+    (self.caches ? caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k)))) : Promise.resolve()).then(go, go);
+  };
+  throw new Error('Health stopped: not loaded ' + missing.join(', '));
+})();
+
 let S = load();
 let tab = 'today', overlay = null, pending = null, day = todayKey(), lastToday = day;
 let trainDay = null, cat = 'usual', query = '', installEvt = null, softQueued = false;
@@ -11,6 +31,7 @@ const TABS = Object.keys(VIEWS);
 const ALIAS = { heart: 'recovery', trend: 'review' };
 const POPS = { fedit: p => vFoodEdit(p.i), swap: p => vSwap(p.id), exinfo: p => vExInfo(p.id), cardioadd: () => vCardioAdd(), cardioinfo: p => vCardioInfo(p) };
 const scrollMem = {};
+const BUILD = (document.querySelector('script[src^="app.js"]')?.getAttribute('src').split('v=')[1]) || 'dev';
 
 // A failure in one screen must never blank the app or touch stored data.
 function render() {
@@ -64,7 +85,7 @@ function route() {
   };
   dir ? transition(dir, go) : go();
 }
-function close() { if (history.length > 1) history.back(); else location.hash = tab; }
+function goBack() { if (history.length > 1) history.back(); else location.hash = tab; }
 function refreshAdd() { const m = overlay.key; $('#rows').innerHTML = addRows(m); $('#foot').innerHTML = addFoot(m); settle(); }
 // The app may stay open past midnight: the view moves on with the date if you were looking at today.
 function rollDay() { const t = todayKey(); if (t !== lastToday) { if (day === lastToday) day = t; lastToday = t; return true; } return false; }
@@ -77,7 +98,7 @@ function applyTheme() {
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
 
 const ACT = {
-  close: () => close(),
+  close: () => goBack(),
   popclose: () => closePop(),
   dismissnote: () => { loadNote = ''; render(); },
   q: el => {
@@ -227,3 +248,5 @@ if (NATIVE) { document.documentElement.classList.add('native'); hcCheck(); backu
 if (recovered === 'mirror') save();
 route();
 if (!NATIVE && 'serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');
+// Loaded: this file ran to the end.
+(self.LOADED ||= []).push('app.js');

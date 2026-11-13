@@ -91,3 +91,5 @@ function historyList(title, rows, stream) {
   return `<details class="inner hist"><summary>${title} · ${rows.length}</summary><ul class="list">${rows.map(([k, text]) =>
     `<li><span class="grow"><span class="nm">${dateLabel(k, { weekday: 'short', day: 'numeric', month: 'short', year: '2-digit' })}</span><span class="sub">${text}</span></span><button class="mini" data-act="rmread" data-s="${stream}" data-k="${k}">Remove</button></li>`).join('')}</ul></details>`;
 }
+// Loaded: this file ran to the end.
+(self.LOADED ||= []).push('ui.js');
