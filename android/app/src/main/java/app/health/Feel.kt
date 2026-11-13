@@ -5,44 +5,50 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.view.HapticFeedbackConstants
 import java.io.File
 
 /**
- * What the page cannot do well on its own: crisp system haptics, a rest timer that still buzzes with the
- * screen off, and a private copy of the data in the app's own files.
+ * What the page cannot do well on its own: crisp haptics from the phone's own vibration engine, and a private copy
+ * of the data in the app's own files.
+ *
+ * Haptics are played with the vibrator directly, not through the page's view: the view's haptic feedback is faint on
+ * many phones and goes silent when the system "touch feedback" switch is off. The app has its own switch (Me › Feel),
+ * and the phone's master vibration setting still applies. Where the phone has haptic primitives (Android 11 and later,
+ * most recent phones) the patterns are composed from them, which feels like a click rather than a buzz; otherwise the
+ * phone's predefined clicks, and on the oldest phones short pulses.
  */
 class Feel(private val a: MainActivity) {
-    private val restEnd = Runnable { vibrate(longArrayOf(0, 180, 110, 180, 110, 320)) }
+    private val vib: Vibrator? = if (Build.VERSION.SDK_INT >= 31) (a.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager?)?.defaultVibrator
+        else @Suppress("DEPRECATION") (a.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator?)
+    private val primitives = Build.VERSION.SDK_INT >= 30 && vib != null && try {
+        vib.areAllPrimitivesSupported(VibrationEffect.Composition.PRIMITIVE_CLICK, VibrationEffect.Composition.PRIMITIVE_TICK)
+    } catch (e: Throwable) { false }
 
-    /** The page's haptic vocabulary mapped onto the phone's own effects, which respect the system touch setting. */
-    fun haptic(kind: String) = a.main.post {
-        val v = a.web
-        fun play(c: Int) = v.performHapticFeedback(c)
-        when (kind) {
-            "tick" -> play(HapticFeedbackConstants.CLOCK_TICK)
-            "ok" -> play(if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.VIRTUAL_KEY)
-            "done" -> {
-                val c = if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.VIRTUAL_KEY
-                play(c); a.main.postDelayed({ play(c) }, 110); a.main.postDelayed({ play(HapticFeedbackConstants.LONG_PRESS) }, 240)
-            }
-            "warn" -> play(if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.REJECT else HapticFeedbackConstants.LONG_PRESS)
-            "heavy" -> play(HapticFeedbackConstants.LONG_PRESS)
-            else -> play(HapticFeedbackConstants.VIRTUAL_KEY)
+    private fun compose(vararg parts: Triple<Int, Float, Int>): VibrationEffect? {
+        if (!primitives || Build.VERSION.SDK_INT < 30) return null
+        val c = VibrationEffect.startComposition()
+        for ((p, s, d) in parts) c.addPrimitive(p, s, d)
+        return c.compose()
+    }
+    private fun predefined(id: Int): VibrationEffect? = if (Build.VERSION.SDK_INT >= 29) VibrationEffect.createPredefined(id) else null
+
+    /** tick, ok, done, warn, heavy: the same vocabulary the page uses. Safe from any thread. */
+    fun haptic(kind: String) {
+        val v = vib ?: return
+        if (!v.hasVibrator()) return
+        val click = VibrationEffect.Composition.PRIMITIVE_CLICK
+        val tick = VibrationEffect.Composition.PRIMITIVE_TICK
+        val e: VibrationEffect = when (kind) {
+            "tick" -> compose(Triple(tick, 0.7f, 0)) ?: predefined(VibrationEffect.EFFECT_TICK) ?: VibrationEffect.createOneShot(8, 90)
+            "ok" -> compose(Triple(click, 0.85f, 0)) ?: predefined(VibrationEffect.EFFECT_CLICK) ?: VibrationEffect.createOneShot(14, 180)
+            "done" -> compose(Triple(click, 0.7f, 0), Triple(click, 0.85f, 90), Triple(click, 1f, 110))
+                ?: VibrationEffect.createWaveform(longArrayOf(0, 16, 70, 16, 70, 34), intArrayOf(0, 200, 0, 220, 0, 255), -1)
+            "warn" -> compose(Triple(click, 1f, 0), Triple(click, 1f, 70)) ?: predefined(VibrationEffect.EFFECT_DOUBLE_CLICK)
+                ?: VibrationEffect.createWaveform(longArrayOf(0, 30, 55, 30), -1)
+            "heavy" -> predefined(VibrationEffect.EFFECT_HEAVY_CLICK) ?: VibrationEffect.createOneShot(26, 255)
+            else -> compose(Triple(tick, 0.5f, 0)) ?: VibrationEffect.createOneShot(8, 80)
         }
-    }
-
-    /** Buzz when rest is over. Runs on the main thread's clock, so it fires while the app is in the background. */
-    fun restAlarm(ms: Long) = a.main.post {
-        a.main.removeCallbacks(restEnd)
-        if (ms > 0) a.main.postDelayed(restEnd, ms.coerceAtMost(15 * 60_000L))
-    }
-    fun restCancel() = a.main.post { a.main.removeCallbacks(restEnd) }
-
-    private fun vibrate(pattern: LongArray) {
-        val vib = if (Build.VERSION.SDK_INT >= 31) (a.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager?)?.defaultVibrator
-            else @Suppress("DEPRECATION") (a.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator?)
-        try { vib?.vibrate(VibrationEffect.createWaveform(pattern, -1)) } catch (e: Exception) { /* no vibrator */ }
+        try { v.vibrate(e) } catch (x: Exception) { /* no vibrator, or not allowed */ }
     }
 
     // ---- the private copy ----

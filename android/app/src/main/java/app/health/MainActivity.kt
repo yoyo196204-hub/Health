@@ -60,6 +60,9 @@ class MainActivity : ComponentActivity() {
     private val bluetoothPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
         afterBluetooth?.invoke(r.values.all { it }); afterBluetooth = null
     }
+    private val notifyPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        emit("remind", JSONObject().put("allowed", ok).toString())
+    }
     private val bluetoothOn = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         afterBluetooth?.invoke(it.resultCode == RESULT_OK); afterBluetooth = null
     }
@@ -68,6 +71,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         health = HealthReader(this); strap = Strap(this); files = Files(this); feel = Feel(this); og = OpenGym(this)
+        Remind.channel(this)
 
         // Draw edge to edge, and pad the page by the system bars and the keyboard so nothing hides behind them.
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -145,7 +149,12 @@ class MainActivity : ComponentActivity() {
     }
 
     // Data handed over from the web app in Chrome arrives as app.health://import?d=<gzip, base64url>.
+    // A tapped reminder carries the tab it is about.
     private fun handle(intent: Intent?) {
+        intent?.getStringExtra("hash")?.takeIf { Regex("^[a-z-]{1,20}$").matches(it) }?.let { h ->
+            intent?.removeExtra("hash")
+            emit("goto", JSONObject().put("hash", h).toString())
+        }
         val data = intent?.data ?: return
         if (data.scheme == "app.health" && data.host == "import") {
             val d = data.getQueryParameter("d")
@@ -185,6 +194,12 @@ class MainActivity : ComponentActivity() {
     fun keepAwake(on: Boolean) = main.post {
         if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    /** Android 13 and later ask before an app may notify; earlier versions allow it. */
+    fun askNotifications() {
+        if (Remind.allowed(this) || android.os.Build.VERSION.SDK_INT < 33) { emit("remind", JSONObject().put("allowed", Remind.allowed(this)).toString()); return }
+        try { notifyPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) } catch (e: Exception) { emit("remind", JSONObject().put("allowed", false).toString()) }
     }
 
     fun askBluetooth(perms: Array<String>, then: (Boolean) -> Unit) { afterBluetooth = then; bluetoothPermissions.launch(perms) }

@@ -81,7 +81,7 @@ function watchAct(a) {
 }
 function watchPreviewBlock() {
   const span = d => { const k = Object.keys(d).sort(); return k.length ? `${k.length} days, ${dateLabel(k[0])} to ${dateLabel(k[k.length - 1])}` : 'no usable rows'; };
-  return `<ul class="list">${watchPreview.map(f => `<li><span class="nm">${esc(f.name)}</span><span class="sub">${f.kind === 'health connect' ? `steps ${f.counts.steps} days · sleep ${f.counts.sleep} nights · resting heart rate ${f.counts.hr} days` : f.kind ? `${f.kind}: ${span(f.P.days)}` : `not recognised${f.note ? ', ' + f.note : ''}`}</span></li>`).join('')}</ul>
+  return `<ul class="list">${watchPreview.map(f => `<li><span class="nm">${esc(f.name)}</span><span class="sub">${f.kind ? `${f.kind}: ${span(f.P.days)}` : `not recognised${f.note ? ', ' + f.note : ''}`}</span></li>`).join('')}</ul>
     <p class="sub">Days you typed in yourself are kept as they are.</p>
     <div class="rowb">${watchPreview.some(f => f.kind) ? '<button class="solid" data-act="wsave">Import</button>' : ''}<button class="ghost" data-act="wcancel">Cancel</button></div>`;
 }

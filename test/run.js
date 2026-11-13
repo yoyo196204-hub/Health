@@ -8,7 +8,7 @@ const root = path.join(__dirname, '..');
 function sandbox() {
   const store = new Map();
   const ctx = {
-    console, Date, Math, JSON, Number, String, Object, Array, Set, Map, Blob, Intl,
+    console, Date, Math, JSON, Number, String, Object, Array, Set, Map, Blob, Intl, setTimeout, clearTimeout,
     localStorage: { getItem: k => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k) },
     toast: () => {}, document: { querySelector: () => null, querySelectorAll: () => [] },
   };
@@ -17,7 +17,8 @@ function sandbox() {
   for (const f of ['lib.js', 'data.js', 'exercises.js', 'opengym-ids.js', 'body-data.js', 'store.js', 'model.js', 'train.js'])
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
   // What native.js would define outside the app, then the openGym link, which uses it.
-  vm.runInContext('var NEV = {}, NATIVE = null;', ctx);
+  ctx.window = ctx; ctx.location = { origin: 'https://x', pathname: '/' };
+  vm.runInContext(fs.readFileSync(path.join(root, 'native.js'), 'utf8'), ctx, { filename: 'native.js' });
   vm.runInContext(fs.readFileSync(path.join(root, 'opengym.js'), 'utf8'), ctx, { filename: 'opengym.js' });
   // The globals app.js would normally define.
   vm.runInContext("var S = sanitize({}); var day = todayKey(); var trainDay = null;", ctx);
@@ -121,9 +122,90 @@ test('weekly volume counts direct sets fully and secondary ones by half', c => {
   const v = run(c, 'volume()');
   assert.strictEqual(v.upperBack, 2); assert.strictEqual(v.lats, 2); assert.strictEqual(v.biceps, 1);
 });
-test('plate maths', c => {
-  assert.deepStrictEqual(run(c, 'plates(62.5).side'), [20, 1.25]);
-  assert.strictEqual(run(c, 'plates(20)'), null);
+// ---- beat-to-beat analysis ----
+function noise(n, f) { let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647, g = () => { let s = 0; for (let i = 0; i < 12; i++) s += rnd(); return s - 6; }; return Array.from({ length: n }, (_, i) => f(g, i)); }
+test('DFA α1: about 0.5 for uncorrelated beats, about 1.5 for a random walk', c => {
+  c.white = noise(240, g => 600 + 40 * g());
+  let w = 0; c.walk = noise(240, g => (w += 10 * g(), 800 + w));
+  const a = run(c, 'dfaA1(white)'), b = run(c, 'dfaA1(walk)');
+  assert.ok(a > 0.35 && a < 0.7, `white ${a}`); assert.ok(b > 1.3 && b < 1.7, `walk ${b}`);
+  assert.strictEqual(run(c, 'dfaA1(white.slice(0, 30))'), null, 'too few beats');
+});
+test('RR artefacts are corrected and counted; the threshold needs a real crossing', c => {
+  c.rr = noise(200, g => 700 + 20 * g()); c.rr[40] = 1400; c.rr[90] = 350;
+  const C = run(c, 'cleanRR(rr)');
+  assert.ok(Math.abs(C.bad - 0.01) < 0.006, `bad ${C.bad}`); assert.ok(Math.abs(C.rr[40] - 700) < 60);
+  c.win = noise(11, (g, i) => [i * 30, 1.25 - 0.01 * (110 + 5 * i - 100) + 0.02 * g(), 110 + 5 * i]);
+  assert.ok(Math.abs(run(c, 'hrvThreshold(win).hr') - 150) <= 3);
+  c.flat = noise(11, (g, i) => [i * 30, 0.95 + 0.02 * g(), 110 + 5 * i]);
+  assert.strictEqual(run(c, 'hrvThreshold(flat)'), null, 'never crossed 0.75');
+});
+test('a strap session keeps its trace, α1 windows and threshold; a morning check keeps its beats', c => {
+  c.cx = { t: Date.now(), kind: 'run', dur: 1800, avg: 140, max: 171, z: [10, 600, 900, 290], tr: [120, 0, 999, 131], a1: [[150, 1.02, 121], ['x'], [180, 0.7, 150]], vt1: 148 };
+  const r = run(c, 'cleanCardio(cx)');
+  assert.deepStrictEqual(r.tr, [120, 0, 0, 131]); assert.deepStrictEqual(r.a1, [[150, 1.02, 121], [180, 0.7, 150]]); assert.strictEqual(r.vt1, 148);
+  c.hv = { rmssd: 52.1, hr: 58, q: 96, sd: 61, rr: [1000, 1010, 990, 5000].concat(Array(30).fill(1005)) };
+  const h = run(c, 'cleanHrv(hv)');
+  assert.strictEqual(h.rr.length, 33, 'an impossible beat is dropped'); assert.strictEqual(h.sd, 61);
+});
+
+// ---- Health Connect ----
+test('a failed workout read never wipes the watch workouts already here', c => {
+  const k = run(c, 'todayKey()'), s = Date.now() - 36e5;
+  run(c, `S.ex['${k}'] = [cleanEx({ s: ${s}, e: ${s + 18e5}, k: 'Walk', src: 'Zepp', h: [] })]`);
+  run(c, `mergeSync({ days: {}, ex: null, from: shift(todayKey(), -3) })`);
+  assert.strictEqual(run(c, `S.ex['${k}'].length`), 1);
+  run(c, `mergeSync({ days: {}, ex: [], from: shift(todayKey(), -3) })`);
+  assert.strictEqual(run(c, `S.ex['${k}']`), undefined, 'an empty successful read does replace the range');
+});
+test('an openGym workout from Health Connect counts as a lifting day, with its routine name', c => {
+  const k = run(c, 'shift(todayKey(), -1)'), s = Date.parse(k + 'T18:00');
+  run(c, `S.ex['${k}'] = [cleanEx({ s: ${s}, e: ${s + 3e6}, k: 'Strength training', src: 'openGym', og: true, ti: 'Day B (Health)', h: [[120, 1800], [135, 1200]] })]; memo.clear()`);
+  assert.ok(run(c, `liftedOn('${k}')`));
+  assert.strictEqual(run(c, `sessions('${k}')[0].kind`), 'Day B (Health)');
+  assert.ok(run(c, `liftHr('${k}').avg`) > 120);
+});
+
+// ---- recovery ----
+test('the watch’s overnight HRV can only nudge the day, and only without a strap verdict', c => {
+  for (let i = 1; i <= 30; i++) run(c, `S.wx[shift(todayKey(), -${i})] = { hv: ${i <= 6 ? 30 : 50 + (i % 3)}, br: 14 + ${(i % 2) * 0.2} }`);
+  run(c, 'S.wx[todayKey()] = { hv: 30, br: 16.5 }; S.sleep[todayKey()] = 7.5; memo.clear()');
+  const R = run(c, 'readiness()');
+  assert.strictEqual(R.WH.state, 'low');
+  assert.ok(R.why.some(w => w[2] === 'night' && /overnight HRV/.test(w[1])));
+  assert.ok(R.why.some(w => /Breathing rate/.test(w[1])), 'breathing 2.4 above usual is flagged');
+  assert.strictEqual(R.level, 'care', 'the watch can only ever nudge: never "keep it easy" on its own');
+  run(c, 'S.wx[todayKey()].br = 14.2; memo.clear()');
+  assert.ok(!run(c, 'readiness()').why.some(w => /Breathing/.test(w[1])), 'a usual night is not flagged');
+});
+test('HRV read with morning heart rate', c => {
+  for (let i = 0; i < 35; i++) run(c, `S.hrv[shift(todayKey(), -${i})] = { rmssd: ${i < 5 ? 30 : 60 + (i % 4)}, hr: ${i < 5 ? 62 : 55} }`);
+  run(c, 'memo.clear()');
+  const R = run(c, 'readiness()');
+  assert.strictEqual(R.V.state, 'low'); assert.ok(R.V.hrDelta > 3);
+  assert.ok(/usual pattern/.test(R.why[0][1]));
+});
+
+// ---- the burn estimate ----
+test('training energy follows the sessions actually done once there is a month of them', c => {
+  run(c, "S.profile.days = 3; memo.clear()");
+  const f0 = run(c, 'liveTargets().formula');
+  run(c, "for (let i = 1; i <= 40; i += 7) S.lifts[shift(todayKey(), -i)] = { prog: 'hfb', day: 'A', ex: { 'leg-press': [[100, 10]] } }; memo.clear()");
+  const T = run(c, 'liveTargets()');
+  assert.strictEqual(T.perWk, 1, 'one a week in the last four');
+  assert.ok(Math.round(f0 - T.formula) === Math.round(2 * 250 / 7), `${f0} → ${T.formula}`);
+});
+
+// ---- reminders ----
+test('reminders skip what is already done today', c => {
+  run(c, "S.settings.remAm = '23:59'; S.settings.remPm = '23:58'; S.meta.h9 = { id: 'x', name: 'H9' }");
+  const tk = run(c, 'todayKey()');
+  let it = run(c, 'remindItems()').filter(x => x.id.endsWith(tk));
+  assert.deepStrictEqual(it.map(x => x.title).sort(), ['Food log', 'Morning check']);
+  run(c, "S.hrv[todayKey()] = { rmssd: 50, hr: 55 }; S.weights[todayKey()] = 90");
+  it = run(c, 'remindItems()').filter(x => x.id.endsWith(tk));
+  assert.deepStrictEqual(it.map(x => x.title), ['Food log']);
+  assert.ok(run(c, 'remindItems()').length > 6, 'the week ahead is scheduled');
 });
 test('cutting old data removes only what is older, in the groups chosen, and a snapshot undoes it', c => {
   c.raw = seedV3(); run(c, 'S = sanitize(raw); save()');
@@ -334,6 +416,38 @@ test('openGym plan file: Health’s plan as it stands for you, in openGym’s fo
   assert.ok(H.routines[1].ex.some(e => e.id === 'health-db-floor-press' && e.note.includes('Machine chest press')), 'and says what it replaces');
   const fp = H.customEx[0];
   assert.ok(fp.n && fp.bp === 'chest' && fp.eq === 'dumbbell' && fp.primaries.includes('chest'));
+});
+test('openGym plan file: backups from the catalogue, a warm-up ramp, and the rotation block', c => {
+  run(c, "S.profile.shoulder = true; S.profile.equip = 'gym'; S.settings.prog = 'hfb'; memo.clear()");
+  const P = run(c, 'ogPlan()'), subs = run(c, 'OG_SUBS'), ofv = new Set(Object.values(run(c, 'OG_OF')));
+  for (const r of P.routines) {
+    assert.ok(r.ex.filter(e => e.warmup === 'auto').length === 1, `${r.name}: one warm-up ramp, on the first big lift`);
+    for (const e of r.ex) {
+      assert.ok(e.subs && e.subs.length >= 1 && e.subs.length <= 3, `${e.id} has backups`);
+      assert.ok(!e.subs.includes(e.id));
+    }
+  }
+  const B = P.programmes[0];
+  assert.strictEqual(P.programme_fmt, 1);
+  assert.deepStrictEqual(B.sequence, P.routines.map(r => r.id), 'a rotation over the routines');
+  assert.strictEqual(B.weeks.length, 8); assert.ok(B.weeks.every(w => w.rpe === 8 && !w.deload), 'RPE 8 and no planned deload');
+  // Every backup is a real openGym number for the same main muscle group; holds only stand in for holds.
+  for (const [id, list] of Object.entries(subs)) {
+    const ex = run(c, `EXD['${id}']`), prim = Object.keys(ex.hits).find(m => ex.hits[m] === 1), grp = run(c, `MUS['${prim}'][2]`);
+    for (const x of list) {
+      const n = x.replace('*', ''), og = run(c, `ogx('${n}')`);
+      assert.ok(og || ofv.has(n), `${id}: ${n} unknown`);
+      if (!og) continue;
+      // The same main group at full credit, or the exercise's own main muscle on the way (a shoulder-safe incline press for a landmine press).
+      assert.ok(og.hits[prim] > 0 || Object.keys(og.hits).some(m => og.hits[m] === 1 && run(c, `MUS['${m}'][2]`) === grp), `${id}: ${n} (${og.n}) trains another group`);
+      assert.strictEqual(og.kind === 'h', ex.unit === 's', `${id}: ${n} hold mismatch`);
+    }
+  }
+  assert.deepStrictEqual(run(c, 'Object.keys(EXD).filter(id => !OG_SUBS[id])'), [], 'every exercise has backups');
+  // At home, only backups that need no gym kit go along.
+  run(c, "S.profile.equip = 'home'; memo.clear()");
+  const home = new Set(Object.values(subs).flat().filter(x => x.endsWith('*')).map(x => x.slice(0, -1)));
+  for (const e of run(c, 'ogPlan()').routines.flatMap(r => r.ex)) for (const x of e.subs || []) assert.ok(home.has(x), `${x} is not home kit`);
 });
 test('openGym plan file: the next loads come from Health’s progression, and a changed plan is noticed', c => {
   run(c, "S.lifts[shift(todayKey(), -2)] = { prog: 'hfb', day: 'A', ex: { 'leg-press': [[100, 12], [100, 12], [100, 12]] } }; memo.clear()");

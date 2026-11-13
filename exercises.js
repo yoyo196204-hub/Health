@@ -377,7 +377,6 @@ const PREHAB = [
   ['Band pull-apart', '2 × 15', 'Upper back and rear shoulder, the counterweight to pressing.'],
   ['Wall slides', '2 × 10', 'Moves the arm overhead with the shoulder blade controlled, at no load.'],
 ];
-const BARS = [20, 15, 10, 0], PLATES = [25, 20, 15, 10, 5, 2.5, 1.25];
 const CARDIO_KINDS = [['walk', 'Walk'], ['run', 'Run'], ['cycle', 'Cycle'], ['incline', 'Incline walk'], ['row', 'Rower'], ['sport', 'Sport'], ['cardio', 'Other']];
 const KINDS = CARDIO_KINDS;
 // Loaded: this file ran to the end.

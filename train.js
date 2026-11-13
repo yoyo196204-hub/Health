@@ -1,6 +1,7 @@
 'use strict';
-// The training engine: which session is next, what each exercise should be today and why, and what the week
-// added up to. Reads S; the only writes are the small helpers at the bottom that the Train screen calls.
+// The training engine: which session is next, what each exercise should be next time and why, and what the week
+// added up to. The lifting itself happens in openGym; this is what Health's plan file and analysis are made from.
+// Reads S and writes nothing.
 
 function prog() { return PROGRAMS[S.settings.prog]; }
 function exName(id) { return EXD[id]?.n || (id.startsWith('og:') ? ogx(id.slice(3))?.n || id : id.startsWith('x:') ? id.slice(2) : id); }
@@ -70,7 +71,6 @@ function sessionPlan(k = day, dayId = trainLetter()) {
   });
 }
 function trainLetter() {
-  if (trainDay && prog().days[trainDay]) return trainDay;
   const L = S.lifts[day];
   if (L && L.prog === S.settings.prog && prog().days[L.day]) return L.day;
   return nextDay();
@@ -150,16 +150,6 @@ function restFor(id) {
   const h = EXD[id]?.hits || {}, direct = Object.values(h).filter(v => v === 1).length;
   return direct >= 2 || EXD[id]?.demand >= 2 ? 150 : 90;
 }
-// What to hang on each side of the bar.
-function plates(total) {
-  const bar = S.settings.bar;
-  if (!bar || total <= bar) return null;
-  let rem = (total - bar) / 2;
-  const side = [];
-  for (const p of PLATES) while (rem >= p - 1e-6) { side.push(p); rem = Math.round((rem - p) * 1000) / 1000; }
-  return { bar, side, short: rem * 2 };
-}
-
 // ---------- the week ----------
 // Fractional sets per muscle over 7 days: 1 for the muscle an exercise is for, 0.5 for one it trains on the way.
 function volume(end = todayKey()) {
@@ -178,17 +168,6 @@ function groupVolume(end) {
   // A group is as trained as its best-covered big muscle, not the sum of every head.
   for (const x of GROUPS) g[x] = Math.max(...Object.keys(MUS).filter(m => MUS[m][2] === x).map(m => v[m]));
   return g;
-}
-function setsDone(k, id) { return (S.lifts[k]?.ex[id] || []).filter(s => s[1] > 0).length; }
-function sessionStats(k, plan) {
-  let done = 0, total = 0, load = 0, prs = 0;
-  for (const L of plan.lifts) { total += L.sets; done += Math.min(L.sets, setsDone(k, L.id)); }
-  for (const [id, sets] of Object.entries(S.lifts[k]?.ex || {})) {
-    for (const s of sets) if (s[1] > 0) load += (s[0] || 0) * s[1];
-    const b = bestBefore(id, k), now = e1rm(sets);
-    if (b && now > b * 1.001) prs++;
-  }
-  return { done, total, load, prs, complete: total > 0 && done >= total };
 }
 // Loaded: this file ran to the end.
 (self.LOADED ||= []).push('train.js');

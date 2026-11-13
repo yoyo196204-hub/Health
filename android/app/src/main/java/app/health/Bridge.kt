@@ -44,10 +44,12 @@ class Bridge(private val a: MainActivity) {
     @JavascriptInterface fun ogTake(): String? = a.og.take()
     @JavascriptInterface fun ogWrite(name: String, text: String) { a.og.write(name, text) }
     @JavascriptInterface fun openOpenGym() { a.og.open() }
-    // Haptics, the rest timer, the private copy and the theme
+    // Haptics (played straight away, from this thread), the private copy and the theme
     @JavascriptInterface fun haptic(kind: String): Boolean { a.feel.haptic(kind); return true }
-    @JavascriptInterface fun restAlarm(ms: Double) { a.feel.restAlarm(ms.toLong()) }
-    @JavascriptInterface fun restCancel() { a.feel.restCancel() }
+    // Reminders: the page's list of what is due, and the notification permission
+    @JavascriptInterface fun remind(json: String) { Remind.plan(a, json) }
+    @JavascriptInterface fun remindAllowed(): Boolean = Remind.allowed(a)
+    @JavascriptInterface fun remindAsk() = a.main.post { a.askNotifications() }
     @JavascriptInterface fun mirrorRead(): String? = a.feel.mirrorRead()
     @JavascriptInterface fun mirrorWrite(json: String) { a.feel.mirrorWrite(json) }
     @JavascriptInterface fun setTheme(dark: Boolean) { a.setTheme(dark) }

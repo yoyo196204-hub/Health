@@ -58,12 +58,39 @@ function readinessStrip() {
   const bits = [V.now ? `HRV ${r1(V.now.rmssd)} ms` : null, restingHR(day) ? `resting ${Math.round(restingHR(day).v)} bpm` : null, sl != null ? `${r1(sl)} h sleep` : null].filter(Boolean);
   return `<a class="strip lv-${R.level}" href="#recovery"><span class="dot"></span><span class="grow"><b>${word}</b><span class="sub">${bits.join(' · ') || 'Do a morning check with the H9'}</span></span><span class="chev">›</span></a>`;
 }
-// What training is next, or how today's session is going.
+// What training is next in openGym, and how hard to go today.
 function trainStrip() {
-  const d = trainLetter(), plan = sessionPlan(day, d), St = sessionStats(day, plan);
+  const k = todayKey(), L = S.lifts[k], R = readiness();
+  const did = nextDay(shift(k, 1)), plan = sessionPlan(shift(k, 1), did);
   if (!plan.lifts.length) return '';
-  const text = St.complete ? `${esc(plan.name)} done · ${plural(St.done, 'set')}` : St.done ? `${esc(plan.name)} · ${St.done} of ${St.total} sets` : `${esc(plan.name)} is next`;
-  return `<a class="strip lv-${St.complete ? 'go' : 'none'}" href="#train"><span class="ic">${ICON.lift}</span><span class="grow"><b>${text}</b><span class="sub">${esc(plan.focus)}</span></span><span class="chev">›</span></a>`;
+  const today = L ? dayName(k) : null, ease = EASE[R.level][0];
+  const text = today ? `${esc(today)} done today` : `${esc(plan.name)} is next in openGym`;
+  return `<a class="strip lv-${L ? 'go' : R.level === 'unknown' ? 'none' : R.level}" href="#training"><span class="ic">${ICON.lift}</span><span class="grow"><b>${text}</b>
+    <span class="sub">${today ? `Next: ${esc(plan.name)}, ${esc(plan.focus)}` : `${esc(plan.focus)} · ${ease.toLowerCase()}`}</span></span><span class="chev">›</span></a>`;
+}
+// The measurements the app relies on that are due today and not done yet, each one tap away. Nothing here is
+// nagging for its own sake: each one feeds a number elsewhere (the HRV range, the weight trend, the waist line).
+function dueList() {
+  const k = todayKey(), h = new Date().getHours(), out = [];
+  const strap = S.meta.h9 || Object.keys(S.hrv).length;
+  if (strap && !S.hrv[k] && h >= 4 && h < 12) out.push({ id: 'hrv', t: 'Morning check', s: 'Two minutes lying down with the H9, before getting up. Your HRV range is built from these.', href: '#recovery' });
+  // A scale that writes to Health Connect fills this in; ask only when nothing has come in today.
+  if (S.weights[k] == null && h >= 5) out.push({ id: 'weight', t: 'Weigh in', s: 'After the toilet, before food or water: the same conditions each day are what make the trend honest.', field: 'weights' });
+  const lastWaist = Object.keys(S.waist).sort().pop();
+  if (!lastWaist || gapDays(lastWaist, k) >= 7) out.push({ id: 'waist', t: 'Waist, once a week', s: 'Tape level, midway between the lowest rib and the top of the hip bone, after breathing out. Same spot every time.', field: 'waist' });
+  const D = shoulderDue();
+  if (D) out.push({ id: 'sx', t: 'Shoulder check', s: `How did ${D.ids.length > 1 ? `${D.ids.length} exercises` : esc(exName(D.ids[0]))} feel on ${dateLabel(D.k, { weekday: 'long' })}? It decides the next loads.`, href: '#training' });
+  if (ogPlanStale()) out.push({ id: 'plan', t: 'Send your plan to openGym', s: 'It changed since the last file: a swap, an exercise out after pain, or a new programme.', href: '#set-train' });
+  if (NATIVE && BACKUP.folder && S.meta.backup && gapDays(S.meta.backup, k) >= 3) out.push({ id: 'bk', t: 'Backup has stopped', s: `Last written ${dateLabel(S.meta.backup)}. Choose the folder again.`, href: '#set-data' });
+  return out;
+}
+function checkins() {
+  if (day !== todayKey()) return '';
+  const D = dueList();
+  if (!D.length) return '';
+  return `<section class="checkins"><div class="eyebrow">Due today · ${D.length}</div><ul>${D.map(x => x.field
+    ? `<li class="ci"><span class="grow"><b>${x.t}</b><span class="sub">${x.s}</span></span><label class="ciin"><input type="number" inputmode="decimal" step="${x.field === 'waist' ? 0.5 : 0.1}" data-log="${x.field}" placeholder="${x.field === 'waist' ? kg(projection().waistNow) : r1(targets().wt)}" aria-label="${x.t}"><i>${x.field === 'waist' ? 'cm' : 'kg'}</i></label></li>`
+    : `<li class="ci"><a href="${x.href}"><span class="grow"><b>${x.t}</b><span class="sub">${x.s}</span></span><span class="chev">›</span></a></li>`).join('')}</ul></section>`;
 }
 function vitalInput(stream, label, whyKey, unit, attrs, placeholder) {
   const v = S[stream][day], fromWatch = v != null && !S.manual[stream]?.[day] && stream !== 'waist';
@@ -85,7 +112,7 @@ function vToday() {
   const nav = d => `<button class="nav" data-act="day" data-d="${d}" ${d > 0 && isToday ? 'disabled' : ''} aria-label="${d < 0 ? 'Previous' : 'Next'} day">${d < 0 ? '‹' : '›'}</button>`;
   const title = isToday ? 'Today' : day === shift(todayKey(), -1) ? 'Yesterday' : dateLabel(day);
   return `${masthead(title, dateLabel(day, { weekday: 'long', day: 'numeric', month: 'long' }), { center: true, before: nav(-1), after: nav(1), h1: isToday ? '' : 'data-act="today" class="tap"' })}
-    ${isToday ? welcome() + syncLine() + part(readinessStrip) + part(trainStrip) : ''}
+    ${isToday ? welcome() + syncLine() + part(readinessStrip) + part(trainStrip) + part(checkins) : ''}
     <section class="hero">${gauge(T, t)}
       <div class="legend"><div>${why('kcal', 'Calories')}<b class="num">${fmt(t.k)}<i> / ${fmt(T.kcal)}</i></b></div>
         <div>${why('protein', 'Protein')}<b class="num pr">${Math.round(t.p)}<i> / ${T.protein} g</i></b></div>

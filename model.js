@@ -63,7 +63,10 @@ function liveTargets() {
     const bmr = 10 * wt + 6.25 * p.h - 5 * ageYears() + (p.sex === 'm' ? 5 : -161);
     const st = range(7).map(k => S.steps[k]).filter(v => v != null);
     const steps = st.length ? mean(st) : 2000;
-    const formula = bmr * 1.2 + steps * 0.0004 * wt + p.days * 250 / 7;
+    // Lifting sessions a week: what you actually did over the last four weeks once there is that much history,
+    // otherwise the days you said you train.
+    const firstLift = Object.keys(S.lifts).sort()[0], perWk = firstLift && gapDays(firstLift, todayKey()) >= 28 ? range(28).filter(liftedOn).length / 4 : p.days;
+    const formula = bmr * 1.2 + steps * 0.0004 * wt + perWk * 250 / 7;
     // Your own burn: intake on complete days minus the energy in the weight trend.
     const full = range(21).filter(k => S.food[k] && isComplete(k));
     const intake = full.length ? mean(full.map(k => totals(k).k)) : null, sl = slope();
@@ -77,7 +80,7 @@ function liveTargets() {
     const ref = 25 * (p.h / 100) ** 2, adj = wt > ref ? ref + 0.25 * (wt - ref) : wt, pf = set.protein === 'high' ? 2.0 : 1.6;
     const base = Math.round((steps + 1000) / 500) * 500;
     return {
-      wt, bmr, formula, tdee, measured, trust, complete: full.length, intake, deficit, live, adj, slope: sl, steps, pf,
+      wt, bmr, formula, tdee, perWk, measured, trust, complete: full.length, intake, deficit, live, adj, slope: sl, steps, pf,
       liveProtein: Math.round(pf * adj / 5) * 5, perMeal: Math.round(0.4 * adj / 5) * 5,
       stepGoal: steps >= 8000 ? clamp(Math.round(steps / 500) * 500, 8000, 10000) : clamp(base, 3000, 8000),
       bmi: wt / (p.h / 100) ** 2,
@@ -134,7 +137,7 @@ function restingHR(k) {
 function hrProfile() {
   return cached('H', () => {
     const est = Math.round(208 - 0.7 * ageYears()), now = todayKey(), peaks = [];
-    for (const k in S.cardio) if (gapDays(k, now) <= 365) for (const c of S.cardio[k]) peaks.push(c.max);
+    for (const k in S.cardio) if (gapDays(k, now) <= 365) for (const c of S.cardio[k]) if (c.max) peaks.push(c.max);
     const seen = peaks.length ? Math.max(...peaks) : null, useSeen = seen != null && seen > est;
     const strap = range(21).map(k => S.hrv[k]?.hr).filter(Boolean), C = calibration();
     let rest = 70, restSrc = 'a default until there are 3 morning checks';
@@ -166,6 +169,29 @@ function hrvState(k = todayKey()) {
     Object.assign(out, { provisional, base: Math.exp(m), lo: Math.exp(lo), hi: Math.exp(hi), baseCv: s / m * 100 });
     if (now) out.day = at(Math.log(now.rmssd));
     if (week.length >= 3) { const r = mean(week); Object.assign(out, { roll: Math.exp(r), state: at(r), cv: week.length >= 4 ? sd(week) / r * 100 : null }); }
+    // Morning heart rate from the same checks, this week against the baseline weeks: read with HRV, it tells the
+    // common pattern (HRV down, heart rate up) from the less common one (both down).
+    const hrOf = ds => ds.map(d => S.hrv[d].hr), bk = keys.filter(d => gapDays(d, k) >= 7).slice(-28), wk = keys.filter(d => gapDays(d, k) < 7);
+    if (bk.length >= 7 && wk.length >= 3) out.hrDelta = mean(hrOf(wk)) - mean(hrOf(bk));
+    return out;
+  });
+}
+// ---------- what the watch measures overnight ----------
+// The Bip's own overnight HRV and breathing rate, each against its own baseline: never mixed with the strap's
+// morning check, which is a different measurement (asleep, wrist light, the watch's own algorithm, against two
+// minutes lying awake with an ECG strap). Amazfit's overnight HRV has no published validation, so it can only
+// ever turn the day to "listen to your body", never to "keep it easy", and only on days without a strap reading.
+function nightly(field, k = todayKey(), log = false) {
+  return cached(`N${field}${k}`, () => {
+    const f = d => { const v = S.wx[d]?.[field]; return v == null ? null : log ? Math.log(v) : v; };
+    const keys = Object.keys(S.wx).filter(d => d <= k && gapDays(d, k) < 45 && f(d) != null).sort();
+    const week = keys.filter(d => gapDays(d, k) < 7).map(f), base = keys.filter(d => gapDays(d, k) >= 7).slice(-28).map(f);
+    const back = x => log ? Math.exp(x) : x, out = { n: keys.length, now: S.wx[k]?.[field] ?? null };
+    if (base.length < 10) return Object.assign(out, { need: 10 - base.length });
+    const m = mean(base), s = sd(base);
+    Object.assign(out, { base: back(m), sd: s, lo: back(m - Math.max(0.5 * s, log ? 0.03 : 0.2)), hi: back(m + Math.max(0.5 * s, log ? 0.03 : 0.2)) });
+    if (week.length >= 3) { const r = mean(week); out.roll = back(r); out.state = r < m - Math.max(0.5 * s, log ? 0.03 : 0.2) ? 'low' : r > m + Math.max(0.5 * s, log ? 0.03 : 0.2) ? 'high' : 'normal'; }
+    if (out.now != null) out.z = s ? ((log ? Math.log(out.now) : out.now) - m) / s : 0;
     return out;
   });
 }
@@ -179,7 +205,7 @@ function rhrTrend(k = todayKey()) {
 function readiness(k = todayKey()) {
   return cached('R' + k, () => {
     const V = hrvState(k), R = rhrTrend(k), sl = S.sleep[k], why = [];
-    if (V.state === 'low') why.push([3, `HRV 7-day average ${Math.round(V.roll)} ms, below your range of ${Math.round(V.lo)}–${Math.round(V.hi)}`, 'hrv']);
+    if (V.state === 'low') why.push([3, `HRV 7-day average ${Math.round(V.roll)} ms, below your range of ${Math.round(V.lo)}–${Math.round(V.hi)}${V.hrDelta == null ? '' : V.hrDelta >= 3 ? `, with morning heart rate ${sign(V.hrDelta)} bpm: the usual pattern of fatigue, illness, short sleep or alcohol` : `; morning heart rate is not raised (${sign(V.hrDelta)} bpm), so this is the weaker pattern`}`, 'hrv']);
     else if (V.day === 'low') why.push([1, `This morning's HRV ${r1(V.now.rmssd)} ms is below your range; the weekly average is still normal`, 'hrv']);
     if (R.delta != null && R.delta >= 5) why.push([2, `Resting heart rate ${sign(R.delta)} bpm above the previous three weeks`, 'rhr']);
     else if (R.delta != null && R.delta >= 3) why.push([1, `Resting heart rate ${sign(R.delta)} bpm above the previous three weeks`, 'rhr']);
@@ -187,9 +213,14 @@ function readiness(k = todayKey()) {
     else { const n3 = range(3, k).map(d => S.sleep[d]).filter(v => v != null); if (n3.length === 3 && mean(n3) < 6.5) why.push([1, `${r1(mean(n3))} h of sleep a night over the last three`, 'sleep']); }
     const sx = S.sleepx[k], sh = sleepStats(28, shift(k, -1));
     if (sx?.hr && sh.hr && sx.hr - sh.hr >= 4) why.push([1, `Sleeping heart rate ${Math.round(sx.hr)}, ${Math.round(sx.hr - sh.hr)} above your 4-week average`, 'rhr']);
-    const score = why.reduce((a, w) => a + w[0], 0), known = V.state || R.delta != null || sl != null;
+    // The watch overnight: only when the strap has no verdict of its own this week, and never more than a nudge.
+    const WH = nightly('hv', k, true), BR = nightly('br', k);
+    if (!V.state && WH.state === 'low') why.push([1, `The watch's overnight HRV, 7-day average ${Math.round(WH.roll)} ms, is below its own range of ${Math.round(WH.lo)}–${Math.round(WH.hi)}`, 'night']);
+    // Breathing rate during sleep rises with fever and infection, often before you feel it (Natarajan 2020).
+    if (BR.now != null && BR.base != null && BR.now - BR.base >= Math.max(1, 2 * BR.sd)) why.push([1, `Breathing rate in sleep ${r1(BR.now)} a minute, ${r1(BR.now - BR.base)} above your usual ${r1(BR.base)}`, 'night']);
+    const score = why.reduce((a, w) => a + w[0], 0), known = V.state || WH.state || R.delta != null || sl != null;
     const level = !known ? 'unknown' : score >= 3 ? 'easy' : score >= 1 ? 'care' : 'go';
-    return { level, why: why.sort((a, b) => b[0] - a[0]), V, R };
+    return { level, why: why.sort((a, b) => b[0] - a[0]), V, R, WH, BR };
   });
 }
 
@@ -231,10 +262,17 @@ function sessions(k) {
       for (const [b, s] of w.h) { const c = b - bias; z[zoneOf(c, H)] += s; sum += c * s; secs += s; max = Math.max(max, c); }
       const noHr = secs < 60;
       if (noHr && !STRENGTH.test(w.k) && !CALM.test(w.k)) z[1] = d;   // a deliberate workout with no heart rate counts as moderate
-      return { src: 'watch', kind: w.k, app: w.src, t: w.s, dur: d, avg: secs ? sum / secs : null, max: max || null, z, noHr, corrected: !!bias && !noHr, strength: STRENGTH.test(w.k) };
+      return { src: 'watch', kind: w.og ? w.ti || 'openGym workout' : w.k, app: w.src, og: !!w.og, t: w.s, dur: d, avg: secs ? sum / secs : null, max: max || null, z, noHr, corrected: !!bias && !noHr, strength: w.og || STRENGTH.test(w.k) };
     });
     return [...strap, ...watch].sort((a, b) => (a.t || 0) - (b.t || 0));
   });
+}
+// The heart rate the watch saw during a lifting day's session: the openGym workout Health Connect has for that day,
+// or failing that any strength workout the watch recorded.
+function liftHr(k) {
+  const ss = sessions(k).filter(x => x.src === 'watch' && x.strength && !x.noHr);
+  const L = S.lifts[k], near = L?.t0 ? ss.find(x => overlapMs(x.t, x.t + x.dur * 1000, L.t0, L.t1 || L.t0 + 36e5) > 0) : null;
+  return near || ss.find(x => x.og) || ss[0] || null;
 }
 function liftedOn(k) { return !!S.lifts[k] || sessions(k).some(s => s.strength); }
 // WHO: moderate minutes plus twice the vigorous, and muscle-strengthening days.
@@ -282,7 +320,8 @@ function links() {
     ['Sleep → morning HRV', pair(k => S.sleep[k], k => S.hrv[k] ? Math.log(S.hrv[k].rmssd) : null)],
     ['Calories → sleeping heart rate that night', pair(kcal, k => S.sleepx[shift(k, 1)]?.hr ?? null)],
     ['Steps → sleep that night', pair(k => S.steps[k], k => S.sleep[shift(k, 1)] ?? null)],
-    ['Lifting → next morning HRV', pair(k => S.lifts[k] ? 1 : 0, k => S.hrv[shift(k, 1)] ? Math.log(S.hrv[shift(k, 1)].rmssd) : null)],
+    ['Hard sets lifted → next morning HRV', pair(k => Object.values(S.lifts[k]?.ex || {}).reduce((a, x) => a + x.filter(s => s[1] > 0).length, 0), k => S.hrv[shift(k, 1)] ? Math.log(S.hrv[shift(k, 1)].rmssd) : null)],
+    ['Sleep the night before → kg lifted that day', pair(k => S.lifts[k] ? S.sleep[k] ?? null : null, k => S.lifts[k] ? Object.values(S.lifts[k].ex).reduce((a, x) => a + x.reduce((b, s) => b + (s[0] || 0) * (s[1] || 0), 0), 0) : null)],
   ].map(([label, p]) => ({ label, n: p.length, r: p.length >= 14 ? pearson(p) : null }));
 }
 // Loaded: this file ran to the end.

@@ -3,10 +3,12 @@
 // removes data, and numbers that move to their new value instead of jumping. Nothing here touches stored data.
 
 // ---------- haptics ----------
-// A small vocabulary, used consistently: tick = a value or choice changed; ok = something was saved or completed;
-// done = a whole session or day finished; warn = refused or out of range; heavy = data was removed.
+// A small vocabulary, used consistently: tick = a value or choice changed, or a gesture crossed its threshold;
+// ok = something was saved or completed; done = a whole session or check finished; warn = refused or out of range;
+// heavy = data was removed. Inside the app the phone's own haptic engine plays them (crisp primitives where the
+// phone has them); in Chrome, short vibrations of the same shape.
 const ACT_HOLD = {};   // actions that need a press and hold, filled in by each screen
-const HAPTIC = { tick: [5], ok: [10, 50, 14], done: [14, 70, 14, 70, 30], warn: [28, 60, 28], heavy: [30] };
+const HAPTIC = { tick: [6], ok: [14], done: [16, 70, 16, 70, 34], warn: [30, 55, 30], heavy: [26] };
 function buzz(kind) {
   const mode = S?.settings?.haptics || 'full';
   if (mode === 'off' || (mode === 'subtle' && kind === 'tick')) return;
@@ -47,7 +49,7 @@ document.addEventListener('click', e => {
 // A sheet that is not its own address (editing an entry, a confirmation) sits on the history stack, so the
 // phone's back gesture closes it like any other screen.
 let pop = null, popKey = '';
-function openPop(p) { pop = p; history.pushState({ pop: 1 }, ''); render(); }
+function openPop(p) { pop = p; history.pushState({ pop: 1 }, ''); buzz('tick'); render(); }
 function closePop() { if (!pop) return; if (history.state?.pop) history.back(); else { pop = null; render(); } }
 addEventListener('popstate', () => { if (pop) { pop = null; render(); } });
 // The sheet slides in only when it first appears, not on every re-render while it is open.
@@ -79,6 +81,53 @@ function sheetEntered() {
   };
   document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
 })();
+
+// ---------- pull to refresh ----------
+// From the top of any tab, pull down: past the line it ticks, and letting go fetches everything at once.
+const PTR_AT = 64;
+(() => {
+  let y0 = null, x0 = 0, armed = false, active = false;
+  const el = () => $('#ptr');
+  const blocked = t => document.body.classList.contains('sheet-open') || document.body.classList.contains('adding') || document.body.classList.contains('setting')
+    || t.closest('input, textarea, select, .chips, .seg, .sheet, .wave, .trace');
+  document.addEventListener('touchstart', e => {
+    y0 = null;
+    if (scrollY > 2 || e.touches.length > 1 || blocked(e.target) || REFRESH.on) return;
+    y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; armed = false; active = false;
+  }, { passive: true });
+  document.addEventListener('touchmove', e => {
+    if (y0 == null) return;
+    const dy = e.touches[0].clientY - y0, dx = Math.abs(e.touches[0].clientX - x0), p = el();
+    if (!active) {
+      if (dy > 10 && dy > dx * 1.6 && scrollY <= 2) { active = true; p.classList.add('pull'); }
+      else if (dy < -4 || dx > 14) { y0 = null; return; }
+      else return;
+    }
+    const pull = Math.min(120, Math.max(0, dy - 10) * 0.55);
+    p.style.transform = `translate(-50%, ${pull.toFixed(1)}px)`;
+    p.style.opacity = Math.min(1, pull / 36).toFixed(2);
+    p.style.setProperty('--turn', `${(pull / PTR_AT * 300).toFixed(0)}deg`);
+    const now = pull >= PTR_AT;
+    if (now !== armed) { armed = now; p.classList.toggle('armed', armed); buzz('tick'); }
+  }, { passive: true });
+  const end = () => {
+    if (y0 == null) return;
+    y0 = null;
+    const p = el();
+    if (!active) return;
+    active = false; p.classList.remove('pull', 'armed');
+    if (armed) refreshAll(); else ptrSpin(false);
+    armed = false;
+  };
+  document.addEventListener('touchend', end); document.addEventListener('touchcancel', end);
+})();
+function ptrSpin(on) {
+  const p = $('#ptr');
+  if (!p) return;
+  p.classList.toggle('spin', on);
+  p.style.transform = on ? `translate(-50%, ${PTR_AT - 8}px)` : '';
+  p.style.opacity = on ? '1' : '';
+}
 
 // ---------- press and hold ----------
 // Removing data takes a deliberate 0.9-second hold; the button fills as you hold it.

@@ -181,12 +181,20 @@ class HealthReader(private val a: MainActivity) {
         // Workouts recorded by the watch (or any other app).
         class Session(val s: Instant, val e: Instant, val json: JSONObject)
         val sessions = ArrayList<Session>()
+        // A failed read must not look like "no workouts": the page replaces the synced range with what comes back.
+        var exFailed = false
         safe("exercise") {
-            readAll(c, ExerciseSessionRecord::class, instants) { r ->
-                if (r.metadata.dataOrigin.packageName == a.packageName || dateOf(r.startTime) < from) return@readAll
-                sessions += Session(r.startTime, r.endTime, JSONObject().put("s", r.startTime.toEpochMilli()).put("e", r.endTime.toEpochMilli())
-                    .put("k", kind(r.exerciseType, r.title)).put("src", appName(r.metadata.dataOrigin.packageName)))
-            }
+            try {
+                readAll(c, ExerciseSessionRecord::class, instants) { r ->
+                    val pkg = r.metadata.dataOrigin.packageName
+                    if (pkg == a.packageName || dateOf(r.startTime) < from) return@readAll
+                    val j = JSONObject().put("s", r.startTime.toEpochMilli()).put("e", r.endTime.toEpochMilli())
+                        .put("k", kind(r.exerciseType, r.title)).put("src", appName(pkg))
+                    // openGym writes each finished workout here with the routine's name as its title.
+                    if (pkg == OpenGym.PKG) { j.put("og", true); r.title?.takeIf { it.isNotBlank() }?.let { j.put("ti", it.take(60)) } }
+                    sessions += Session(r.startTime, r.endTime, j)
+                }
+            } catch (e: Throwable) { exFailed = true; throw e }
         }
 
         // Heart-rate samples, sorted by time, used four ways below.
@@ -228,9 +236,9 @@ class HealthReader(private val a: MainActivity) {
                 val r = samples(w.optLong(0), w.optLong(1))
                 if (r.last - r.first >= 9) win.put(JSONObject().put("s", w.optLong(0)).put("a", Math.round(r.map { hrB[it] }.average() * 10) / 10.0).put("n", r.last - r.first + 1))
             }
-            return finish(days, from, today, sessions.map { it.json }, has("exercise"), win, granted, errors)
+            return finish(days, from, today, sessions.map { it.json }, has("exercise") && !exFailed, win, granted, errors)
         }
-        return finish(days, from, today, sessions.map { it.json }, has("exercise"), JSONArray(), granted, errors)
+        return finish(days, from, today, sessions.map { it.json }, has("exercise") && !exFailed, JSONArray(), granted, errors)
     }
 
     private fun finish(days: TreeMap<LocalDate, JSONObject>, from: LocalDate, to: LocalDate, ex: List<JSONObject>, exAllowed: Boolean,
@@ -265,6 +273,7 @@ class HealthReader(private val a: MainActivity) {
         "com.mi.health", "com.xiaomi.wearable" -> "Mi Fitness"
         "fi.polar.polarflow" -> "Polar Flow"
         "com.google.android.apps.healthdata" -> "Health Connect"
+        OpenGym.PKG -> "openGym"
         else -> pkg.substringAfterLast('.').replaceFirstChar { it.uppercase() }
     }
 

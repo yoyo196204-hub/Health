@@ -46,8 +46,8 @@ NEV['hc-data'] = P => {
   else { SYNC.got = mergeSync(P); S.meta.sync = Date.now(); save(); }
   renderSoft();
 };
-NEV.resume = () => { rollDay(); autoSync(); autoBackup(); ogAuto(); restTick(); renderSoft(); };
-NEV.pause = () => flushMirror();
+NEV.resume = () => { rollDay(); autoSync(); autoBackup(); ogAuto(); renderSoft(); };
+NEV.pause = () => { remindPlan(); flushMirror(); };
 // Update the sync line in place, so a sync never steals focus from a field being typed in.
 function paintSync() { const el = $('#syncline'); if (el) el.outerHTML = syncLine(); }
 
@@ -116,6 +116,70 @@ NEV.backup = r => {
   renderSoft();
 };
 
+// ---------- pull to refresh: everything that can be fetched, at once ----------
+// Health Connect, openGym's folder and the daily backup, then one line saying what actually came in.
+const REFRESH = { on: false, t: 0, before: null };
+function dataCounts() {
+  const n = o => Object.keys(o).length;
+  return { nights: n(S.sleep), steps: n(S.steps), hr: n(S.rhr), workouts: Object.values(S.ex).reduce((a, x) => a + x.length, 0), lifts: n(S.lifts), weights: n(S.weights) };
+}
+function refreshLine(a, b) {
+  const d = k => b[k] - a[k];
+  const parts = [d('nights') > 0 && plural(d('nights'), 'night'), d('steps') > 0 && plural(d('steps'), 'day') + ' of steps', d('workouts') > 0 && plural(d('workouts'), 'workout'),
+    d('lifts') > 0 && plural(d('lifts'), 'lifting session'), d('weights') > 0 && plural(d('weights'), 'weigh-in')].filter(Boolean);
+  if (SYNC.err) return SYNC.err;
+  return parts.length ? `New: ${parts.join(', ')}` : NATIVE ? `Up to date${S.meta.sync ? ` · synced ${ago(S.meta.sync)}` : ''}` : 'Up to date. In Chrome, everything here is already on this phone.';
+}
+function refreshAll() {
+  if (REFRESH.on) return;
+  Object.assign(REFRESH, { on: true, t: Date.now(), before: dataCounts() });
+  rollDay();
+  ptrSpin(true);
+  if (NATIVE) {
+    SYNC.err = '';
+    if (SYNC.status?.granted?.length) syncNow(); else hcCheck();
+    ogAuto(true); autoBackup();
+  }
+  const finish = () => {
+    if (NATIVE && (SYNC.busy || OGF.busy) && Date.now() - REFRESH.t < 15000) return setTimeout(finish, 250);
+    REFRESH.on = false; ptrSpin(false); render();
+    const line = refreshLine(REFRESH.before, dataCounts());
+    buzz(SYNC.err ? 'warn' : 'ok'); toast(line, 3200);
+  };
+  setTimeout(finish, 650);
+}
+
+// ---------- reminders on the phone ----------
+// The app works out what is due over the next week and hands the phone a list of notifications; each time it is
+// opened or left, the list is worked out again, so a check already done today is not reminded about.
+function remindItems() {
+  const s = S.settings, out = [], now = Date.now(), at = (k, t) => Date.parse(`${k}T${t}`);
+  const strap = S.meta.h9 || Object.keys(S.hrv).length;
+  for (const k of range(8, shift(todayKey(), 7))) {
+    const today = k === todayKey();
+    if (s.remAm !== 'off') {
+      const hrv = strap && !(today && S.hrv[k]), wt = !(today && S.weights[k] != null);
+      if (hrv || wt) out.push({ id: 'am' + k, at: at(k, s.remAm), title: hrv ? 'Morning check' : 'Weigh in',
+        text: hrv ? `Before getting up: wet the H9, two minutes lying still.${wt ? ' Then weigh in.' : ''}` : 'After the toilet, before food or water.', hash: hrv ? 'recovery' : 'today' });
+    }
+    if (s.remWk !== 'off' && new Date(k + 'T12:00').getDay() === +s.remWk) {
+      const last = Object.keys(S.waist).sort().pop();
+      if (!last || gapDays(last, k) >= 6) out.push({ id: 'wk' + k, at: at(k, s.remAm !== 'off' ? s.remAm : '08:00') + 15 * 6e4, title: 'Waist, once a week', text: 'Midway between the lowest rib and the hip bone, after breathing out.', hash: 'today' });
+    }
+    if (s.remPm !== 'off' && !(today && mainMeals(k) >= 3)) {
+      const t = today ? totals(k) : null;
+      out.push({ id: 'pm' + k, at: at(k, s.remPm), title: 'Food log', text: t && t.n ? `${fmt(t.k)} kcal and ${Math.round(t.p)} g protein logged today. Anything missing?` : 'Log today’s meals while you remember them: whole days are what the burn estimate learns from.', hash: 'today' });
+    }
+  }
+  return out.filter(x => x.at > now + 6e4).slice(0, 24);
+}
+function remindPlan() { if (NATIVE && typeof NATIVE.remind === 'function') nat('remind', JSON.stringify(remindItems())); }
+function remindOn() { return ['remAm', 'remWk', 'remPm'].some(k => S.settings[k] !== 'off'); }
+const REMIND = { allowed: null };
+function remindStatus() { if (NATIVE && typeof NATIVE.remindAllowed === 'function') REMIND.allowed = nat('remindAllowed') === true; }
+NEV.remind = r => { REMIND.allowed = !!r?.allowed; if (!REMIND.allowed) toast('Notifications are off for Health in the phone’s settings', 5000); remindPlan(); renderSoft(); };
+NEV.goto = r => { if (r?.hash && /^[a-z-]+$/.test(r.hash)) location.hash = r.hash; };
+
 // ---------- moving data from Chrome into the app ----------
 function b64url(buf) { let s = ''; const b = new Uint8Array(buf); for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 function unb64url(s) { const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(bin, c => c.charCodeAt(0)); }
@@ -142,17 +206,6 @@ function importSummary(D) {
   return `${plural(n(D.food), 'day')} of food, ${plural(n(D.weights), 'weigh-in')}, ${plural(n(D.lifts), 'lifting session')}, ${plural(n(D.hrv), 'morning check')}`;
 }
 
-// Data from the original Health Sync app in Chrome: {v:1, d:{date:[steps, deep, light, rem, awake, onset, restingHr]}}.
-function hcReceive(b64) {
-  try {
-    if (b64.length > 200000) throw new Error('too large');
-    const data = JSON.parse(new TextDecoder().decode(unb64url(b64)));
-    if (!obj(data) || !obj(data.d)) throw new Error('bad shape');
-    const days = {};
-    for (const [k, a] of Object.entries(data.d)) if (Array.isArray(a)) days[k] = { st: a[0], sl: { d: a[1], l: a[2], r: a[3], w: a[4], on: a[5] }, rp: a[6] };
-    watchPreview = [{ name: 'Health Connect', kind: 'health connect', P: { days }, counts: countDays(days) }];
-  } catch (e) { watchPreview = null; toast('The sync data could not be read'); }
-}
 function countDays(days) {
   const c = { steps: 0, sleep: 0, hr: 0 };
   for (const d of Object.values(days)) { if (d.st != null) c.steps++; if (d.sl) c.sleep++; if (d.rp != null || d.rh != null) c.hr++; }
