@@ -34,7 +34,7 @@ function vMe() {
       ${navrow('#set-evid', 'The evidence', `${Object.keys(EVID).length} topics, each with its sources`, ICON.book)}
     </nav>
     ${standalone ? '' : sec('Use as an app in Chrome', installEvt ? '<button class="solid" data-act="install">Install</button>' : para('Open this page in Chrome itself, not inside another app. Tap ⋮ at the top right, then <b>Add to Home screen</b>.'))}
-    <p class="note">${NATIVE ? `Health ${esc(APP.version || '')}. The app has no internet permission: nothing you log, and nothing from the watch, can leave this phone.` : 'Everything stays in this browser on this device. Nothing is sent anywhere.'}</p>`;
+    <p class="note">${NATIVE ? `Health ${esc(APP.version || '')}, build ${esc(BUILD)}. The app has no internet permission: nothing you log, and nothing from the watch, can leave this phone.` : `Build ${esc(BUILD)}. Everything stays in this browser on this device. Nothing is sent anywhere.`}</p>`;
 }
 function vSet(key) {
   const P = SETPAGES[key];
@@ -214,3 +214,5 @@ ACT_HOLD.erase = () => {
   toast('Everything erased', 8000, { label: 'Undo', fn: () => { restoreSnapshot(); render(); toast('Put back'); } });
 };
 ACT_HOLD.snaprestore = () => { if (restoreSnapshot()) { render(); buzz('ok'); toast('Restored the copy'); } else toast('That copy could not be read'); };
+// Loaded: this file ran to the end.
+(self.LOADED ||= []).push('view-me.js');

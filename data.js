@@ -254,3 +254,5 @@ const EVID = {
     b: () => 'Body weight swings 1–2 kg in a day on water, salt and food in the gut. The trend line smooths each weigh-in toward the last, so a single reading moves it only a tenth of the way. The weekly rate uses the median of the slopes between every pair of weigh-ins in the last three weeks (the Theil–Sen estimate) rather than a straight least-squares line, so one festival dinner or a missed reading cannot swing it. It needs 6 weigh-ins across 10 days.',
     s: ['Sen PK. J Am Stat Assoc. 1968;63:1379–89', 'Hall KD, et al. Lancet. 2011;378:826–37'] },
 };
+// Loaded: this file ran to the end.
+(self.LOADED ||= []).push('data.js');

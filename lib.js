@@ -74,3 +74,5 @@ function agreement(pairs) {
   const d = pairs.map(([a, b]) => a - b), bias = mean(d), s = sd(d);
   return { n: pairs.length, bias, sd: s, lo: bias - 1.96 * s, hi: bias + 1.96 * s, mape: mean(pairs.map(([a, b]) => Math.abs(a - b) / b * 100)) };
 }
+// Loaded: this file ran to the end.
+(self.LOADED ||= []).push('lib.js');

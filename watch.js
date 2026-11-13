@@ -85,3 +85,5 @@ function watchPreviewBlock() {
     <p class="sub">Days you typed in yourself are kept as they are.</p>
     <div class="rowb">${watchPreview.some(f => f.kind) ? '<button class="solid" data-act="wsave">Import</button>' : ''}<button class="ghost" data-act="wcancel">Cancel</button></div>`;
 }
+// Loaded: this file ran to the end.
+(self.LOADED ||= []).push('watch.js');

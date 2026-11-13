@@ -285,3 +285,5 @@ function links() {
     ['Lifting → next morning HRV', pair(k => S.lifts[k] ? 1 : 0, k => S.hrv[shift(k, 1)] ? Math.log(S.hrv[shift(k, 1)].rmssd) : null)],
   ].map(([label, p]) => ({ label, n: p.length, r: p.length >= 14 ? pearson(p) : null }));
 }
+// Loaded: this file ran to the end.
+(self.LOADED ||= []).push('model.js');

@@ -12,6 +12,7 @@ function sandbox() {
     localStorage: { getItem: k => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k) },
     toast: () => {}, document: { querySelector: () => null, querySelectorAll: () => [] },
   };
+  ctx.self = ctx;
   vm.createContext(ctx);
   for (const f of ['lib.js', 'data.js', 'exercises.js', 'body-data.js', 'store.js', 'model.js', 'train.js'])
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
@@ -174,6 +175,46 @@ test('every programme exercise exists and every rep range is sane', c => {
     assert.ok(run(c, `!!EXD['${l[0]}']`), `${p}/${d}/${l[0]}`);
     assert.ok(l[1] >= 1 && l[1] <= 6 && l[2] < l[3], `${p}/${d}/${l[0]} range`);
   }
+});
+
+// ---- the web app as files: these guard against the failures that only show up on a phone ----
+const scripts = [...fs.readFileSync(path.join(root, 'index.html'), 'utf8').matchAll(/<script src="([a-z0-9-]+\.js)/g)].map(m => m[1]);
+test('every file carries the current version stamp, the same one everywhere', () => {
+  const { stamp, current } = require('./stamp.js');
+  const c = current();
+  assert.strictEqual(c.marks.length, 1, `files carry ${c.marks.length} different stamps`);
+  assert.strictEqual(c.marks[0], stamp(), 'stamp is out of date: run node test/stamp.js');
+  assert.strictEqual(c.sw, stamp(), 'sw.js stamp is out of date: run node test/stamp.js');
+  assert.strictEqual([...fs.readFileSync(path.join(root, 'index.html'), 'utf8').matchAll(/\.(?:js|css|webmanifest)\?v=/g)].length, c.count);
+});
+test('every script reports that it loaded, as its last statement', () => {
+  for (const f of scripts) {
+    const t = fs.readFileSync(path.join(root, f), 'utf8').trimEnd();
+    assert.ok(t.endsWith(`(self.LOADED ||= []).push('${f}');`), f);
+  }
+});
+test('no two files declare the same name, and none hides a browser built-in', () => {
+  // A name declared twice stops the second file from loading at all (const, let) or silently replaces the
+  // first (function). A browser built-in such as history or close, redeclared, breaks the page in ways a
+  // test in Node never sees.
+  const BUILTIN = ['history', 'location', 'close', 'open', 'name', 'status', 'top', 'parent', 'self', 'frames', 'length', 'origin',
+    'event', 'print', 'alert', 'confirm', 'prompt', 'stop', 'focus', 'blur', 'find', 'scroll', 'screen', 'navigator', 'document',
+    'performance', 'crypto', 'caches', 'fetch', 'external', 'menubar', 'toolbar', 'opener', 'closed', 'Image', 'Option', 'Audio'];
+  const seen = {};
+  for (const f of scripts) {
+    const t = fs.readFileSync(path.join(root, f), 'utf8');
+    for (const m of t.matchAll(/^(?:async\s+)?(?:const|let|var|function\*?|class)\s+([A-Za-z_$][\w$]*)/gm)) (seen[m[1]] ||= []).push(f);
+    // const a = 1, b = 2 on one top-level line
+    for (const m of t.matchAll(/^(?:const|let|var)\s+([^;=\n]+=[^\n]*)$/gm)) for (const n of m[1].matchAll(/,\s*([A-Za-z_$][\w$]*)\s*=/g)) if (!/[([{]/.test(m[1].split(n[0])[0].slice(-1))) (seen[n[1]] ||= []).push(f);
+  }
+  const dup = Object.entries(seen).filter(([, fs2]) => fs2.length > 1).map(([n, fs2]) => `${n} in ${fs2.join(', ')}`);
+  assert.deepStrictEqual(dup, [], 'declared twice');
+  const hit = BUILTIN.filter(n => seen[n]).map(n => `${n} in ${seen[n].join(', ')}`);
+  assert.deepStrictEqual(hit, [], 'hides a browser built-in');
+});
+test('a script that fails to load is caught before the app starts', () => {
+  const t = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+  assert.ok(t.indexOf('(function boot()') >= 0 && t.indexOf('(function boot()') < t.indexOf('let S = load()'));
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
