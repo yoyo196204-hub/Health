@@ -29,6 +29,8 @@ function plural(n, one, many = one + 's') { return `${n} ${n === 1 ? one : many}
 // Minutes from midnight (negative = the evening before) to a clock time.
 function hm(min) { const m = ((Math.round(min) % 1440) + 1440) % 1440; return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; }
 function dur(min) { min = Math.round(min); return min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}`; }
+function kg(x) { return x == null ? '' : String(Math.round(x * 100) / 100); }
+function bytes(n) { return n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${r1(n / 1048576)} MB`; }
 function clock(s) { s = Math.max(0, Math.round(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
 
 // ---------- statistics ----------
@@ -56,17 +58,19 @@ function linfit(pts) {
   for (const [x, y] of pts) { n += (x - mx) * (y - my); d += (x - mx) ** 2; }
   return d ? { m: n / d, b: my - (n / d) * mx } : null;
 }
+// Median of the slopes between every pair of points (Theil–Sen). One wild reading cannot swing it.
+function theilSen(pts) {
+  if (pts.length < 2) return null;
+  const sl = [];
+  for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) { const dx = pts[j][0] - pts[i][0]; if (dx) sl.push((pts[j][1] - pts[i][1]) / dx); }
+  if (!sl.length) return null;
+  const m = median(sl);
+  return { m, b: median(pts.map(([x, y]) => y - m * x)) };
+}
 // Agreement between two methods (Bland & Altman 1986): pairs are [test, reference].
 // bias = mean difference; 95% of single readings fall within bias ± 1.96 SD.
 function agreement(pairs) {
   if (pairs.length < 3) return { n: pairs.length };
   const d = pairs.map(([a, b]) => a - b), bias = mean(d), s = sd(d);
   return { n: pairs.length, bias, sd: s, lo: bias - 1.96 * s, hi: bias + 1.96 * s, mape: mean(pairs.map(([a, b]) => Math.abs(a - b) / b * 100)) };
-}
-
-// ---------- feedback ----------
-function toast(msg, ms = 2200) {
-  const t = $('#toast');
-  t.textContent = msg; t.classList.add('show');
-  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), ms);
 }

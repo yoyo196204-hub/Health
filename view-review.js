@@ -84,6 +84,8 @@ function vReview() {
       ${para(`${read}. ${why('waist', `Waist ÷ height ${(waist / p.h).toFixed(2)}${waist > cut ? `, ${r1(waist - cut)} cm above ${cut}` : ''}`)}${bf ? ` Scale body fat ${r1(S.wx[bf].bf)}% (${dateLabel(bf)}), ${why('comp', 'read with care')}.` : ''}`, read.includes('risk') ? 'flag' : 'sub')}
       ${P.items.length ? `<table class="ahead">${P.items.map(i => trow(`${i.label} <i>${r1(i.togo)} kg to go</i>`, i.date ? `≈ ${dateLabel(i.date, { month: 'short', year: 'numeric' })}` : DASH)).join('')}</table>
         ${para(`${P.rate != null && P.rate < -0.05 ? `At ${r1(-P.rate)} kg a week.` : 'Dates appear once the trend is falling.'} ${P.perKg ? `Your waist moves ${r1(P.perKg)} cm per kg.` : ''} ${why('project', 'How projected')}`)}` : ''}
+      ${historyList('Every weigh-in', Object.keys(S.weights).sort().reverse().slice(0, 120).map(k => [k, `${kg(S.weights[k])} kg${S.manual.weights[k] ? '' : ' · from the watch or scale'}`]), 'weights')}
+      ${historyList('Every waist reading', Object.keys(S.waist).sort().reverse().map(k => [k, `${kg(S.waist[k])} cm`]), 'waist')}
       <label class="line">Waist this week, at the navel<span class="f"><input type="number" inputmode="decimal" step="0.5" data-log="waist" value="${S.waist[day] ?? ''}" placeholder="${waist}"><i>cm</i></span></label>`, { why: ['comp', 'How to read it'] })}
     ${sec('Links in your own data', table(Lk.map(l => trow(l.label, l.n < 14 ? `${l.n} of 14 days` : l.r == null ? `no variation · n ${l.n}` : `<span class="${Math.abs(l.r) >= 0.35 && l.n >= 20 ? '' : 'muted'}">r ${sign(l.r, 2)}</span> · n ${l.n}`))), { why: ['links', 'Read with care'] })}`;
 }

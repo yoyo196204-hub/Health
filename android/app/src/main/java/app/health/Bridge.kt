@@ -31,10 +31,17 @@ class Bridge(private val a: MainActivity) {
     @JavascriptInterface fun saveFile(name: String, mime: String, text: String) = a.main.post { a.files.save(name, text) }
     @JavascriptInterface fun backupStatus(): String = JSONObject().put("folder", a.files.folderName() ?: JSONObject.NULL).toString()
     @JavascriptInterface fun backupPick() = a.main.post { a.files.pickFolder() }
-    @JavascriptInterface fun backupWrite(json: String) { a.files.backup(json) }
+    @JavascriptInterface fun backupWrite(json: String, manual: Boolean) { a.files.backup(json, manual) }
     @JavascriptInterface fun share(title: String, text: String) = a.main.post {
         val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT, title).putExtra(Intent.EXTRA_TEXT, text)
         try { a.startActivity(Intent.createChooser(send, title)) } catch (e: Exception) { /* nothing to share with */ }
     }
+    // Haptics, the rest timer, the private copy and the theme
+    @JavascriptInterface fun haptic(kind: String): Boolean { a.feel.haptic(kind); return true }
+    @JavascriptInterface fun restAlarm(ms: Double) { a.feel.restAlarm(ms.toLong()) }
+    @JavascriptInterface fun restCancel() { a.feel.restCancel() }
+    @JavascriptInterface fun mirrorRead(): String? = a.feel.mirrorRead()
+    @JavascriptInterface fun mirrorWrite(json: String) { a.feel.mirrorWrite(json) }
+    @JavascriptInterface fun setTheme(dark: Boolean) { a.setTheme(dark) }
     @JavascriptInterface fun openZepp() = a.main.post { a.zeppIntent()?.let { try { a.startActivity(it) } catch (e: Exception) { } } }
 }

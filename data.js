@@ -2,8 +2,12 @@
 // Built for one person. Change these in Me > Profile, not here.
 const ME = { sex: 'm', dob: '1999-12-18', h: 183, w0: 94.5, waist0: 110, days: 3, equip: 'gym', shoulder: true };
 
+// Goal pace: % of body weight a week. Steady is the default the evidence supports for keeping muscle.
+const PACE = { maintain: ['Maintain', 0, 'Hold your weight; train for strength and health.'], slow: ['Slow', 0.4, 'Easiest to sustain; best when training hard.'],
+  steady: ['Steady', 0.6, 'Fat loss while keeping muscle. Recommended.'], faster: ['Faster', 0.8, 'Upper end; watch strength and sleep.'] };
+
 const MEALS = [['breakfast', 'Breakfast'], ['lunch', 'Lunch'], ['snack', 'Snacks'], ['dinner', 'Dinner']];
-const CATS = [['usual', 'Usual'], ['thali', 'Thali'], ['roti', 'Poli & bhaat'], ['dal', 'Dal & usal'], ['bhaji', 'Bhaji'], ['protein', 'Protein'],
+const CATS = [['usual', 'Usual'], ['quick', 'Quick'], ['thali', 'Thali'], ['roti', 'Poli & bhaat'], ['dal', 'Dal & usal'], ['bhaji', 'Bhaji'], ['protein', 'Protein'],
   ['nashta', 'Nashta'], ['snack', 'Snacks'], ['sweet', 'God'], ['drink', 'Drinks'], ['fruit', 'Fruit'], ['kerala', 'South Indian'], ['nonveg', 'Egg & non-veg'], ['mine', 'Mine']];
 
 // [id, name, household unit, kcal, protein, carbs, fat, fibre, category]
@@ -163,47 +167,16 @@ const USUAL = {
 // Veg protein the coach reaches for, in the order it suggests them.
 const GAP = ['whey', 'usal', 'curd', 'soya_bhaji', 'greek', 'chana', 'taak'];
 
-// [gym exercise, dumbbell-at-home exercise, sets, reps, note, primary muscle group]
-const PLAN = {
-  A: [
-    ['Leg press', 'Goblet squat', 3, '8–12', '', 'Quads'],
-    ['DB bench press, neutral grip', 'DB floor press, neutral grip', 3, '8–12', 'Elbows about 45° from the body', 'Chest'],
-    ['Seated cable row', 'One-arm DB row', 3, '8–12', '', 'Back'],
-    ['Romanian deadlift', 'DB Romanian deadlift', 3, '8–12', '', 'Hamstrings & glutes'],
-    ['Cable face pull', 'Band face pull', 2, '12–15', '', 'Shoulders'],
-    ['Plank', 'Plank', 3, '30–60', 'Log seconds as reps', 'Core'],
-  ],
-  B: [
-    ['DB split squat', 'DB split squat', 3, '8–12', 'Each side', 'Quads'],
-    ['Lat pulldown, neutral grip', 'Band pulldown', 3, '8–12', 'To the front only', 'Back'],
-    ['Incline DB press, 30°', 'Push-up', 3, '8–12', '', 'Chest'],
-    ['Hip thrust', 'Glute bridge with DB', 3, '10–15', '', 'Hamstrings & glutes'],
-    ['DB lateral raise, scapular plane', 'DB lateral raise, scapular plane', 2, '12–15', 'Light; stop at shoulder height', 'Shoulders'],
-    ['Dead bug', 'Dead bug', 3, '8–10', 'Each side', 'Core'],
-  ],
-  C: [
-    ['Hack squat', 'Goblet squat, slow lowering', 3, '10–15', '', 'Quads'],
-    ['Landmine press', 'Half-kneeling one-arm DB press', 3, '8–12', 'Up and slightly forward', 'Shoulders'],
-    ['Chest-supported row', 'Chest-supported DB row', 3, '8–12', '', 'Back'],
-    ['Leg curl', 'DB leg curl', 3, '10–15', '', 'Hamstrings & glutes'],
-    ['DB curl', 'DB curl', 2, '10–15', '', 'Arms'],
-    ['Triceps pushdown', 'DB kickback', 2, '10–15', '', 'Arms'],
-  ],
-};
-const MUSCLES = ['Quads', 'Hamstrings & glutes', 'Back', 'Chest', 'Shoulders', 'Arms', 'Core'];
-const PREHAB = ['Cross-body stretch, 3 × 30 s', 'Sleeper stretch, 3 × 30 s, gentle', 'Band external rotation, 2 × 15', 'Band pull-apart, 2 × 15', 'Wall slides, 2 × 10'];
-const KINDS = [['walk', 'Walk'], ['run', 'Run'], ['cycle', 'Cycle'], ['sport', 'Sport'], ['cardio', 'Cardio']];
-
 // The reasoning behind every number.
 // lv: 1 = meta-analysis or guideline built on trials, 2 = trials or large cohorts, 3 = small, indirect or n-of-1.
 // g: what the evidence is. b(): the explanation, using your numbers. s: sources.
 const LEVEL = ['', 'Strong', 'Moderate', 'Limited'];
 const EVID = {
   kcal: { t: 'Calorie target', lv: 2, g: 'Validated equation, then your own data',
-    b: () => { const T = targets(); return `Resting energy by Mifflin-St Jeor: <b>${fmt(T.bmr)} kcal</b>. Daily burn by formula, from steps and training: <b>${fmt(T.formula)} kcal</b>.${T.measured != null ? ` Burn your own logs imply: <b>${fmt(T.measured)} kcal</b>.` : ''}<br><br>The equation misses by 10–15% in individuals, so the app moves from the formula to your data as complete logging days build up: today it leans <b>${Math.round(T.trust * 100)}%</b> on your data (${T.complete} complete days; fully yours at 20). The shift is gradual, so the target never jumps.<br><br>Daily burn <b>${fmt(T.tdee)}</b> less a deficit of <b>${fmt(T.deficit)}</b> gives <b>${fmt(T.kcal)} kcal</b>.`; },
+    b: () => { const T = targets(); return `Resting energy by Mifflin-St Jeor: <b>${fmt(T.bmr)} kcal</b>. Daily burn by formula, from steps and training: <b>${fmt(T.formula)} kcal</b>.${T.measured != null ? ` Burn your own logs imply: <b>${fmt(T.measured)} kcal</b>.` : ''}<br><br>The equation misses by 10–15% in individuals, so the app moves from the formula to your data as complete logging days build up: today it leans <b>${Math.round(T.trust * 100)}%</b> on your data (${T.complete} complete days; fully yours at 20).<br><br>Daily burn <b>${fmt(T.tdee)}</b> less a deficit of <b>${fmt(T.deficit)}</b> gives <b>${fmt(T.live)} kcal</b>. ${T.locked ? `Your target is held at <b>${fmt(T.kcal)} kcal</b> until ${dateLabel(T.next, { weekday: 'long' })}, so it does not wobble with each day's steps. ${why('lock', 'Why weekly')}` : ''}`; },
     s: ['Mifflin MD, et al. Am J Clin Nutr. 1990;51:241–7', 'Hall KD, et al. Lancet. 2011;378:826–37'] },
-  rate: { t: 'Why 0.6% a week', lv: 2, g: 'Randomised trial, 24 athletes',
-    b: () => 'Losing 0.7% of body weight a week while lifting preserved and slightly increased lean mass. Losing 1.4% a week did not, and the slower group gained more strength. For you that is about 0.5–0.6 kg a week. If the trend drops faster than 1% a week, the app tells you to eat more.',
+  rate: { t: 'How fast to lose', lv: 2, g: 'Randomised trial, 24 athletes; review',
+    b: () => { const P = PACE[S.settings.pace]; return `Losing 0.7% of body weight a week while lifting preserved and slightly increased lean mass. Losing 1.4% a week did not, and the slower group gained more strength. Reviews of dieting lifters land on 0.5–1% a week.<br><br>Your pace is <b>${P[0].toLowerCase()}</b>${P[1] ? `: ${P[1]}% a week, about ${r1(P[1] / 100 * targets().wt)} kg` : ''}. Change it in Me › Goal. If the trend drops faster than 1% a week, the app tells you to eat more.`; },
     s: ['Garthe I, et al. Int J Sport Nutr Exerc Metab. 2011;21:97–104', 'Helms ER, et al. J Int Soc Sports Nutr. 2014;11:20'] },
   protein: { t: 'Protein target', lv: 1, g: 'Meta-analysis, 49 trials, 1,863 people',
     b: () => { const T = targets(); return `Muscle gain from resistance training stops improving above about 1.6 g of protein per kg a day. Fat mass does not need protein, so the app uses an adjusted weight of ${Math.round(T.adj)} kg: 1.6 × ${Math.round(T.adj)} ≈ <b>${T.protein} g</b>. In a deficit, higher protein plus lifting kept more lean mass in a controlled trial.<br><br>Two plates of poli, bhaji and varan give about 30–40 g. That gap is why whey, soya, usal and dahi carry this plan.`; },
@@ -236,10 +209,10 @@ const EVID = {
     b: () => 'Consumer trackers are good at telling sleep from wake and at total sleep time. They are much weaker at deep and REM sleep, where agreement with a sleep lab was moderate at best. The app shows your stage split for interest but never makes a recommendation from it; duration, timing and sleeping heart rate carry the decisions.',
     s: ['Chinoy ED, et al. Sleep. 2021;44:zsaa291', 'de Zambotti M, et al. Med Sci Sports Exerc. 2019;51:1538–57'] },
   lift: { t: 'Training plan', lv: 1, g: 'Two meta-analyses',
-    b: () => 'Muscle growth rises with weekly sets per muscle, and training a muscle at least twice a week beats once. Three full-body days give each major muscle about 9 hard sets across three sessions. Stop 1–3 reps short of failure; add weight when every set reaches the top of the range.<br><br>Pressing is neutral-grip or in the scapular plane, and there is no behind-the-neck work, upright row or dip, to keep a tight posterior capsule and a type II acromion out of trouble.',
+    b: () => `Muscle growth rises with weekly sets per muscle, and training a muscle at least twice a week beats once. Your programme is <b>${esc(PROGRAMS[S.settings.prog].n.toLowerCase())}</b>. Stop 1–3 reps short of failure.<br><br>${S.profile.shoulder ? 'With shoulder care on, pressing is neutral-grip or angled, laterals stop at shoulder height, and overhead pressing and flyes are swapped for movements that never reach the provocative end range.' : 'Turn on shoulder care in Me › Training if a shoulder is sore: the plan then keeps every exercise out of the positions that provoke it.'}`,
     s: ['Schoenfeld BJ, et al. J Sports Sci. 2017;35:1073–82', 'Schoenfeld BJ, et al. Sports Med. 2016;46:1689–97'] },
   volume: { t: 'Sets per muscle', lv: 1, g: 'Meta-analysis; maintenance trial',
-    b: () => 'Ten or more hard sets per muscle a week produced more growth than fewer than five. Keeping muscle needs far less: a third of the training volume maintained size and strength for months in young adults. In a deficit, 4 or more sets per muscle a week protects what you have; about 10 builds. Only working sets with reps logged count, and each exercise counts toward its main muscle only.',
+    b: () => 'Ten or more hard sets per muscle a week produced more growth than fewer than five. Keeping muscle needs far less: a third of the training volume maintained size and strength for months in young adults. In a deficit, 4 or more sets per muscle a week protects what you have; about 10 builds.<br><br>Each set counts fully for the muscle an exercise is for and half for a muscle it trains on the way: a row is a whole set for the back and half a set for the biceps. That half is a convention, not a measured number; it stops the map from claiming a row built your arms.',
     s: ['Schoenfeld BJ, et al. J Sports Sci. 2017;35:1073–82', 'Bickel CS, et al. Med Sci Sports Exerc. 2011;43:1177–87'] },
   e1rm: { t: 'Strength from your sets', lv: 2, g: 'Validation in trained and untrained lifters',
     b: () => 'Each set is turned into an estimated one-rep maximum with the Epley formula: weight × (1 + reps ÷ 30). It is accurate within a few percent below about 10 reps and drifts above 15, so higher-rep sets are left out. Comparing best estimates across sessions shows strength trend without ever testing a true maximum.',
@@ -265,4 +238,19 @@ const EVID = {
   links: { t: 'Links in your own data', lv: 3, g: 'n-of-1 observation: correlation only',
     b: () => 'r runs from −1 to +1. Nothing is shown below 14 paired days, and with fewer than about 30 an r under 0.35 is indistinguishable from noise. These are associations in one person, confounded by duty hours, festivals and everything else, so they suggest what to test, not what is true.',
     s: ['Lillie EO, et al. Per Med. 2011;8:161–73'] },
+  progress: { t: 'When the weight goes up', lv: 2, g: 'Randomised trial; meta-analysis of rep prediction',
+    b: () => 'Double progression: stay at a load and add reps until every set reaches the top of the range, then add the smallest step of weight and start again from the bottom. Adding reps and adding load built the same muscle in a 2022 trial, so neither is the "real" progression.<br><br>The decision uses reps you actually completed, never how hard a set felt: people misjudge reps in reserve by about a rep, more so far from failure. Three sessions in a row under the bottom of the range drops the load 10% so you build back instead of grinding.',
+    s: ['Plotkin D, et al. PeerJ. 2022;10:e14142', 'Halperin I, et al. Sports Med. 2022;52:377–90'] },
+  rest: { t: 'Rest between sets', lv: 2, g: 'Randomised trial; systematic review',
+    b: () => 'Rest long enough that the next set is limited by the muscle, not by breathing. Three-minute rests built more strength and muscle than one-minute rests in trained men, and the review agrees for strength. The timer starts at 2½ minutes after exercises that work several big muscles and 1½ after small ones; change it in Me › Training. The precise numbers are a convention: the trials are small and short.',
+    s: ['Schoenfeld BJ, et al. J Strength Cond Res. 2016;30:1805–12', 'Grgic J, et al. Sports Med. 2018;48:137–51'] },
+  shoulder: { t: 'Shoulder care', lv: 2, g: 'Placebo-controlled surgical trial; mechanics',
+    b: () => 'Exercise is the first treatment for shoulder impingement pain: in a trial with a placebo operation, removing bone under the acromion did no better than the placebo. So the plan keeps training the shoulder and changes positions instead: no loaded overhead end range, no arms behind the body in a fly, laterals to shoulder height, and a five-minute cuff and shoulder-blade routine.<br><br>After a shoulder-loading exercise you can say how it felt. A niggle holds the load and shortens the range next time; pain swaps the exercise; pain twice in a row takes it out of the plan until you bring it back. Which exercises to avoid comes from joint mechanics rather than trials, and the app says so.',
+    s: ['Beard DJ, et al. Lancet. 2018;391:329–38', 'Paavola M, et al. BMJ. 2018;362:k2860'] },
+  lock: { t: 'Why the target holds for a week', lv: 3, g: 'Practical choice',
+    b: () => 'Your burn estimate moves a little every day with steps and the weight trend. A target that changed every morning would be noise: nothing about your body changes in a day. So the calorie and protein targets are recalculated once a week, on Monday, and a single update never moves calories by more than 150 kcal. Changing your profile, pace or protein setting recalculates at once.',
+    s: ['Hall KD, et al. Lancet. 2011;378:826–37'] },
+  trend: { t: 'Reading the scale', lv: 2, g: 'Robust statistics; energy-balance models',
+    b: () => 'Body weight swings 1–2 kg in a day on water, salt and food in the gut. The trend line smooths each weigh-in toward the last, so a single reading moves it only a tenth of the way. The weekly rate uses the median of the slopes between every pair of weigh-ins in the last three weeks (the Theil–Sen estimate) rather than a straight least-squares line, so one festival dinner or a missed reading cannot swing it. It needs 6 weigh-ins across 10 days.',
+    s: ['Sen PK. J Am Stat Assoc. 1968;63:1379–89', 'Hall KD, et al. Lancet. 2011;378:826–37'] },
 };

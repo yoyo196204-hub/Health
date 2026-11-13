@@ -40,6 +40,8 @@ class MainActivity : ComponentActivity() {
     lateinit var health: HealthReader
     lateinit var strap: Strap
     lateinit var files: Files
+    lateinit var feel: Feel
+    private lateinit var root: FrameLayout
 
     private var ready = false
     private val queued = ArrayList<String>()
@@ -63,12 +65,12 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        health = HealthReader(this); strap = Strap(this); files = Files(this)
+        health = HealthReader(this); strap = Strap(this); files = Files(this); feel = Feel(this)
 
         // Draw edge to edge, and pad the page by the system bars and the keyboard so nothing hides behind them.
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val night = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        val root = FrameLayout(this).apply { setBackgroundColor(if (night) 0xFF14110D.toInt() else 0xFFF5EFE3.toInt()) }
+        root = FrameLayout(this).apply { setBackgroundColor(if (night) 0xFF14110D.toInt() else 0xFFF5EFE3.toInt()) }
         web = WebView(this)
         root.addView(web, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
@@ -152,6 +154,18 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (ready) emit("resume", "{}")
+    }
+
+    override fun onPause() {
+        if (ready) emit("pause", "{}")
+        super.onPause()
+    }
+
+    /** The page chose light or dark: match the status bar icons and the background behind the page. */
+    fun setTheme(dark: Boolean) = main.post {
+        root.setBackgroundColor(if (dark) 0xFF14110D.toInt() else 0xFFF5EFE3.toInt())
+        web.setBackgroundColor(if (dark) 0xFF14110D.toInt() else 0xFFF5EFE3.toInt())
+        WindowInsetsControllerCompat(window, root).apply { isAppearanceLightStatusBars = !dark; isAppearanceLightNavigationBars = !dark }
     }
 
     override fun onDestroy() {

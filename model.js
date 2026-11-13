@@ -36,22 +36,30 @@ function series() {
   });
 }
 function trendOn(k) { let t = null; for (const s of series()) { if (s.k <= k) t = s.t; else break; } return t; }
-// kg per day over the last 21 days (least squares through raw weigh-ins); null until there is enough.
+// kg per day over the last 21 days: Theil–Sen through the raw weigh-ins; null until there is enough.
 function slope() {
   return cached('slope', () => {
     const from = shift(todayKey(), -21);
     const pts = Object.keys(S.weights).filter(k => k >= from).map(k => [Date.parse(k + 'T12:00') / DAY, S.weights[k]]);
     if (pts.length < 6) return null;
     const xs = pts.map(p => p[0]);
-    if (Math.max(...xs) - Math.min(...xs) < 13) return null;
-    return linfit(pts).m;
+    if (Math.max(...xs) - Math.min(...xs) < 10) return null;
+    return theilSen(pts).m;
   });
+}
+// A weigh-in far from the trend is usually a typo or a heavy meal; ask before trusting it.
+function weighCheck(k, v) {
+  const t = trendOn(shift(k, -1));
+  if (t == null) return null;
+  const d = v - t;
+  return Math.abs(d) > Math.max(2.5, t * 0.03) ? d : null;
 }
 
 // ---------- daily targets ----------
-function targets() {
-  return cached('T', () => {
-    const p = S.profile, ser = series(), wt = ser.length ? ser[ser.length - 1].t : p.w0;
+// The live figures move a little every day; the target you see is held for the week (settleTargets).
+function liveTargets() {
+  return cached('TL', () => {
+    const p = S.profile, set = S.settings, ser = series(), wt = ser.length ? ser[ser.length - 1].t : p.w0;
     const bmr = 10 * wt + 6.25 * p.h - 5 * ageYears() + (p.sex === 'm' ? 5 : -161);
     const st = range(7).map(k => S.steps[k]).filter(v => v != null);
     const steps = st.length ? mean(st) : 2000;
@@ -63,17 +71,36 @@ function targets() {
     // Lean on your data gradually, from 7 complete days to fully at 20, within ±25% of the formula.
     const trust = measured == null ? 0 : clamp((full.length - 6) / 14, 0, 1);
     const tdee = formula + trust * (clamp(measured ?? formula, formula * 0.75, formula * 1.25) - formula);
-    const deficit = Math.min(0.006 * wt * 7700 / 7, 0.25 * tdee);
-    const kcal = Math.max(p.sex === 'm' ? 1600 : 1400, Math.round((tdee - deficit) / 50) * 50);
-    const ref = 25 * (p.h / 100) ** 2, adj = wt > ref ? ref + 0.25 * (wt - ref) : wt;
+    const pace = PACE[set.pace][1];
+    const deficit = Math.min(pace / 100 * wt * 7700 / 7, 0.25 * tdee);
+    const live = Math.max(p.sex === 'm' ? 1600 : 1400, Math.round((tdee - deficit) / 50) * 50);
+    const ref = 25 * (p.h / 100) ** 2, adj = wt > ref ? ref + 0.25 * (wt - ref) : wt, pf = set.protein === 'high' ? 2.0 : 1.6;
     const base = Math.round((steps + 1000) / 500) * 500;
     return {
-      wt, bmr, formula, tdee, measured, trust, complete: full.length, intake, deficit, kcal, adj, slope: sl, steps,
-      protein: Math.round(1.6 * adj / 5) * 5, perMeal: Math.round(0.4 * adj / 5) * 5,
-      fibre: Math.max(30, Math.round(15 * kcal / 1000)),
+      wt, bmr, formula, tdee, measured, trust, complete: full.length, intake, deficit, live, adj, slope: sl, steps, pf,
+      liveProtein: Math.round(pf * adj / 5) * 5, perMeal: Math.round(0.4 * adj / 5) * 5,
       stepGoal: steps >= 8000 ? clamp(Math.round(steps / 500) * 500, 8000, 10000) : clamp(base, 3000, 8000),
       bmi: wt / (p.h / 100) ** 2,
     };
+  });
+}
+function targetSig() { const p = S.profile, s = S.settings; return [s.pace, s.protein, p.sex, p.dob, p.h, p.days].join('|'); }
+function weekStart(k = todayKey()) { const d = new Date(k + 'T12:00'); return shift(k, -((d.getDay() + 6) % 7)); }
+// Recalculated on Mondays; one update moves calories by 150 kcal at most. A changed profile or goal applies at once.
+function settleTargets() {
+  const t = S.meta.tgt, sig = targetSig();
+  if (t && t.sig === sig && t.at >= weekStart()) return false;
+  const L = liveTargets();
+  const k = t && t.sig === sig ? Math.round(clamp(L.live, t.k - 150, t.k + 150) / 50) * 50 : L.live;
+  S.meta.tgt = { k, p: L.liveProtein, at: todayKey(), sig };
+  save();
+  return true;
+}
+function targets() {
+  return cached('T', () => {
+    const L = liveTargets(), t = S.meta.tgt, locked = !!t && t.sig === targetSig();
+    const kcal = locked ? t.k : L.live, protein = locked ? t.p : L.liveProtein;
+    return Object.assign({}, L, { kcal, protein, locked, next: shift(weekStart(), 7), fibre: Math.max(30, Math.round(15 * kcal / 1000)) });
   });
 }
 
@@ -157,6 +184,7 @@ function readiness(k = todayKey()) {
     if (R.delta != null && R.delta >= 5) why.push([2, `Resting heart rate ${sign(R.delta)} bpm above the previous three weeks`, 'rhr']);
     else if (R.delta != null && R.delta >= 3) why.push([1, `Resting heart rate ${sign(R.delta)} bpm above the previous three weeks`, 'rhr']);
     if (sl != null && sl < 6) why.push([1, `${r1(sl)} h of sleep last night`, 'sleep']);
+    else { const n3 = range(3, k).map(d => S.sleep[d]).filter(v => v != null); if (n3.length === 3 && mean(n3) < 6.5) why.push([1, `${r1(mean(n3))} h of sleep a night over the last three`, 'sleep']); }
     const sx = S.sleepx[k], sh = sleepStats(28, shift(k, -1));
     if (sx?.hr && sh.hr && sx.hr - sh.hr >= 4) why.push([1, `Sleeping heart rate ${Math.round(sx.hr)}, ${Math.round(sx.hr - sh.hr)} above your 4-week average`, 'rhr']);
     const score = why.reduce((a, w) => a + w[0], 0), known = V.state || R.delta != null || sl != null;
@@ -196,7 +224,7 @@ function overlapMs(a0, a1, b0, b1) { return Math.max(0, Math.min(a1, b1) - Math.
 function sessions(k) {
   return cached('X' + k, () => {
     const H = hrProfile(), C = calibration(), bias = C.exOn ? C.ex.bias : 0;
-    const strap = (S.cardio[k] || []).map((c, i) => ({ src: 'strap', i, kind: (KINDS.find(x => x[0] === c.kind) || KINDS[4])[1], t: c.t, dur: c.dur, avg: c.avg, max: c.max, z: c.z }));
+    const strap = (S.cardio[k] || []).map((c, i) => ({ src: c.m ? 'manual' : 'strap', i, kind: (KINDS.find(x => x[0] === c.kind) || KINDS[KINDS.length - 1])[1], t: c.t, dur: c.dur, avg: c.avg ?? null, max: c.max ?? null, z: c.z, eff: c.eff }));
     const watch = (S.ex[k] || []).filter(w => !strap.some(c => c.t && overlapMs(c.t, c.t + c.dur * 1000, w.s, w.e) > 0.5 * Math.min(c.dur * 1000, w.e - w.s))).map(w => {
       const z = [0, 0, 0, 0], d = (w.e - w.s) / 1000;
       let sum = 0, secs = 0, max = 0;
@@ -217,32 +245,6 @@ function activityWeek(end = todayKey()) {
     return { mod, vig, who: mod + 2 * vig, n, strengthDays: range(7, end).filter(liftedOn).length };
   });
 }
-function muscleOf(name) { for (const d in PLAN) for (const e of PLAN[d]) if (e[0] === name || e[1] === name) return e[5]; return null; }
-function volume(end = todayKey()) {
-  const v = Object.fromEntries(MUSCLES.map(m => [m, 0]));
-  for (const k of range(7, end)) for (const [name, sets] of Object.entries(S.lifts[k]?.ex || {})) {
-    const m = muscleOf(name);
-    if (m) v[m] += sets.filter(s => s && s[1] > 0).length;
-  }
-  return v;
-}
-// Best estimated one-rep max per session, per lift (Epley; sets above 15 reps left out).
-function e1rm(sets) { let b = 0; for (const s of sets || []) if (s && s[0] > 0 && s[1] > 0 && s[1] <= 15) b = Math.max(b, s[0] * (1 + s[1] / 30)); return b; }
-function liftHistory() {
-  return cached('lifts', () => {
-    const by = {};
-    for (const k of Object.keys(S.lifts).sort()) for (const [name, sets] of Object.entries(S.lifts[k].ex)) { const b = e1rm(sets); if (b) (by[name] ||= []).push({ k, v: b }); }
-    return by;
-  });
-}
-function strength() {
-  const ratios = Object.values(liftHistory()).filter(a => a.length >= 2).map(a => {
-    const first = mean(a.slice(0, 2).map(x => x.v)), last = mean(a.slice(-2).map(x => x.v));
-    return last / first;
-  });
-  return ratios.length ? { pct: (mean(ratios) - 1) * 100, n: ratios.length } : null;
-}
-
 // ---------- energy ledger ----------
 function energy() {
   const T = targets(), full = range(21).filter(k => S.food[k] && isComplete(k));

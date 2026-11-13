@@ -14,9 +14,39 @@ function stats(items, cls = '') { return `<div class="stats ${cls} n${items.leng
 function trow(a, b, cls = '') { return `<tr class="${cls}"><td>${a}</td><td>${b}</td></tr>`; }
 function table(rows) { return `<table>${rows.join('')}</table>`; }
 function para(text, cls = 'sub') { return `<p class="${cls}">${text}</p>`; }
+// One part of a screen that fails shows a line instead of taking the whole screen with it.
+function part(fn, ...a) { try { return fn(...a); } catch (e) { console.error(e); return `<p class="flag">This part could not be shown (${esc(e.message)}). Your data is untouched.</p>`; } }
+// A row of choices, one on. act gets data-v.
+function seg(act, items, cur, cls = '') { return `<div class="seg ${cls}">${items.map(([v, label]) => `<button class="${String(v) === String(cur) ? 'on' : ''}" data-act="${act}" data-v="${v}">${label}</button>`).join('')}</div>`; }
+// A settings row that opens a page.
+function navrow(href, label, value = '', icon = '') { return `<a class="navrow" href="${href}">${icon ? `<span class="ic">${icon}</span>` : ''}<span class="grow"><span class="nm">${label}</span>${value ? `<span class="sub">${value}</span>` : ''}</span><span class="chev">›</span></a>`; }
+const ICON = {
+  gear: '<svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>',
+  goal: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".6"/></svg>',
+  lift: '<svg viewBox="0 0 24 24"><path d="M3 12h18M6 8v8M18 8v8M3.5 10v4M20.5 10v4"/></svg>',
+  person: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>',
+  link: '<svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
+  box: '<svg viewBox="0 0 24 24"><path d="M4 7l8-4 8 4v10l-8 4-8-4z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg>',
+  hand: '<svg viewBox="0 0 24 24"><path d="M12 3v9M9 5v8M15 5v8M6 9v6a6 6 0 0 0 12 0V9"/></svg>',
+  book: '<svg viewBox="0 0 24 24"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10"/></svg>',
+};
+
+// ---------- the muscle map ----------
+// vol: sets per muscle (or an exercise's hits when fixed). Level by the evidence: under 4, 4–10, 10 and more.
+function lvl(v, fixed) { return fixed ? (v >= 1 ? 4 : v > 0 ? 2 : 0) : v <= 0 ? 0 : v < 2 ? 1 : v < 4 ? 2 : v < 10 ? 3 : 4; }
+function bodySvg(side, vol, sel, fixed = false) {
+  const g = BODY[side].map(({ muscle, polys }) => {
+    const m = OUTLINE[muscle], v = m ? vol[m] || 0 : 0, inert = !m;
+    const cls = inert ? 'inert' : `m l${lvl(v, fixed)}${sel === m ? ' sel' : ''}${sel && sel !== m ? ' dim' : ''}`;
+    return `<g class="${cls}" ${!inert && !fixed ? `data-act="muscle" data-m="${m}"` : ''}>${polys.map(p => `<polygon points="${p.map(x => x.join(',')).join(' ')}"/>`).join('')}</g>`;
+  }).join('');
+  return `<svg class="body ${side}" viewBox="-4 -4 108 ${side === 'anterior' ? 212 : 230}" role="img" aria-label="${side === 'anterior' ? 'Front' : 'Back'}">${g}</svg>`;
+}
+// A tiny front view for exercises without a demo clip.
+function musclesGlyph(id) { return bodySvg(['erectors', 'glutes', 'hamstrings', 'lats', 'rearDelts', 'traps', 'upperBack'].includes(primaryOf(id)) ? 'posterior' : 'anterior', EXD[id]?.hits || {}, null, true); }
 function meter(v, of, cls = '') { return `<div class="bar ${cls}"><i style="width:${clamp(v / of * 100, 0, 100).toFixed(1)}%"></i></div>`; }
 // Where a number came from. Typed entries carry no label: they are the default.
-function src(kind) { const L = { watch: 'watch', strap: 'H9', est: 'estimate', adj: 'watch, corrected' }; return L[kind] ? `<span class="src s-${kind}">${L[kind]}</span>` : ''; }
+function src(kind) { const L = { watch: 'watch', strap: 'H9', est: 'estimate', adj: 'watch, corrected', typed: 'typed', ok: 'done' }; return L[kind] ? `<span class="src s-${kind}">${L[kind]}</span>` : ''; }
 function pill(lv) { return `<span class="pill lv${lv}">${LEVEL[lv]}</span>`; }
 const DASH = '–';
 
@@ -54,3 +84,10 @@ function niceTicks(a, b) {
   return out;
 }
 function legend(items) { return `<p class="key">${items.map(([cls, label]) => `<i class="k ${cls}"></i>${label}`).join('')}</p>`; }
+
+// A collapsible list of dated readings, each removable (with undo). stream names where they live in S.
+function historyList(title, rows, stream) {
+  if (!rows.length) return '';
+  return `<details class="inner hist"><summary>${title} · ${rows.length}</summary><ul class="list">${rows.map(([k, text]) =>
+    `<li><span class="grow"><span class="nm">${dateLabel(k, { weekday: 'short', day: 'numeric', month: 'short', year: '2-digit' })}</span><span class="sub">${text}</span></span><button class="mini" data-act="rmread" data-s="${stream}" data-k="${k}">Remove</button></li>`).join('')}</ul></details>`;
+}

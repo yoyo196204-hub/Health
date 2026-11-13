@@ -14,8 +14,8 @@ android {
         applicationId = "app.health"
         minSdk = 28
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.0"
+        versionCode = 3
+        versionName = "3.0"
     }
     buildFeatures { buildConfig = true }
     signingConfigs {
@@ -45,7 +45,7 @@ android {
 // so there is one copy of the code and the Android app never falls behind it.
 val copyWeb by tasks.registering(Sync::class) {
     from(rootDir.parentFile) {
-        include("index.html", "*.js", "*.css", "*.png", "manifest.webmanifest")
+        include("index.html", "*.js", "*.css", "*.png", "manifest.webmanifest", "media/*.gif")
         exclude("sw.js")
     }
     into(layout.projectDirectory.dir("src/main/assets/www"))
