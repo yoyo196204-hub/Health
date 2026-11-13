@@ -2,7 +2,8 @@
 # Every push: engine tests, then the APK. On the default branch it is signed with the app's permanent key
 # (android/release.p12 + the secret HEALTH_KEYSTORE_PASSWORD) and published on the Releases page, where
 # https://github.com/yoyo196204-hub/Health/releases/latest/download/health.apk always points at the newest.
-# On other branches it is a check only. To rebuild by hand: Actions › Android app › Run workflow.
+# On other branches it is a check only. To rebuild by hand: Actions › Android app › Run workflow, or open the
+# last run and tap Re-run jobs.
 name: Android app
 
 on:
@@ -41,11 +42,18 @@ jobs:
 
       - name: Build
         env:
-          ORG_GRADLE_PROJECT_kspass: ${{ secrets.HEALTH_KEYSTORE_PASSWORD }}
+          KS_RAW: ${{ secrets.HEALTH_KEYSTORE_PASSWORD }}
           DEFAULT: ${{ github.event.repository.default_branch }}
         run: |
           code=$((100 + GITHUB_RUN_NUMBER)); name="3.${GITHUB_RUN_NUMBER}"
+          # Copying on a phone often adds a line break or spaces around the password. The password itself
+          # never contains any, so all of them are dropped.
+          export ORG_GRADLE_PROJECT_kspass="$(printf '%s' "$KS_RAW" | tr -d '[:space:]')"
           if [ -n "$ORG_GRADLE_PROJECT_kspass" ]; then
+            if ! keytool -list -keystore android/release.p12 -storetype PKCS12 -storepass:env ORG_GRADLE_PROJECT_kspass > /dev/null 2>&1; then
+              echo "::error title=Wrong signing password::HEALTH_KEYSTORE_PASSWORD does not open the app's key. Open HEALTH_KEYSTORE_PASSWORD.txt, copy the whole line again, and save it over the secret (Settings › Secrets and variables › Actions)."
+              exit 1
+            fi
             gradle -p android assembleRelease --no-daemon -Pks="$PWD/android/release.p12" -PversionCode=$code -PversionName=$name
           elif [ "$GITHUB_REF_NAME" = "$DEFAULT" ]; then
             echo "::error title=Signing password missing::Add the repository secret HEALTH_KEYSTORE_PASSWORD (Settings › Secrets and variables › Actions). Without it the app cannot be signed with its permanent key, so nothing is published."
