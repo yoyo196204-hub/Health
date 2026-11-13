@@ -3,8 +3,10 @@
 // added up to. Reads S; the only writes are the small helpers at the bottom that the Train screen calls.
 
 function prog() { return PROGRAMS[S.settings.prog]; }
-function exName(id) { return EXD[id]?.n || (id.startsWith('x:') ? id.slice(2) : id); }
-function isHold(id) { return EXD[id]?.unit === 's'; }
+function exName(id) { return EXD[id]?.n || (id.startsWith('og:') ? ogx(id.slice(3))?.n || id : id.startsWith('x:') ? id.slice(2) : id); }
+// The muscles an exercise trains: Health's own library, or openGym's for one logged there.
+function hitsOf(id) { return EXD[id]?.hits || (String(id).startsWith('og:') ? ogx(id.slice(3))?.hits : null) || {}; }
+function isHold(id) { return EXD[id] ? EXD[id].unit === 's' : String(id).startsWith('og:') && ogx(id.slice(3))?.kind === 'h'; }
 function isBw(id) { return !!EXD[id]?.bw; }
 function equipHas(id, word) { return (EXD[id]?.eq || '').toLowerCase().includes(word); }
 function isBarbell(id) { return equipHas(id, 'barbell') || equipHas(id, 'ez bar'); }
@@ -31,7 +33,7 @@ function painRun(id, before = day) {
   }
   return { last, run };
 }
-function shoulderLoads(id) { const h = EXD[id]?.hits || {}; return EXD[id]?.sh === 'caution' || !!(h.chest || h.frontDelts || h.sideDelts || h.rearDelts); }
+function shoulderLoads(id) { const h = hitsOf(id); return EXD[id]?.sh === 'caution' || !!(h.chest || h.frontDelts || h.sideDelts || h.rearDelts); }
 
 // ---------- today's plan ----------
 // The programme day, then dumbbells-at-home substitutes, then shoulder care, then today's swaps.
@@ -75,7 +77,7 @@ function trainLetter() {
 }
 
 // ---------- alternatives ----------
-function primaryOf(id) { const h = EXD[id]?.hits || {}; return Object.keys(h).find(m => h[m] === 1) || Object.keys(h)[0]; }
+function primaryOf(id) { const h = hitsOf(id); return Object.keys(h).find(m => h[m] === 1) || Object.keys(h)[0]; }
 function freeKit(id) { return equipHas(id, 'dumbbell') || equipHas(id, 'bodyweight') || equipHas(id, 'band') || equipHas(id, 'floor'); }
 // Other exercises for the same main muscle: direct substitutes first, then always-available kit, then the least technical.
 function altPool(id, { free = false, busy = new Set(), safe = S.profile.shoulder } = {}) {
@@ -164,8 +166,8 @@ function volume(end = todayKey()) {
   return cached('vol' + end, () => {
     const v = Object.fromEntries(Object.keys(MUS).map(m => [m, 0]));
     for (const k of range(7, end)) for (const [id, sets] of Object.entries(S.lifts[k]?.ex || {})) {
-      const n = sets.filter(s => s[1] > 0).length, h = EXD[id]?.hits;
-      if (n && h) for (const m in h) v[m] += h[m] * n;
+      const n = sets.filter(s => s[1] > 0).length, h = hitsOf(id);
+      if (n) for (const m in h) if (m in v) v[m] += h[m] * n;
     }
     return v;
   });

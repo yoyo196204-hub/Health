@@ -46,7 +46,7 @@ NEV['hc-data'] = P => {
   else { SYNC.got = mergeSync(P); S.meta.sync = Date.now(); save(); }
   renderSoft();
 };
-NEV.resume = () => { rollDay(); autoSync(); autoBackup(); restTick(); renderSoft(); };
+NEV.resume = () => { rollDay(); autoSync(); autoBackup(); ogAuto(); restTick(); renderSoft(); };
 NEV.pause = () => flushMirror();
 // Update the sync line in place, so a sync never steals focus from a field being typed in.
 function paintSync() { const el = $('#syncline'); if (el) el.outerHTML = syncLine(); }

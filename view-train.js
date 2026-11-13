@@ -87,12 +87,14 @@ function vTrain() {
   return `${masthead('Train', `${esc(P.short)} · ${S.profile.equip === 'home' ? 'Dumbbells at home' : 'Gym'}`, { after: `<a class="mini icon" href="#set-train" aria-label="Training settings">${ICON.gear}</a>` })}
     ${weekStrip(day >= shift(todayKey(), -6) ? todayKey() : shift(day, 3))}
     ${liteBar}
+    ${part(ogTrainStrip)}
     <div class="chips">${Object.entries(P.days).map(([x, D]) => `<button class="${x === d ? 'on' : ''}" data-act="tday" data-d="${x}">${esc(D.n)}${x === next && !S.lifts[day] ? '<i class="nextdot" aria-label="next"></i>' : ''}</button>`).join('')}</div>
     <section class="session"><div class="mh"><h2>${esc(plan.name)}<span class="sub">${esc(plan.focus)} · ${plural(lifts.length, 'exercise')} · about ${mins} min</span></h2><b class="num big">${St.done}<i>/${St.total} sets</i></b></div>${meter(St.done, St.total || 1, St.complete ? 'ok' : '')}</section>
     ${retired}
     ${S.profile.shoulder && upper ? `<details class="prehab"><summary>Shoulder warm-up · 5 min ${S.prehab[day] ? '<span class="src s-ok">done</span>' : ''}</summary><ol>${PREHAB.map(([n, dose, w]) => `<li><b>${n}</b>, ${dose}<span class="sub">${w}</span></li>`).join('')}</ol>
       <label class="check"><input type="checkbox" data-act="prehab" ${S.prehab[day] ? 'checked' : ''}><span>Done today</span></label></details>` : ''}
     <div class="exlist">${lifts.map((L, i) => exCard(L, i, plan, lite)).join('')}</div>
+    ${part(ogTrainNote, day, plan)}
     ${done}
     ${S.lifts[day] ? `<p class="note"><button class="link" data-act="clearsession">Clear this day’s sets</button></p>` : ''}
     ${sec('This week', `<div class="pair">
@@ -178,6 +180,7 @@ function logLift(el) {
 function writeSet(id, si, f, v) {
   const entry = S.lifts[day] ||= { prog: S.settings.prog, day: trainLetter(), ex: {}, t0: Date.now() };
   entry.prog = S.settings.prog; entry.day = trainLetter();
+  delete entry.src; delete entry.ow;   // a day from openGym that you change here becomes Health's own; openGym no longer updates it
   const sets = entry.ex[id] ||= [];
   while (sets.length <= si) sets.push([null, null]);
   sets[si][f] = v;

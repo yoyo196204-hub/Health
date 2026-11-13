@@ -3,10 +3,10 @@
 // check), so a stale file can never be mixed with a new one; the saved copy is used only when offline.
 // STAMP is written by test/stamp.js and matches the ?v= on every file in index.html.
 // Exercise demos never change, so they come from the saved copy once seen.
-const STAMP = 'f6ccfc4fab';
+const STAMP = 'cef2ab21c0';
 const CACHE = 'health-' + STAMP, MEDIA = 'health-media-v1';
-const SHELL = ['./', 'index.html', 'styles.css', 'lib.js', 'data.js', 'exercises.js', 'body-data.js', 'store.js', 'model.js', 'train.js', 'native.js',
-  'feel.js', 'ui.js', 'h9.js', 'watch.js', 'view-today.js', 'view-train.js', 'view-recovery.js', 'view-review.js', 'view-me.js', 'app.js',
+const SHELL = ['./', 'index.html', 'styles.css', 'lib.js', 'data.js', 'exercises.js', 'opengym-ids.js', 'body-data.js', 'store.js', 'model.js', 'train.js', 'native.js',
+  'feel.js', 'ui.js', 'h9.js', 'watch.js', 'opengym.js', 'view-today.js', 'view-train.js', 'view-recovery.js', 'view-review.js', 'view-me.js', 'app.js',
   'manifest.webmanifest'].map(f => /\.(js|css|webmanifest)$/.test(f) ? `${f}?v=${STAMP}` : f).concat(['icon-192.png', 'icon-512.png']);
 
 self.addEventListener('install', e => {
