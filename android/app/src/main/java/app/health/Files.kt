@@ -49,14 +49,14 @@ class Files(private val a: MainActivity) {
     fun folderName(): String? = tree()?.let { DocumentsContract.getTreeDocumentId(it).substringAfterLast(':').substringAfterLast('/').ifBlank { "your phone's storage" } }
 
     /** Writes "Health backup.json", replaced daily, and one file per month that is kept. */
-    fun backup(json: String) = io.execute {
+    fun backup(json: String, manual: Boolean = false) = io.execute {
         val t = tree() ?: return@execute backupEvent(JSONObject().put("folder", JSONObject.NULL))
         try {
             for (name in listOf("Health backup.json", "Health backup ${LocalDate.now().toString().take(7)}.json")) {
                 val doc = find(t, name) ?: DocumentsContract.createDocument(a.contentResolver, DocumentsContract.buildDocumentUriUsingTree(t, DocumentsContract.getTreeDocumentId(t)), "application/json", name)
                 a.contentResolver.openOutputStream(doc!!, "wt")!!.use { it.write(json.toByteArray()) }
             }
-            backupEvent(JSONObject().put("written", true).put("folder", folderName()))
+            backupEvent(JSONObject().put("written", true).put("folder", folderName()).put("manual", manual))
         } catch (e: Exception) { backupEvent(JSONObject().put("msg", "Backup failed: ${e.message}. Choose the folder again in Me.")) }
     }
     private fun find(t: Uri, name: String): Uri? {

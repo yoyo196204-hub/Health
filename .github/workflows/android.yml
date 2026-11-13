@@ -1,0 +1,79 @@
+# Builds the Android app on GitHub, so no computer is ever needed.
+# Every push: engine tests, then the APK. On the default branch it is signed with the app's permanent key
+# (android/release.p12 + the secret HEALTH_KEYSTORE_PASSWORD) and published on the Releases page, where
+# https://github.com/yoyo196204-hub/Health/releases/latest/download/health.apk always points at the newest.
+# On other branches it is a check only. To rebuild by hand: Actions › Android app › Run workflow.
+name: Android app
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # SHA-256 of the permanent key's certificate. A published APK must carry exactly this signature.
+  CERT_SHA256: 7d9dfafd9fdd0be3d8713a9730657676c9ce219d145b72a0abc0deba682c6650
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Engine tests
+        run: node test/run.js
+
+      - name: Build
+        env:
+          ORG_GRADLE_PROJECT_kspass: ${{ secrets.HEALTH_KEYSTORE_PASSWORD }}
+          DEFAULT: ${{ github.event.repository.default_branch }}
+        run: |
+          code=$((100 + GITHUB_RUN_NUMBER)); name="3.${GITHUB_RUN_NUMBER}"
+          if [ -n "$ORG_GRADLE_PROJECT_kspass" ]; then
+            gradle -p android assembleRelease --no-daemon -Pks="$PWD/android/release.p12" -PversionCode=$code -PversionName=$name
+          elif [ "$GITHUB_REF_NAME" = "$DEFAULT" ]; then
+            echo "::error title=Signing password missing::Add the repository secret HEALTH_KEYSTORE_PASSWORD (Settings › Secrets and variables › Actions). Without it the app cannot be signed with its permanent key, so nothing is published."
+            exit 1
+          else
+            echo "::warning title=Unsigned check build::HEALTH_KEYSTORE_PASSWORD is not set, so this branch was built as 'Health test' only."
+            gradle -p android assembleRelease --no-daemon -PversionCode=$code -PversionName=$name
+          fi
+          cp android/app/build/outputs/apk/release/app-release.apk health.apk
+
+      - name: Check the signature
+        if: github.ref_name == github.event.repository.default_branch
+        run: |
+          signer="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner"
+          "$signer" verify --print-certs health.apk | tee cert.txt
+          grep -q "SHA-256 digest: $CERT_SHA256" cert.txt || { echo "::error title=Wrong signature::The APK is not signed with the app's permanent key; not publishing it."; exit 1; }
+
+      - name: Publish on the Releases page
+        if: github.ref_name == github.event.repository.default_branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="$(git log -1 --format='%B' | grep -v -e '^Co-Authored-By' -e '^Claude-Session')"
+          gh release create "v3.${GITHUB_RUN_NUMBER}" health.apk --target "$GITHUB_SHA" --latest \
+            --title "Health 3.${GITHUB_RUN_NUMBER}" --notes "$notes"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: health-apk
+          path: health.apk
+          retention-days: 14

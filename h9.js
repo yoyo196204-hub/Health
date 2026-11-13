@@ -151,6 +151,6 @@ function strapBlock(purpose) {
   if (purpose === 'morning') return `${head}<button class="solid wide" data-act="hrmorning">Start morning check · 2 min</button>`;
   return `${head}<p class="sub">Zones today: moderate ${H.zones[0]}–${H.zones[1] - 1}, vigorous ${H.zones[1]}–${H.zones[2] - 1} bpm.</p>
     <div class="chips tight">${KINDS.map(([k, l]) => `<button class="${HR.kind === k ? 'on' : ''}" data-act="hrkind" data-k="${k}">${l}</button>`).join('')}</div>
-    <button class="solid wide" data-act="hrworkout">Start ${(KINDS.find(x => x[0] === HR.kind) || KINDS[4])[1].toLowerCase()}</button>`;
+    <button class="solid wide" data-act="hrworkout">Start ${(KINDS.find(x => x[0] === HR.kind) || KINDS[KINDS.length - 1])[1].toLowerCase()}</button>`;
 }
 function strapMsg() { return HR.msg ? `<p class="${/^Saved/.test(HR.msg) ? 'sub' : 'flag'} msg">${esc(HR.msg)}</p>` : ''; }

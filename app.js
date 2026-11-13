@@ -1,20 +1,26 @@
 'use strict';
-// State, routing and events. Screens are in view-*.js; the maths in model.js; storage in store.js.
+// State, routing and events. Screens are in view-*.js; the maths in model.js and train.js; storage in store.js;
+// haptics, motion and sheets in feel.js.
 
 let S = load();
 let tab = 'today', overlay = null, pending = null, day = todayKey(), lastToday = day;
 let trainDay = null, cat = 'usual', query = '', installEvt = null, softQueued = false;
 
 const VIEWS = { today: vToday, train: vTrain, recovery: vRecovery, review: vReview, me: vMe };
+const TABS = Object.keys(VIEWS);
 const ALIAS = { heart: 'recovery', trend: 'review' };
+const POPS = { fedit: p => vFoodEdit(p.i), swap: p => vSwap(p.id), exinfo: p => vExInfo(p.id), cardioadd: () => vCardioAdd(), cardioinfo: p => vCardioInfo(p) };
+const scrollMem = {};
 
 // A failure in one screen must never blank the app or touch stored data.
 function render() {
   memo.clear(); softQueued = false;
-  const adding = overlay?.type === 'add' && MEALS.some(m => m[0] === overlay.key);
+  settleTargets();
+  const adding = overlay?.type === 'add' && MEALS.some(m => m[0] === overlay.key), setting = overlay?.type === 'set';
   try {
-    $('#view').innerHTML = (loadNote ? `<p class="flag banner">${loadNote}</p>` : '') + (adding ? vAdd(overlay.key) : VIEWS[tab]());
-    $('#sheet').innerHTML = pending ? vImport(pending) : overlay?.type === 'why' ? vWhy(overlay.key) : '';
+    const banner = (loadNote ? `<p class="flag banner">${loadNote} <button class="link" data-act="dismissnote">OK</button></p>` : '') + (saveFailed ? '<p class="flag banner">Storage is full or blocked: changes are not being kept. Export a backup from Me › Backup and data.</p>' : '');
+    $('#view').innerHTML = banner + (adding ? vAdd(overlay.key) : setting ? vSet(overlay.key) : VIEWS[tab]());
+    $('#sheet').innerHTML = pending ? (pending.type === 'halftone' ? vHalftone(pending) : vImport(pending)) : pop && POPS[pop.kind] ? part(POPS[pop.kind], pop) : overlay?.type === 'why' ? vWhy(overlay.key) : '';
   } catch (err) {
     console.error(err);
     $('#sheet').innerHTML = '';
@@ -22,8 +28,12 @@ function render() {
       <div class="rowb"><button class="solid" data-act="export">Export backup</button><a class="ghost link" href="#today">Go to Today</a></div>`;
   }
   document.body.classList.toggle('adding', adding);
+  document.body.classList.toggle('setting', setting);
   document.body.classList.toggle('sheet-open', !!$('#sheet').innerHTML);
   $$('#tabs a').forEach(a => a.classList.toggle('on', a.hash === '#' + tab));
+  $('#tabs').style.setProperty('--i', TABS.indexOf(tab));
+  document.documentElement.classList.toggle('still', !motionOK());
+  sheetEntered(); settle(); restTick();
 }
 // Renders caused by the watch or the strap wait until you have finished typing in a field.
 function renderSoft() {
@@ -36,77 +46,120 @@ function route() {
   if (location.hash.startsWith('#sync=')) { hcReceive(location.hash.slice(6)); history.replaceState(null, '', '#me'); }
   let [a, b] = (location.hash.slice(1) || 'today').split('-');
   a = ALIAS[a] || a;
-  const was = overlay;
-  if (a === 'add' || a === 'why') overlay = { type: a, key: b };
-  else { overlay = null; if (VIEWS[a]) tab = a; }
-  if (overlay?.type === 'add' && was?.type !== 'add') { query = ''; cat = 'usual'; }
-  render();
-  if (!was && !overlay) window.scrollTo(0, 0);
+  const was = overlay, wasTab = tab;
+  let next = null, nextTab = tab;
+  if (a === 'add' || a === 'why' || a === 'set') next = { type: a, key: b };
+  else if (VIEWS[a]) nextTab = a;
+  if (next?.type === 'add' && was?.type !== 'add') { query = ''; cat = 'usual'; }
+  const page = o => o && (o.type === 'add' || o.type === 'set');
+  let dir = null, top = false;
+  if (page(next) && !(page(was) && was.key === next.key)) { dir = 'push'; top = true; if (!page(was)) scrollMem[wasTab] = scrollY; }
+  else if (!page(next) && page(was)) dir = 'pop';
+  else if (!next && !was && nextTab !== wasTab) { dir = TABS.indexOf(nextTab) > TABS.indexOf(wasTab) ? 'fwd' : 'back'; top = true; buzz('tick'); }
+  const go = () => {
+    overlay = next; tab = nextTab; pop = null;
+    render();
+    if (top) scrollTo(0, 0);
+    else if (dir === 'pop') scrollTo(0, scrollMem[tab] || 0);
+  };
+  dir ? transition(dir, go) : go();
 }
 function close() { if (history.length > 1) history.back(); else location.hash = tab; }
-function refreshAdd() { const m = overlay.key; $('#rows').innerHTML = addRows(m); $('#foot').innerHTML = addFoot(m); }
+function refreshAdd() { const m = overlay.key; $('#rows').innerHTML = addRows(m); $('#foot').innerHTML = addFoot(m); settle(); }
 // The app may stay open past midnight: the view moves on with the date if you were looking at today.
 function rollDay() { const t = todayKey(); if (t !== lastToday) { if (day === lastToday) day = t; lastToday = t; return true; } return false; }
+function applyTheme() {
+  const t = S.settings.theme, root = document.documentElement;
+  if (t === 'system') delete root.dataset.theme; else root.dataset.theme = t;
+  const dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  nat('setTheme', dark);
+}
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
 
 const ACT = {
   close: () => close(),
+  popclose: () => closePop(),
+  dismissnote: () => { loadNote = ''; render(); },
   q: el => {
     bump(el.dataset.m, food(el.dataset.id) || (S.food[day] || []).find(x => x.id === el.dataset.id), +el.dataset.d);
     return overlay?.type === 'add' ? refreshAdd() : render();
   },
-  thali: el => { const [name, parts] = THALI[+el.dataset.i]; for (const [id, n] of parts) bump(el.dataset.m, food(id), n); toast(`${name} added`); refreshAdd(); },
-  cat: el => { cat = el.dataset.c; query = ''; render(); },
+  thali: el => { const [name, parts] = THALI[+el.dataset.i]; for (const [id, n] of parts) bump(el.dataset.m, food(id), n); buzz('ok'); toast(`${name} added`); refreshAdd(); },
+  cat: el => { cat = el.dataset.c; query = ''; buzz('tick'); render(); },
   custom: el => {
     const f = cleanFood({ id: 'x' + Date.now(), n: $('#c_n').value, u: $('#c_u').value.trim(), k: $('#c_k').value, p: $('#c_p').value, fb: $('#c_fb').value, cat: 'mine' }, false);
-    if (!f) return toast('Name and kcal are needed');
-    if (S.custom.length >= 300) return toast('Limit of 300 own foods reached');
-    S.custom.push(f); bump(el.dataset.m, f, 1); render();
+    if (!f) { buzz('warn'); return toast('Name and kcal are needed'); }
+    if (S.custom.length >= 300) { buzz('warn'); return toast('Limit of 300 own foods reached'); }
+    S.custom.push(f); bump(el.dataset.m, f, 1); buzz('ok'); render();
+  },
+  quick: el => {
+    const k = num($('#k_k').value, 1, 5000), p = num($('#k_p').value, 0, 500) ?? 0;
+    if (k == null) { buzz('warn'); return toast('Enter the calories'); }
+    const f = { id: 'q' + Date.now(), n: $('#k_n').value.trim().slice(0, 60) || 'Quick add', u: 'entry', k, p, fb: 0, cat: 'quick' };
+    bump(el.dataset.m, f, 1); buzz('ok'); toast(`${fmt(k)} kcal added`); render();
   },
   delcustom: el => {
     const f = S.custom.find(x => x.id === el.dataset.id);
     if (!f) return;
-    S.custom = S.custom.filter(x => x !== f);
+    const i = S.custom.indexOf(f), fr = Object.fromEntries(Object.keys(S.freq).map(m => [m, S.freq[m][f.id]]));
+    S.custom.splice(i, 1);
     for (const m in S.freq) delete S.freq[m][f.id];
-    save(); refreshAdd(); toast(`${f.n} removed from your foods. Days already logged keep it.`, 3000);
+    save(); refreshAdd();
+    undoable(`${f.n} removed from your foods`, () => { S.custom.splice(i, 0, f); for (const m in fr) if (fr[m]) S.freq[m][f.id] = fr[m]; });
   },
-  copy: el => { for (const x of S.food[shift(day, -1)].filter(x => x.m === el.dataset.m)) (S.food[day] ||= []).push({ ...x }); save(); render(); },
-  day: el => { day = shift(day, +el.dataset.d); if (day > todayKey()) day = todayKey(); trainDay = null; render(); },
-  today: () => { day = todayKey(); trainDay = null; render(); },
-  goday: el => { day = el.dataset.k; trainDay = null; render(); },
-  // Switching the session letter carries already-logged sets with it; they still count toward the week.
-  tday: el => { trainDay = el.dataset.d; if (S.lifts[day]) { S.lifts[day].day = trainDay; save(); } render(); },
-  full: () => { S.full[day] = !isComplete(day); save(); render(); },
+  copy: el => { for (const x of S.food[shift(day, -1)].filter(x => x.m === el.dataset.m)) (S.food[day] ||= []).push({ ...x }); save(); buzz('ok'); render(); },
+  day: el => { const d = +el.dataset.d; transition(d < 0 ? 'back' : 'fwd', () => { day = shift(day, d); if (day > todayKey()) day = todayKey(); trainDay = null; openEx = null; buzz('tick'); render(); }); },
+  today: () => transition('fwd', () => { day = todayKey(); trainDay = null; openEx = null; render(); }),
+  goday: el => { day = el.dataset.k; trainDay = null; openEx = null; buzz('tick'); render(); },
+  // Switching the session day carries already-logged sets with it; they still count toward the week.
+  tday: el => { trainDay = el.dataset.d; openEx = null; if (S.lifts[day]) { S.lifts[day].day = trainDay; S.lifts[day].prog = S.settings.prog; save(); } buzz('tick'); render(); },
+  full: () => { S.full[day] = !isComplete(day); save(); buzz('tick'); render(); },
   profile: () => {
     const dob = $('#p_dob').value, age = (Date.now() - Date.parse(dob)) / (365.25 * DAY);
     Object.assign(S.profile, {
       sex: $('#p_sex').value, dob: DATE.test(dob) && age >= 12 && age <= 100 ? dob : S.profile.dob,
       h: num($('#p_h').value, 120, 230) ?? S.profile.h, w0: num($('#p_w0').value, 30, 250) ?? S.profile.w0,
-      waist0: num($('#p_waist0').value, 40, 200) ?? S.profile.waist0, days: +$('#p_days').value, equip: $('#p_equip').value, shoulder: $('#p_sh').checked,
+      waist0: num($('#p_waist0').value, 40, 200) ?? S.profile.waist0, days: +$('#p_days').value,
     });
-    save(); render(); toast('Saved');
+    save(); buzz('ok'); render(); toast('Profile saved');
   },
+  muscle: el => { mapSel = mapSel === el.dataset.m ? null : el.dataset.m; buzz('tick'); render(); },
+  rmread: el => {
+    const s = el.dataset.s, k = el.dataset.k, was = S[s][k], man = S.manual[s]?.[k];
+    if (was == null) return;
+    delete S[s][k]; if (S.manual[s]) delete S.manual[s][k];
+    save(); render();
+    undoable(`${dateLabel(k)} removed`, () => { S[s][k] = was; if (man) S.manual[s][k] = man; });
+  },
+  rest15: () => restAdd(15),
+  restskip: () => { restStop(); buzz('tick'); },
   install: () => { installEvt?.prompt(); installEvt = null; },
   export: () => { S.meta.exported = todayKey(); save(); saveText(`health-${todayKey()}.json`, JSON.stringify(S)); render(); },
   import: () => $('#imp').click(),
   importok: () => {
-    try { localStorage.setItem(KEY + '.bak', JSON.stringify(S)); } catch (e) { /* best effort */ }
-    S = pending.data; pending = null; save(); render(); toast('Imported'); syncNow();
+    snapshot('Before importing a backup');
+    S = sanitize(pending.data); S.meta.welcomed = true; pending = null; save(); applyTheme(); buzz('done'); render();
+    toast('Imported', 7000, { label: 'Undo', fn: () => { restoreSnapshot(); applyTheme(); render(); toast('Import undone'); } });
+    syncNow();
   },
   importno: () => { pending = null; render(); },
   move: () => moveToApp(),
-  sync: () => syncNow(),
+  sync: () => { buzz('tick'); syncNow(); },
   fullsync: () => syncNow(90),
   hcask: () => hcAsk(),
   zepp: () => nat('openZepp'),
-  bkpick: () => nat('backupPick'),
+  bkpick: () => { S.meta.welcomed = true; save(); nat('backupPick'); },
   shareweek: () => { const T = targets(); shareText('Health · week', shareWeek(T, range(7).map(k => dayCells(k, T)), energy())); },
 };
 
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
   if (!el || el.tagName === 'INPUT') return;
+  // The click that ends a press-and-repeat has already been counted.
+  if (el.dataset.repeat && e.isTrusted && repeated === el.dataset.repeat) { repeated = ''; return; }
   const a = el.dataset.act;
   if (ACT[a]) return ACT[a](el);
+  if (trainAct(a, el) || foodAct(a, el) || setAct(a, el)) return;
   if (a.startsWith('hr')) return hrAct(a, el);
   if (a.startsWith('w')) return watchAct(a);
 });
@@ -120,24 +173,38 @@ document.addEventListener('input', e => {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.log) {
-    const stream = el.dataset.log, v = num(el.value, ...LIMITS[stream]);
+    const stream = el.dataset.log, v = num(el.value, ...LIMITS[stream]), prev = S[stream][day], prevMan = S.manual[stream]?.[day];
     if (MANUAL.includes(stream)) setManual(stream, day, v);
     else if (v == null) delete S[stream][day]; else S[stream][day] = v;
-    if (v == null && el.value !== '') { el.value = ''; toast('That value is out of range'); }
+    if (v == null && el.value !== '') { el.value = ''; buzz('warn'); toast('That value is out of range'); }
     el.closest('label')?.querySelector('.src')?.remove();
     save();
+    const off = stream === 'weights' && v != null ? weighCheck(day, v) : null;
+    if (off != null) {
+      buzz('warn');
+      toast(`${sign(off, 1)} kg from your trend. A typo?`, 7000, { label: 'Undo', fn: () => { if (prev == null) setManual(stream, day, null); else { S[stream][day] = prev; if (!prevMan) delete S.manual[stream][day]; } save(); render(); } });
+    } else if (v != null) buzz('tick');
   }
   else if (el.dataset.lift) logLift(el);
-  else if (el.dataset.act === 'prehab') { if (el.checked) S.prehab[day] = true; else delete S.prehab[day]; save(); }
+  else if (el.dataset.act === 'prehab') { if (el.checked) S.prehab[day] = true; else delete S.prehab[day]; save(); buzz(el.checked ? 'ok' : 'tick'); render(); }
+  else if (el.dataset.act === 'shoulder') { S.profile.shoulder = el.checked; openEx = null; save(); buzz('tick'); render(); }
+  else if (el.dataset.act === 'cutg') { CUT.groups[el.dataset.v] = el.checked; buzz('tick'); render(); }
   else if (el.id === 'wfile' && el.files.length) { watchRead(el.files); el.value = ''; }
-  else if (el.id === 'imp' && el.files[0]) {
+  else if ((el.id === 'imp' || el.id === 'htimp') && el.files[0]) {
     const f = el.files[0]; el.value = '';
-    if (f.size > 20e6) return toast('That file is too large to be a Health backup');
+    if (f.size > 30e6) { buzz('warn'); return toast('That file is too large to be a backup'); }
     f.text().then(txt => {
-      const data = JSON.parse(txt);
-      if (!obj(data) || !data.profile || !data.food) throw new Error('bad file');
-      pending = { type: 'import', data: sanitize(data), from: f.name }; render();
-    }).catch(() => toast('That file is not a Health backup'));
+      const data = JSON.parse(txt), ht = halftoneProfiles(data);
+      if (ht) {
+        if (!ht.length) throw new Error('empty');
+        const pick = ht.reduce((b, x, i) => x.conv.days > ht[b].conv.days ? i : b, 0);
+        pending = { type: 'halftone', profiles: ht, pick, from: f.name };
+      } else {
+        if (!obj(data) || !data.profile || !data.food) throw new Error('bad file');
+        pending = { type: 'import', data: sanitize(data), from: f.name };
+      }
+      render();
+    }).catch(() => { buzz('warn'); toast('That file is not a Health or Halftone backup'); });
   }
 });
 
@@ -147,10 +214,16 @@ addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = 
 addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } });
 addEventListener('error', () => toast('Something went wrong. Your data is safe.'));
 addEventListener('unhandledrejection', () => toast('Something went wrong. Your data is safe.'));
-document.addEventListener('visibilitychange', () => { if (!document.hidden && !NATIVE && rollDay()) render(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return flushMirror();
+  if (!NATIVE && rollDay()) render();
+  restTick();
+});
 
+applyTheme();
 dailyBackup();
 navigator.storage?.persist?.().catch(() => {});
 if (NATIVE) { document.documentElement.classList.add('native'); hcCheck(); backupInfo(); autoBackup(); }
+if (recovered === 'mirror') save();
 route();
 if (!NATIVE && 'serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');

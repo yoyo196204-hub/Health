@@ -8,7 +8,17 @@ function nat(method, ...args) { try { return NATIVE?.[method]?.(...args) ?? null
 function parse(s) { try { return JSON.parse(s); } catch (e) { return null; } }
 const APP = NATIVE ? parse(nat('info')) || {} : null;
 const HERE = location.origin + location.pathname.replace(/[^/]*$/, '');
-const APK = 'https://yoyo196204-hub.github.io/Health/health.apk';
+// Every build is published, signed with the app's permanent key, on the repository's Releases page.
+const APK = 'https://github.com/yoyo196204-hub/Health/releases/latest/download/health.apk';
+
+// ---------- the app's private copy ----------
+// Inside the app every save is also written, a moment later, to a file only this app can read. If the WebView's
+// storage is ever lost or damaged, the app starts from that copy instead of from nothing.
+function mirrorRead() {
+  if (!NATIVE || typeof NATIVE.mirrorRead !== 'function') return null;
+  try { const t = nat('mirrorRead'); return t ? sanitize(JSON.parse(t)) : null; } catch (e) { return null; }
+}
+function mirrorWrite(text) { if (NATIVE && typeof NATIVE.mirrorWrite === 'function') nat('mirrorWrite', text); }
 
 // ---------- Health Connect ----------
 const SYNC = { busy: false, err: '', status: null, got: null };
@@ -36,7 +46,8 @@ NEV['hc-data'] = P => {
   else { SYNC.got = mergeSync(P); S.meta.sync = Date.now(); save(); }
   renderSoft();
 };
-NEV.resume = () => { rollDay(); autoSync(); autoBackup(); renderSoft(); };
+NEV.resume = () => { rollDay(); autoSync(); autoBackup(); restTick(); renderSoft(); };
+NEV.pause = () => flushMirror();
 // Update the sync line in place, so a sync never steals focus from a field being typed in.
 function paintSync() { const el = $('#syncline'); if (el) el.outerHTML = syncLine(); }
 
@@ -93,15 +104,15 @@ function shareText(title, text) {
 // The app writes a copy of everything to a folder you choose, once a day. It survives uninstalling the app.
 const BACKUP = { folder: null };
 function backupInfo() { if (NATIVE) BACKUP.folder = parse(nat('backupStatus'))?.folder || null; }
-function autoBackup() {
-  if (!NATIVE || !BACKUP.folder || S.meta.backup === todayKey()) return;
-  nat('backupWrite', JSON.stringify(S));
+function autoBackup(force) {
+  if (!NATIVE || !BACKUP.folder || (!force && S.meta.backup === todayKey())) return;
+  nat('backupWrite', JSON.stringify(S), !!force);
 }
 NEV.backup = r => {
   if (r?.folder !== undefined) BACKUP.folder = r.folder;
-  if (r?.written) { S.meta.backup = todayKey(); save(); }
+  if (r?.written) { S.meta.backup = todayKey(); save(); if (r.manual) toast('Backed up'); }
   if (r?.msg) toast(r.msg);
-  if (r?.picked) autoBackup();
+  if (r?.picked) { S.meta.welcomed = true; save(); autoBackup(true); }
   renderSoft();
 };
 
@@ -113,7 +124,7 @@ async function moveToApp() {
     const gz = await new Response(new Blob([JSON.stringify(S)]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
     const d = b64url(gz);
     if (d.length > 450000) return toast('Too much to hand over in one step. Export here, then Import inside the app.', 5000);
-    location.href = `intent://import?d=${d}#Intent;scheme=app.health;package=app.health;S.browser_fallback_url=${encodeURIComponent(APK)};end`;
+    location.href = `intent://import?d=${d}#Intent;scheme=app.health;package=app.health.personal;S.browser_fallback_url=${encodeURIComponent(APK)};end`;
   } catch (e) { toast('This browser cannot hand over data. Export here, then Import inside the app.', 5000); }
 }
 // The app received data handed over from Chrome. Nothing is replaced until you confirm.
