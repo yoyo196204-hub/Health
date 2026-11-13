@@ -8,7 +8,8 @@ progression, shoulder care, swaps, a rest timer, plate maths and a muscle map.
 
 ## Two ways to run it
 
-- **Android app** (`health.apk`): the full experience. Steps, sleep, heart rate, workouts and weight arrive
+- **Android app**: the full experience. Download `health.apk` from the
+  [latest release](https://github.com/yoyo196204-hub/Health/releases/latest). Steps, sleep, heart rate, workouts and weight arrive
   by themselves from Health Connect each time the app opens. The Polar H9 connects over the phone's own
   Bluetooth and is remembered. Haptics use the phone's own engine, and the rest timer vibrates even with the
   screen off. A daily backup can go to a folder you choose. The app has **no internet permission**, so
@@ -16,6 +17,20 @@ progression, shoulder care, swaps, a rest timer, plate maths and a muscle map.
 - **In Chrome** (`index.html`, served by GitHub Pages): the same screens, with the H9 over Web Bluetooth and
   Amazfit data from a Zepp CSV export. "Move my data to the app" in Me hands everything to the Android app
   in one step.
+
+## Installing and updating, from the phone
+
+Every version is built on GitHub and signed with the app's one permanent key, so each new version installs
+straight over the last and keeps everything in it. No computer is involved at any point.
+
+- **Update**: open the [latest release](https://github.com/yoyo196204-hub/Health/releases/latest) on the phone,
+  tap `health.apk`, then Update. Do this on each device you use.
+- **Only ever install from the Releases page.** A build made anywhere else is named "Health test", has its own ID
+  and installs separately; it cannot replace or touch the real app.
+- **Moving from version 2** (one time only): version 2 was signed with a key that no longer exists, so version 3
+  is a separate app and installs next to it. In the old app: Me › Backup › Export. In the new app: Today ›
+  Import a backup, pick that file, check your history is there, then uninstall the old app. Allow Health
+  Connect, pick the backup folder and connect the H9 again in the new app.
 
 ## Screens
 
@@ -80,5 +95,10 @@ Plain JavaScript, no build step. Scripts load in this order:
 Exercise demonstrations are in `media/`. Engine tests: `node test/run.js`.
 
 The Android project is in `android/`. Its build copies the web files and `media/` from the repository root
-into the app, so there is one copy of the code. Build with `gradle -p android assembleRelease` and copy
-`android/app/build/outputs/apk/release/app-release.apk` to `health.apk`.
+into the app, so there is one copy of the code.
+
+Builds run in GitHub Actions (`.github/workflows/android.yml`) on every push. On the default branch the APK is
+signed with `android/release.p12`, its signature is checked against the permanent certificate
+(SHA-256 `7d9dfafd…682c6650`), and it is published as a release. The key file is encrypted; its password is only
+in the repository secret `HEALTH_KEYSTORE_PASSWORD` (keep a copy of it somewhere safe as well). Without that
+password a build is signed with a throwaway key and becomes "Health test" (`app.health.personal.test`).

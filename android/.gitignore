@@ -4,6 +4,10 @@ app/build/
 local.properties
 *.jks
 *.p12
+# The app's permanent signing key. It is encrypted (AES-256) with a long random password that is kept only in
+# the GitHub secret HEALTH_KEYSTORE_PASSWORD, so the file alone is useless to anyone else.
+!release.p12
 *.keystore
 # Web files are copied in from the repository root at build time.
 app/src/main/assets/www/
+.kotlin/

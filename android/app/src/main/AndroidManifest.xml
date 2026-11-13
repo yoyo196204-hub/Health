@@ -40,7 +40,7 @@
     <application
         android:allowBackup="false"
         android:icon="@drawable/ic_launcher"
-        android:label="Health"
+        android:label="${appLabel}"
         android:theme="@style/Health">
 
         <activity

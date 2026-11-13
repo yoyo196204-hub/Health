@@ -8,7 +8,8 @@ function nat(method, ...args) { try { return NATIVE?.[method]?.(...args) ?? null
 function parse(s) { try { return JSON.parse(s); } catch (e) { return null; } }
 const APP = NATIVE ? parse(nat('info')) || {} : null;
 const HERE = location.origin + location.pathname.replace(/[^/]*$/, '');
-const APK = 'https://yoyo196204-hub.github.io/Health/health.apk';
+// Every build is published, signed with the app's permanent key, on the repository's Releases page.
+const APK = 'https://github.com/yoyo196204-hub/Health/releases/latest/download/health.apk';
 
 // ---------- the app's private copy ----------
 // Inside the app every save is also written, a moment later, to a file only this app can read. If the WebView's
@@ -123,7 +124,7 @@ async function moveToApp() {
     const gz = await new Response(new Blob([JSON.stringify(S)]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
     const d = b64url(gz);
     if (d.length > 450000) return toast('Too much to hand over in one step. Export here, then Import inside the app.', 5000);
-    location.href = `intent://import?d=${d}#Intent;scheme=app.health;package=app.health;S.browser_fallback_url=${encodeURIComponent(APK)};end`;
+    location.href = `intent://import?d=${d}#Intent;scheme=app.health;package=app.health.personal;S.browser_fallback_url=${encodeURIComponent(APK)};end`;
   } catch (e) { toast('This browser cannot hand over data. Export here, then Import inside the app.', 5000); }
 }
 // The app received data handed over from Chrome. Nothing is replaced until you confirm.

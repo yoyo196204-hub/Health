@@ -3,23 +3,29 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-// A release key can be passed in from outside the repository: -Pks=/path/to/key.p12 -Pkspass=...
-// Without one, the build is signed with this machine's debug key.
+// The app's permanent key is android/release.p12, protected by a password that lives only in the GitHub secret
+// HEALTH_KEYSTORE_PASSWORD. GitHub builds pass both in: -Pks=android/release.p12 and kspass (as an environment
+// variable). Every version signed with it installs over the last one.
+// Without them (any other computer), the build is signed with that machine's throwaway debug key and gets a
+// different app ID and the name "Health test", so it can never be mistaken for, or installed over, the real app.
 val ks: String? = providers.gradleProperty("ks").orNull
+val signed = ks != null
 
 android {
     namespace = "app.health"
     compileSdk = 36
     defaultConfig {
-        applicationId = "app.health"
+        // "app.health" was the ID of versions signed with keys that no longer exist; the new ID lets this one
+        // install next to such a version, so data can be moved across before the old app is removed.
+        applicationId = "app.health.personal"
         minSdk = 28
         targetSdk = 35
-        versionCode = 3
-        versionName = "3.0"
+        versionCode = providers.gradleProperty("versionCode").orNull?.toInt() ?: 3
+        versionName = providers.gradleProperty("versionName").orNull ?: "3.0"
     }
     buildFeatures { buildConfig = true }
     signingConfigs {
-        if (ks != null) create("release") {
+        if (signed) create("release") {
             storeFile = file(ks)
             storePassword = providers.gradleProperty("kspass").get()
             keyAlias = providers.gradleProperty("ksalias").orNull ?: "health"
@@ -27,11 +33,14 @@ android {
         }
     }
     buildTypes {
+        debug { manifestPlaceholders["appLabel"] = "Health test"; applicationIdSuffix = ".test" }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName(if (ks != null) "release" else "debug")
+            signingConfig = signingConfigs.getByName(if (signed) "release" else "debug")
+            if (!signed) applicationIdSuffix = ".test"
+            manifestPlaceholders["appLabel"] = if (signed) "Health" else "Health test"
         }
     }
     compileOptions {
