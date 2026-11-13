@@ -36,6 +36,14 @@ class Bridge(private val a: MainActivity) {
         val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT, title).putExtra(Intent.EXTRA_TEXT, text)
         try { a.startActivity(Intent.createChooser(send, title)) } catch (e: Exception) { /* nothing to share with */ }
     }
+    // openGym: its backup folder, read each time the app opens; Health's plan file written next to it
+    @JavascriptInterface fun ogStatus(): String = a.og.status()
+    @JavascriptInterface fun ogPick() = a.main.post { a.og.pick() }
+    @JavascriptInterface fun ogUnlink() { a.og.unlink() }
+    @JavascriptInterface fun ogCheck(seen: String) { a.og.check(seen) }
+    @JavascriptInterface fun ogTake(): String? = a.og.take()
+    @JavascriptInterface fun ogWrite(name: String, text: String) { a.og.write(name, text) }
+    @JavascriptInterface fun openOpenGym() { a.og.open() }
     // Haptics, the rest timer, the private copy and the theme
     @JavascriptInterface fun haptic(kind: String): Boolean { a.feel.haptic(kind); return true }
     @JavascriptInterface fun restAlarm(ms: Double) { a.feel.restAlarm(ms.toLong()) }

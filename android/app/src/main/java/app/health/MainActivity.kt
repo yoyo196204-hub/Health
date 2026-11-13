@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
     lateinit var strap: Strap
     lateinit var files: Files
     lateinit var feel: Feel
+    lateinit var og: OpenGym
     private lateinit var root: FrameLayout
 
     private var ready = false
@@ -54,6 +55,7 @@ class MainActivity : ComponentActivity() {
     }
     val createJson = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { files.saved(it) }
     val pickFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { files.folderPicked(it) }
+    val pickOgFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { og.picked(it) }
     val healthPermissions = registerForActivityResult(PermissionController.createRequestPermissionResultContract()) { health.status() }
     private val bluetoothPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
         afterBluetooth?.invoke(r.values.all { it }); afterBluetooth = null
@@ -65,7 +67,7 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        health = HealthReader(this); strap = Strap(this); files = Files(this); feel = Feel(this)
+        health = HealthReader(this); strap = Strap(this); files = Files(this); feel = Feel(this); og = OpenGym(this)
 
         // Draw edge to edge, and pad the page by the system bars and the keyboard so nothing hides behind them.
         WindowCompat.setDecorFitsSystemWindows(window, false)

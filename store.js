@@ -37,10 +37,11 @@ function cleanFood(e, logged) {
   if (q == null) return null;
   return Object.assign(f, { q, m: MEALS.some(m => m[0] === e.m) ? e.m : 'lunch' });
 }
-// An exercise is a library id, or 'x:' and a name for anything older that the library does not know.
+// An exercise is a library id, 'og:' and the number of an exercise from openGym's library, or 'x:' and a name for
+// anything else the library does not know.
 function liftId(name) {
   if (typeof name !== 'string' || BAD.has(name) || !name || name.length > 64) return null;
-  if (EXD[name] || /^x:./.test(name)) return name;
+  if (EXD[name] || /^x:./.test(name) || (/^og:\d{1,6}$/.test(name) && ogx(name.slice(3)))) return name;
   return OLDNAMES[name] || 'x:' + name.slice(0, 50);
 }
 function cleanLift(v) {
@@ -61,6 +62,12 @@ function cleanLift(v) {
   const t0 = num(v.t0, 1e12, 1e13), t1 = num(v.t1, 1e12, 1e13);
   if (t0 != null) r.t0 = t0;
   if (t1 != null && t0 != null && t1 >= t0) r.t1 = t1;
+  // Logged in openGym: the next read from openGym may update it. ow: openGym's own ids for the workouts of that day.
+  if (v.src === 'og') {
+    r.src = 'og';
+    const ow = Array.isArray(v.ow) ? v.ow.filter(x => typeof x === 'string' && x && x.length <= 40 && !BAD.has(x)).slice(0, 6) : [];
+    if (ow.length) r.ow = ow;
+  }
   return r;
 }
 // A cardio session from the strap (heart rate and zones), or one typed in by hand (m: 1, with an effort).
@@ -158,6 +165,8 @@ function sanitize(raw) {
       h9: h9 && str(h9.id, 64) ? { id: str(h9.id, 64), name: str(h9.name, 40) } : null,
       tgt: tg && num(tg.k, 800, 6000) != null && DATE.test(tg.at) ? { k: +tg.k, p: num(tg.p, 20, 400) || 0, at: tg.at, sig: str(tg.sig, 80) } : null,
       welcomed: meta.welcomed === true, imported: str(meta.imported, 40) || null,
+      og: obj(meta.og) && num(meta.og.at, 1e12, 1e13) != null ? { at: +meta.og.at, file: str(meta.og.file, 60), seen: str(meta.og.seen, 90) } : null,
+      ogplan: obj(meta.ogplan) && DATE.test(meta.ogplan.at) ? { sig: str(meta.ogplan.sig, 16), at: meta.ogplan.at } : null,
     },
   };
 }

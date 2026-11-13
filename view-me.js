@@ -26,9 +26,9 @@ function vMe() {
       trow(why('waist', 'BMI, Indian cut-offs'), `${r1(T.bmi)}, ${cls}`)]) + (T.locked ? para(`Targets hold until ${dateLabel(T.next, { weekday: 'long', day: 'numeric', month: 'short' })}. ${why('lock', 'Why')}`) : ''))}
     <nav class="group">
       ${navrow('#set-goal', 'Goal and targets', `${PACE[S.settings.pace][0]}${PACE[S.settings.pace][1] ? ` · ${PACE[S.settings.pace][1]}% a week` : ''} · protein ${S.settings.protein === 'high' ? 'higher' : 'standard'}`, ICON.goal)}
-      ${navrow('#set-train', 'Training', `${esc(P.short)} · ${p.equip === 'home' ? 'home' : 'gym'}${p.shoulder ? ' · shoulder care' : ''}`, ICON.lift)}
+      ${navrow('#set-train', 'Training', `${esc(P.short)} · ${p.equip === 'home' ? 'home' : 'gym'}${p.shoulder ? ' · shoulder care' : ''}${ogPlanStale() ? ' · plan changed: send it to openGym' : ''}`, ICON.lift)}
       ${navrow('#set-profile', 'Profile', `${p.sex === 'm' ? 'Male' : 'Female'} · ${p.h} cm · started at ${p.w0} kg`, ICON.person)}
-      ${navrow('#set-sources', 'Data sources', NATIVE ? (SYNC.status?.granted?.length ? `Health Connect · synced ${S.meta.sync ? ago(S.meta.sync) : 'not yet'}` : 'Health Connect not connected') : 'Zepp files, H9', ICON.link)}
+      ${navrow('#set-sources', 'Data sources', (NATIVE ? (SYNC.status?.granted?.length ? `Health Connect · synced ${S.meta.sync ? ago(S.meta.sync) : 'not yet'}` : 'Health Connect not connected') : 'Zepp files, H9') + (OGF.folder || S.meta.og ? ' · openGym' : ''), ICON.link)}
       ${navrow('#set-data', 'Backup and data', bk, ICON.box)}
       ${navrow('#set-feel', 'Feel', `Haptics ${S.settings.haptics} · motion ${S.settings.motion} · ${S.settings.theme} theme`, ICON.hand)}
       ${navrow('#set-evid', 'The evidence', `${Object.keys(EVID).length} topics, each with its sources`, ICON.book)}
@@ -67,7 +67,8 @@ function vSetTrain() {
     ${sec('Shoulder care', `<label class="toggle"><input type="checkbox" data-act="shoulder" ${p.shoulder ? 'checked' : ''}><span class="grow"><b>Protect a sore shoulder</b><span class="sub">No loaded overhead end range or flyes, laterals to shoulder height, a five-minute warm-up, and a quick “how did it feel” after shoulder exercises.</span></span><i class="sw"></i></label>`, { why: ['shoulder', 'How it works'] })}
     ${sec('Rest timer', seg('rest', [[0, 'Auto'], [60, '1:00'], [90, '1:30'], [120, '2:00'], [150, '2:30'], [180, '3:00'], [240, '4:00']], s.rest, 'scroll') + para(s.rest ? 'The same rest after every set.' : 'Auto: 2:30 after exercises that use several big muscles, 1:30 after small ones, 1:00 after holds.'), { why: ['rest', 'Why'] })}
     ${sec('Equipment', `<h3>Barbell</h3>${seg('bar', [[20, '20 kg'], [15, '15 kg'], [10, '10 kg'], [0, 'No plate maths']], s.bar)}
-      <h3>Smallest dumbbell step</h3>${seg('dbstep', [[1, '1 kg'], [2, '2 kg'], [2.5, '2.5 kg']], s.dbStep)}${para('When a dumbbell exercise earns more weight, it goes up by this much.')}`)}`;
+      <h3>Smallest dumbbell step</h3>${seg('dbstep', [[1, '1 kg'], [2, '2 kg'], [2.5, '2.5 kg']], s.dbStep)}${para('When a dumbbell exercise earns more weight, it goes up by this much.')}`)}
+    ${sec('Train in openGym', part(ogPlanBlock))}`;
 }
 
 // ---------- profile ----------
@@ -115,7 +116,7 @@ function sourcesSection() {
     : para(`Connect from Train or Recovery. ${NATIVE ? 'The app remembers it after the first time.' : ''}`);
   const zepp = watchPreview ? watchPreviewBlock() : `<details class="inner"><summary>Import a Zepp export instead</summary><ol class="sub steps"><li>Zepp › Profile › Settings › Account › Export data. Pick activity, sleep and heart rate.</li><li>Zepp emails a zip with a password. Unzip it in your Files app.</li><li>Tap below and select the CSV files together.</li></ol>
       <button class="ghost" data-act="wpick">Choose Zepp files</button></details>`;
-  return `<h3>Health Connect ${NATIVE ? '' : '<span class="src">in the app</span>'}</h3>${hc}<h3>Polar H9</h3>${strap}<h3>Amazfit files</h3>${zepp}
+  return `<h3>Health Connect ${NATIVE ? '' : '<span class="src">in the app</span>'}</h3>${hc}<h3>openGym</h3>${part(ogSourcesBlock)}<h3>Polar H9</h3>${strap}<h3>Amazfit files</h3>${zepp}
     <input type="file" id="wfile" accept=".csv,text/csv,text/comma-separated-values" multiple hidden>`;
 }
 

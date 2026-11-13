@@ -35,6 +35,8 @@
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
         <package android:name="com.huami.watch.hmwatchmanager" />
+        <!-- openGym, so Health can offer to open it. Its files are only read from the folder you pick. -->
+        <package android:name="ch.duartesantos.opengym" />
     </queries>
 
     <application

@@ -41,7 +41,7 @@ function render() {
   try {
     const banner = (loadNote ? `<p class="flag banner">${loadNote} <button class="link" data-act="dismissnote">OK</button></p>` : '') + (saveFailed ? '<p class="flag banner">Storage is full or blocked: changes are not being kept. Export a backup from Me › Backup and data.</p>' : '');
     $('#view').innerHTML = banner + (adding ? vAdd(overlay.key) : setting ? vSet(overlay.key) : VIEWS[tab]());
-    $('#sheet').innerHTML = pending ? (pending.type === 'halftone' ? vHalftone(pending) : vImport(pending)) : pop && POPS[pop.kind] ? part(POPS[pop.kind], pop) : overlay?.type === 'why' ? vWhy(overlay.key) : '';
+    $('#sheet').innerHTML = pending ? (pending.type === 'halftone' ? vHalftone(pending) : pending.type === 'opengym' ? vOpenGym(pending) : vImport(pending)) : pop && POPS[pop.kind] ? part(POPS[pop.kind], pop) : overlay?.type === 'why' ? vWhy(overlay.key) : '';
   } catch (err) {
     console.error(err);
     $('#sheet').innerHTML = '';
@@ -180,7 +180,7 @@ document.addEventListener('click', e => {
   if (el.dataset.repeat && e.isTrusted && repeated === el.dataset.repeat) { repeated = ''; return; }
   const a = el.dataset.act;
   if (ACT[a]) return ACT[a](el);
-  if (trainAct(a, el) || foodAct(a, el) || setAct(a, el)) return;
+  if (trainAct(a, el) || foodAct(a, el) || setAct(a, el) || ogAct(a, el)) return;
   if (a.startsWith('hr')) return hrAct(a, el);
   if (a.startsWith('w')) return watchAct(a);
 });
@@ -211,10 +211,14 @@ document.addEventListener('change', e => {
   else if (el.dataset.act === 'shoulder') { S.profile.shoulder = el.checked; openEx = null; save(); buzz('tick'); render(); }
   else if (el.dataset.act === 'cutg') { CUT.groups[el.dataset.v] = el.checked; buzz('tick'); render(); }
   else if (el.id === 'wfile' && el.files.length) { watchRead(el.files); el.value = ''; }
+  else if (el.id === 'ogimp' && el.files[0]) { const f = el.files[0]; el.value = ''; ogFile(f); }
   else if ((el.id === 'imp' || el.id === 'htimp') && el.files[0]) {
     const f = el.files[0]; el.value = '';
     if (f.size > 30e6) { buzz('warn'); return toast('That file is too large to be a backup'); }
     f.text().then(txt => {
+      // An openGym backup or spreadsheet picked here goes the openGym way: added, never replacing anything.
+      const og = ogParse(txt);
+      if (og && !og.error) return ogReceive(txt, f.name, '', false);
       const data = JSON.parse(txt), ht = halftoneProfiles(data);
       if (ht) {
         if (!ht.length) throw new Error('empty');
@@ -225,7 +229,7 @@ document.addEventListener('change', e => {
         pending = { type: 'import', data: sanitize(data), from: f.name };
       }
       render();
-    }).catch(() => { buzz('warn'); toast('That file is not a Health or Halftone backup'); });
+    }).catch(() => { buzz('warn'); toast('That file is not a Health, Halftone or openGym backup'); });
   }
 });
 
@@ -244,7 +248,7 @@ document.addEventListener('visibilitychange', () => {
 applyTheme();
 dailyBackup();
 navigator.storage?.persist?.().catch(() => {});
-if (NATIVE) { document.documentElement.classList.add('native'); hcCheck(); backupInfo(); autoBackup(); }
+if (NATIVE) { document.documentElement.classList.add('native'); hcCheck(); backupInfo(); autoBackup(); ogInfo(); ogAuto(); }
 if (recovered === 'mirror') save();
 route();
 if (!NATIVE && 'serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');

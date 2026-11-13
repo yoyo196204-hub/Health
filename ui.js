@@ -43,7 +43,7 @@ function bodySvg(side, vol, sel, fixed = false) {
   return `<svg class="body ${side}" viewBox="-4 -4 108 ${side === 'anterior' ? 212 : 230}" role="img" aria-label="${side === 'anterior' ? 'Front' : 'Back'}">${g}</svg>`;
 }
 // A tiny front view for exercises without a demo clip.
-function musclesGlyph(id) { return bodySvg(['erectors', 'glutes', 'hamstrings', 'lats', 'rearDelts', 'traps', 'upperBack'].includes(primaryOf(id)) ? 'posterior' : 'anterior', EXD[id]?.hits || {}, null, true); }
+function musclesGlyph(id) { return bodySvg(['erectors', 'glutes', 'hamstrings', 'lats', 'rearDelts', 'traps', 'upperBack'].includes(primaryOf(id)) ? 'posterior' : 'anterior', hitsOf(id), null, true); }
 function meter(v, of, cls = '') { return `<div class="bar ${cls}"><i style="width:${clamp(v / of * 100, 0, 100).toFixed(1)}%"></i></div>`; }
 // Where a number came from. Typed entries carry no label: they are the default.
 function src(kind) { const L = { watch: 'watch', strap: 'H9', est: 'estimate', adj: 'watch, corrected', typed: 'typed', ok: 'done' }; return L[kind] ? `<span class="src s-${kind}">${L[kind]}</span>` : ''; }

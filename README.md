@@ -32,6 +32,40 @@ straight over the last and keeps everything in it. No computer is involved at an
   Import a backup, pick that file, check your history is there, then uninstall the old app. Allow Health
   Connect, pick the backup folder and connect the H9 again in the new app.
 
+## Training in openGym
+
+[openGym](https://github.com/DuarteSantos8/openGym) and Health work as a pair, through files on the phone (neither
+app needs the internet for it). openGym is where you lift: its animations, rest timer, watch app and 5,600 exercises.
+Health stays the brain: the plan, recovery, food, weight, and the analysis of everything you lift.
+
+**Health → openGym: your plan.** Me › Training › Train in openGym makes `Health plan for openGym.json`: your
+programme as Health has it today (gym or home kit, shoulder care, anything pain has taken out), with rep ranges, double
+progression, the next loads, rest times, the shoulder cues and the weekdays. openGym's double progression is the same
+rule as Health's, so the loads keep moving the same way there.
+
+1. Health: Me › Training › **Save the plan file** (in the app, with openGym's folder linked: **Put the plan in the openGym folder**).
+2. openGym: **Plan** › share icon (top right) › **Import a plan file** › pick `Health plan for openGym.json`.
+3. Turn on **Use this weekly schedule**, then **Add to my plan**. The routines are named "Day A (Health)" and so on.
+4. When the plan changes (another programme, home or gym, shoulder care, an exercise out after pain), Health says so on
+   Train and in Me. Delete the old "(Health)" routines in openGym, then import the new file. New loads alone need no new
+   file: openGym works those out itself.
+
+**openGym → Health: what you lifted.** Every completed work set (no warm-ups, no unticked sets), timed holds, cardio,
+and the weigh-ins you typed in openGym. Sessions count in Review, the muscle map, strength and Health's next targets.
+A day you logged in Health is never overwritten; a session that came from openGym follows openGym's later edits, moves
+and deletions, and keeps any shoulder report you gave it in Health. Change a set of it in Health and it becomes
+Health's own.
+
+- **Android app, automatic**: in openGym, Settings › Data & backup › turn on **Auto-backup on changes**. In Health,
+  Me › Data sources › openGym › **Link openGym's folder** and choose Documents › openGym (the picker opens there).
+  The first read shows what would come in; after you accept it, Health reads openGym's newest backup by itself each
+  time it opens, and only when it has changed.
+- **By hand, anywhere**: openGym's **Export backup** or **Export as CSV** (workouts), then Me › Data sources ›
+  openGym › Choose an openGym file. A copy is kept first, so it can be undone.
+
+Exercises in Health's plan go to the same exercise in openGym's library and come back as Health's own. Anything else
+you log in openGym arrives with its name and the muscles it trains, from `opengym-ids.js` (see Credits).
+
 ## Screens
 
 | Tab | What it is for |
@@ -67,6 +101,7 @@ straight over the last and keeps everything in it. No computer is involved at an
   the removals themselves need a press and hold.
 - Me › Backup and data shows what is stored and can **remove data older than** 3, 6, 12 or 24 months, for food,
   weigh-ins, watch data or training separately.
+- **openGym**: see [Training in openGym](#training-in-opengym).
 - **Halftone**: Me › Backup and data › Bring in Halftone takes a Halftone backup file and adds its sessions,
   shoulder reports, bodyweight and cardio. Halftone's five demonstration sessions are recognised and left out,
   and any day already in Health keeps Health's version.
@@ -80,6 +115,7 @@ Plain JavaScript, no build step. Scripts load in this order:
 | `lib.js` | Dates, formatting, statistics (Theil–Sen, Bland–Altman agreement) |
 | `data.js` | Foods, goal paces, the evidence library |
 | `exercises.js` | The exercise library, programmes, home substitutes, shoulder rules, warm-up |
+| `opengym-ids.js` | openGym's exercise numbers with their names and muscles (see Credits) |
 | `body-data.js` | Muscle map outlines (from react-body-highlighter, MIT) |
 | `store.js` | Storage, schema and migration, snapshots, removing old data, Halftone import |
 | `model.js` | Nutrition, weight, heart, HRV, sleep and activity conclusions |
@@ -89,6 +125,7 @@ Plain JavaScript, no build step. Scripts load in this order:
 | `ui.js` | Shared building blocks, the chart and the muscle map |
 | `h9.js` | The strap: connection, live workout, morning HRV check |
 | `watch.js` | Zepp CSV import |
+| `opengym.js` | openGym: its backup and CSV coming in, the folder link, Health's plan as an openGym plan file |
 | `view-*.js` | One file per screen |
 | `app.js` | State, routing, events |
 
@@ -107,3 +144,10 @@ signed with `android/release.p12`, its signature is checked against the permanen
 (SHA-256 `7d9dfafd…682c6650`), and it is published as a release. The key file is encrypted; its password is only
 in the repository secret `HEALTH_KEYSTORE_PASSWORD` (keep a copy of it somewhere safe as well). Without that
 password a build is signed with a throwaway key and becomes "Health test" (`app.health.personal.test`).
+
+## Credits
+
+`opengym-ids.js` lists exercise numbers from [openGym](https://github.com/DuarteSantos8/openGym)'s catalogue, with only
+the 1,324 entries whose names and muscles come from ExerciseDB v1 by AscendAPI via
+[hasaneyldrm/exercises-dataset](https://github.com/hasaneyldrm/exercises-dataset) (MIT; the notice is in the file).
+No openGym code, descriptions, pictures or animations are copied into Health.
