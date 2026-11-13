@@ -24,12 +24,12 @@
 
 let S = load();
 let tab = 'today', overlay = null, pending = null, day = todayKey(), lastToday = day;
-let trainDay = null, cat = 'usual', query = '', installEvt = null, softQueued = false;
+let cat = 'usual', query = '', installEvt = null, softQueued = false;
 
-const VIEWS = { today: vToday, train: vTrain, recovery: vRecovery, review: vReview, me: vMe };
+const VIEWS = { today: vToday, recovery: vRecovery, training: vTraining, review: vReview, me: vMe };
 const TABS = Object.keys(VIEWS);
-const ALIAS = { heart: 'recovery', trend: 'review' };
-const POPS = { fedit: p => vFoodEdit(p.i), swap: p => vSwap(p.id), exinfo: p => vExInfo(p.id), cardioadd: () => vCardioAdd(), cardioinfo: p => vCardioInfo(p) };
+const ALIAS = { heart: 'recovery', trend: 'review', train: 'training' };
+const POPS = { fedit: p => vFoodEdit(p.i), exinfo: p => vExInfo(p.id), cardioadd: () => vCardioAdd(), cardioinfo: p => vCardioInfo(p), sess: p => vSession(p) };
 const scrollMem = {};
 const BUILD = (document.querySelector('script[src^="app.js"]')?.getAttribute('src').split('v=')[1]) || 'dev';
 
@@ -54,7 +54,7 @@ function render() {
   $$('#tabs a').forEach(a => a.classList.toggle('on', a.hash === '#' + tab));
   $('#tabs').style.setProperty('--i', TABS.indexOf(tab));
   document.documentElement.classList.toggle('still', !motionOK());
-  sheetEntered(); settle(); restTick();
+  sheetEntered(); settle();
 }
 // Renders caused by the watch or the strap wait until you have finished typing in a field.
 function renderSoft() {
@@ -64,7 +64,6 @@ function renderSoft() {
 document.addEventListener('focusout', () => setTimeout(() => { if (softQueued && !document.activeElement?.matches?.('input, select, textarea')) render(); }, 250));
 
 function route() {
-  if (location.hash.startsWith('#sync=')) { hcReceive(location.hash.slice(6)); history.replaceState(null, '', '#me'); }
   let [a, b] = (location.hash.slice(1) || 'today').split('-');
   a = ALIAS[a] || a;
   const was = overlay, wasTab = tab;
@@ -129,11 +128,8 @@ const ACT = {
     undoable(`${f.n} removed from your foods`, () => { S.custom.splice(i, 0, f); for (const m in fr) if (fr[m]) S.freq[m][f.id] = fr[m]; });
   },
   copy: el => { for (const x of S.food[shift(day, -1)].filter(x => x.m === el.dataset.m)) (S.food[day] ||= []).push({ ...x }); save(); buzz('ok'); render(); },
-  day: el => { const d = +el.dataset.d; transition(d < 0 ? 'back' : 'fwd', () => { day = shift(day, d); if (day > todayKey()) day = todayKey(); trainDay = null; openEx = null; buzz('tick'); render(); }); },
-  today: () => transition('fwd', () => { day = todayKey(); trainDay = null; openEx = null; render(); }),
-  goday: el => { day = el.dataset.k; trainDay = null; openEx = null; buzz('tick'); render(); },
-  // Switching the session day carries already-logged sets with it; they still count toward the week.
-  tday: el => { trainDay = el.dataset.d; openEx = null; if (S.lifts[day]) { S.lifts[day].day = trainDay; S.lifts[day].prog = S.settings.prog; save(); } buzz('tick'); render(); },
+  day: el => { const d = +el.dataset.d; transition(d < 0 ? 'back' : 'fwd', () => { day = shift(day, d); if (day > todayKey()) day = todayKey(); buzz('tick'); render(); }); },
+  today: () => transition('fwd', () => { day = todayKey(); buzz('tick'); render(); }),
   full: () => { S.full[day] = !isComplete(day); save(); buzz('tick'); render(); },
   profile: () => {
     const dob = $('#p_dob').value, age = (Date.now() - Date.parse(dob)) / (365.25 * DAY);
@@ -152,8 +148,7 @@ const ACT = {
     save(); render();
     undoable(`${dateLabel(k)} removed`, () => { S[s][k] = was; if (man) S.manual[s][k] = man; });
   },
-  rest15: () => restAdd(15),
-  restskip: () => { restStop(); buzz('tick'); },
+  refresh: () => refreshAll(),
   install: () => { installEvt?.prompt(); installEvt = null; },
   export: () => { S.meta.exported = todayKey(); save(); saveText(`health-${todayKey()}.json`, JSON.stringify(S)); render(); },
   import: () => $('#imp').click(),
@@ -204,11 +199,13 @@ document.addEventListener('change', e => {
     if (off != null) {
       buzz('warn');
       toast(`${sign(off, 1)} kg from your trend. A typo?`, 7000, { label: 'Undo', fn: () => { if (prev == null) setManual(stream, day, null); else { S[stream][day] = prev; if (!prevMan) delete S.manual[stream][day]; } save(); render(); } });
-    } else if (v != null) buzz('tick');
+    } else if (v != null) buzz('ok');
+    // A check-in on Today is done once it has a value: redraw when you leave the field, so it drops off the list.
+    if (el.closest('.ci') && v != null) softQueued = true;
   }
   else if (el.dataset.lift) logLift(el);
   else if (el.dataset.act === 'prehab') { if (el.checked) S.prehab[day] = true; else delete S.prehab[day]; save(); buzz(el.checked ? 'ok' : 'tick'); render(); }
-  else if (el.dataset.act === 'shoulder') { S.profile.shoulder = el.checked; openEx = null; save(); buzz('tick'); render(); }
+  else if (el.dataset.act === 'shoulder') { S.profile.shoulder = el.checked; save(); buzz('tick'); render(); }
   else if (el.dataset.act === 'cutg') { CUT.groups[el.dataset.v] = el.checked; buzz('tick'); render(); }
   else if (el.id === 'wfile' && el.files.length) { watchRead(el.files); el.value = ''; }
   else if (el.id === 'ogimp' && el.files[0]) { const f = el.files[0]; el.value = ''; ogFile(f); }
@@ -240,15 +237,14 @@ addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } 
 addEventListener('error', () => toast('Something went wrong. Your data is safe.'));
 addEventListener('unhandledrejection', () => toast('Something went wrong. Your data is safe.'));
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) return flushMirror();
+  if (document.hidden) { remindPlan(); return flushMirror(); }
   if (!NATIVE && rollDay()) render();
-  restTick();
 });
 
 applyTheme();
 dailyBackup();
 navigator.storage?.persist?.().catch(() => {});
-if (NATIVE) { document.documentElement.classList.add('native'); hcCheck(); backupInfo(); autoBackup(); ogInfo(); ogAuto(); }
+if (NATIVE) { document.documentElement.classList.add('native'); hcCheck(); backupInfo(); autoBackup(); ogInfo(); ogAuto(); remindStatus(); remindPlan(); }
 if (recovered === 'mirror') save();
 route();
 if (!NATIVE && 'serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');

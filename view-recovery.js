@@ -22,10 +22,11 @@ function hrvSection() {
   const status = !V.lo ? `${plural(V.n, 'reading')} so far. ${V.need} more and your normal range appears.`
     : !V.state ? `Your normal range is ${Math.round(V.lo)}–${Math.round(V.hi)} ms${V.provisional ? ' (provisional until 2 weeks of readings)' : ''}. Three readings this week give a 7-day average to compare with it.`
     : `7-day average ${r1(V.roll)} ms is ${V.state === 'low' ? 'below' : V.state === 'high' ? 'above' : 'inside'} your range of ${Math.round(V.lo)}–${Math.round(V.hi)} ms${V.provisional ? ' (provisional)' : ''}.${V.state === 'high' ? ' Usually good; persistently high after hard training can mean saturation.' : ''}`;
+  const pat = V.state && V.hrDelta != null ? ` Morning heart rate over the same days: ${sign(V.hrDelta, 1)} bpm against the baseline weeks${V.state === 'low' ? (V.hrDelta >= 3 ? ', the pattern that usually means fatigue, illness, short sleep or alcohol.' : ', so the fall in HRV is the weaker kind of signal.') : '.'}` : '';
   const cv = V.cv != null ? ` Day-to-day wobble ${r1(V.cv)}%${V.baseCv ? ` against ${r1(V.baseCv)}% usually` : ''}${V.baseCv && V.cv > V.baseCv * 1.5 ? ', higher than usual' : ''}.` : '';
   return sec('Morning HRV', `${stats([[V.now ? r1(V.now.rmssd) : DASH, 'today, ms'], [V.roll ? r1(V.roll) : DASH, '7-day average'], [V.lo ? `${Math.round(V.lo)}–${Math.round(V.hi)}` : DASH, 'normal range']])}
     ${c}${c ? legend([['dot', 'daily'], ['line', '7-day average'], ['band', 'your normal range']]) : ''}
-    ${para(status + cv, V.state === 'low' ? 'flag' : 'sub')}
+    ${para(status + pat + cv, V.state === 'low' ? 'flag' : 'sub')}
     ${historyList('Every morning check', Object.keys(S.hrv).sort().reverse().slice(0, 60).map(k => [k, `${r1(S.hrv[k].rmssd)} ms · ${Math.round(S.hrv[k].hr)} bpm${S.hrv[k].q ? ` · ${S.hrv[k].q}% clean` : ''}`]), 'hrv')}`, { why: ['hrv', 'How it is read'] });
 }
 function rhrSection() {
@@ -48,6 +49,21 @@ function sleepSection() {
   return sec('Sleep, 14 nights', `${stats([[L.avg != null ? r1(L.avg) : DASH, 'h a night'], [spread, `min timing spread${L.mid != null ? `, midpoint ${hm(L.mid)}` : ''}`], [L.eff != null ? Math.round(L.eff) + '%' : DASH, 'asleep while in bed']])}
     ${c}${para(L.midSd != null ? (L.midSd <= 30 ? 'Regular timing.' : L.midSd <= 60 ? 'Timing moderately irregular.' : 'Timing irregular. A fixed wake time on off days is the lever.') + ` ${why('regular', 'Why timing matters')}` : `Bars under 6 h are marked. ${why('sleep', 'Why sleep matters here')}`)}${st}`, { why: ['sleep', 'Sleep and fat loss'] });
 }
+// What the Bip measures while you sleep, each against its own normal: overnight HRV, breathing rate, and for interest
+// only SpO2 and the VO2max estimate.
+function nightSection() {
+  const days = range(30), WH = nightly('hv', todayKey(), true), BR = nightly('br'), o2 = {}, hv = {}, br = {};
+  for (const k of days) { const x = S.wx[k]; if (x?.hv) hv[k] = x.hv; if (x?.br) br[k] = x.br; if (x?.o2) o2[k] = x.o2; }
+  if (Object.keys(hv).length + Object.keys(br).length + Object.keys(o2).length < 2) return '';
+  const vo = Object.keys(S.wx).sort().reverse().find(k => S.wx[k].vo);
+  const c1 = chart({ days, dots: hv, band: WH.lo ? [WH.lo, WH.hi] : null, fy: v => Math.round(v) });
+  const c2 = chart({ days, dots: br, band: BR.base != null ? [BR.base - Math.max(1, 2 * BR.sd), BR.base + Math.max(1, 2 * BR.sd)] : null, fy: v => r1(v), h: 110 });
+  const o2v = Object.values(o2);
+  return sec('Overnight, from the watch', `${c1 ? `<h3>Overnight HRV</h3>${c1}${para(WH.lo ? `7-day average ${WH.roll ? Math.round(WH.roll) + ' ms' : DASH} against its own range of ${Math.round(WH.lo)}–${Math.round(WH.hi)} ms. ${V7(WH)} Kept apart from the strap's morning check: a different measurement, and one Amazfit has not published a validation for.` : `${plural(WH.n, 'night')} so far; its own range appears after ${WH.need} more.`)}` : ''}
+    ${c2 ? `<h3>Breathing rate in sleep</h3>${c2}${para(BR.base != null ? `Usually ${r1(BR.base)} breaths a minute${BR.now != null ? `; last night ${r1(BR.now)}` : ''}. A rise of 1 or more above your usual, beyond the shaded spread, often comes with infection or fever before you feel it, so it nudges the day's verdict.` : `${plural(BR.n, 'night')} so far; a baseline needs ${BR.need} more.`)}` : ''}
+    ${o2v.length || vo ? para(`${o2v.length ? `Blood oxygen in sleep: ${r1(mean(o2v.slice(-7)))}% on average this week. Wrist SpO2 misses by several points, so it is shown and never used.` : ''} ${vo ? `VO2max estimate ${r1(S.wx[vo].vo)} (${dateLabel(vo)}): a watch estimate, useful as a trend over months.` : ''}`) : ''}`, { why: ['night', 'How these are read'] });
+}
+function V7(W) { return W.state === 'low' ? 'Below range: a nudge toward an easier day when there is no strap reading.' : W.state === 'high' ? 'Above range.' : W.state ? 'Inside range.' : ''; }
 function devicesSection() {
   const C = calibration(), fmtA = (A, need) => A.bias == null ? `${need - A.n} more` : `${sign(A.bias, 1)} bpm`, lim = A => A.lo == null ? DASH : `${sign(A.lo, 0)} to ${sign(A.hi, 0)}`;
   const used = [C.restOn ? `Watch resting heart rate is shifted by ${sign(-C.rest.bias, 1)} bpm on days without a morning check.` : `Resting correction starts at 5 paired mornings (${C.rest.n} so far).`,
@@ -62,7 +78,7 @@ function vRecovery() {
   return `${masthead('Recovery', `Resting ${H.rest} · max ${H.max} bpm${H.maxSrc === 'seen' ? ' (seen)' : ''}`)}
     ${verdictCard()}
     ${sec('Morning check', strapBlock('morning') + strapMsg(), { why: ['hrv', 'Why mornings'] })}
-    ${hrvSection()}${rhrSection()}${sleepSection()}${devicesSection()}`;
+    ${hrvSection()}${rhrSection()}${sleepSection()}${part(nightSection)}${devicesSection()}`;
 }
 // Loaded: this file ran to the end.
 (self.LOADED ||= []).push('view-recovery.js');

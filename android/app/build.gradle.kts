@@ -54,7 +54,7 @@ android {
 // so there is one copy of the code and the Android app never falls behind it.
 val copyWeb by tasks.registering(Sync::class) {
     from(rootDir.parentFile) {
-        include("index.html", "*.js", "*.css", "*.png", "manifest.webmanifest", "media/*.gif")
+        include("index.html", "*.js", "*.css", "*.png", "manifest.webmanifest")
         exclude("sw.js")
     }
     into(layout.projectDirectory.dir("src/main/assets/www"))

@@ -4,7 +4,7 @@
 
 const SETPAGES = {
   goal: ['Goal and targets', () => vSetGoal()], train: ['Training', () => vSetTrain()], profile: ['Profile', () => vSetProfile()],
-  sources: ['Data sources', () => sourcesSection()], data: ['Backup and data', () => vSetData()], feel: ['Feel', () => vSetFeel()],
+  sources: ['Data sources', () => sourcesSection()], data: ['Backup and data', () => vSetData()], remind: ['Reminders', () => vSetRemind()], feel: ['Feel', () => vSetFeel()],
   evid: ['The evidence', () => `<ul class="list evid">${Object.entries(EVID).map(([k, e]) => `<li><a href="#why-${k}"><span class="nm">${e.t} ${pill(e.lv)}</span><span class="sub">${e.g}</span></a></li>`).join('')}</ul>`],
 };
 function vMe() {
@@ -30,6 +30,7 @@ function vMe() {
       ${navrow('#set-profile', 'Profile', `${p.sex === 'm' ? 'Male' : 'Female'} · ${p.h} cm · started at ${p.w0} kg`, ICON.person)}
       ${navrow('#set-sources', 'Data sources', (NATIVE ? (SYNC.status?.granted?.length ? `Health Connect · synced ${S.meta.sync ? ago(S.meta.sync) : 'not yet'}` : 'Health Connect not connected') : 'Zepp files, H9') + (OGF.folder || S.meta.og ? ' · openGym' : ''), ICON.link)}
       ${navrow('#set-data', 'Backup and data', bk, ICON.box)}
+      ${navrow('#set-remind', 'Reminders', !NATIVE ? 'In the Android app' : remindOn() ? [S.settings.remAm !== 'off' && `morning ${S.settings.remAm}`, S.settings.remWk !== 'off' && `waist ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][+S.settings.remWk]}`, S.settings.remPm !== 'off' && `food ${S.settings.remPm}`].filter(Boolean).join(' · ') : 'Off', ICON.bell)}
       ${navrow('#set-feel', 'Feel', `Haptics ${S.settings.haptics} · motion ${S.settings.motion} · ${S.settings.theme} theme`, ICON.hand)}
       ${navrow('#set-evid', 'The evidence', `${Object.keys(EVID).length} topics, each with its sources`, ICON.book)}
     </nav>
@@ -61,14 +62,13 @@ function vSetGoal() {
 // ---------- training ----------
 function vSetTrain() {
   const s = S.settings, p = S.profile;
-  return `${sec('Programme', `<ul class="list picks">${Object.entries(PROGRAMS).map(([k, P]) => `<li><button class="rowbtn ${s.prog === k ? 'on' : ''}" data-act="prog" data-v="${k}"><span class="radio"></span><span class="grow"><span class="nm">${esc(P.n)}</span><span class="sub">${esc(P.blurb)}</span></span></button></li>`).join('')}</ul>
+  return `${sec('Train in openGym', part(ogPlanBlock), { why: ['block', 'How the block is set up'] })}
+    ${sec('Programme', `<ul class="list picks">${Object.entries(PROGRAMS).map(([k, P]) => `<li><button class="rowbtn ${s.prog === k ? 'on' : ''}" data-act="prog" data-v="${k}"><span class="radio"></span><span class="grow"><span class="nm">${esc(P.n)}</span><span class="sub">${esc(P.blurb)}</span></span></button></li>`).join('')}</ul>
       ${para('Changing programme keeps every session you have logged; the next session starts at the first day of the new one.')}`, { why: ['lift', 'Why this plan'] })}
     ${sec('Where you train', seg('equip', [['gym', 'Gym'], ['home', 'Dumbbells at home']], p.equip) + para(p.equip === 'home' ? 'Gym exercises are replaced by the closest dumbbell, band or bodyweight version.' : 'The programme as written.'))}
     ${sec('Shoulder care', `<label class="toggle"><input type="checkbox" data-act="shoulder" ${p.shoulder ? 'checked' : ''}><span class="grow"><b>Protect a sore shoulder</b><span class="sub">No loaded overhead end range or flyes, laterals to shoulder height, a five-minute warm-up, and a quick “how did it feel” after shoulder exercises.</span></span><i class="sw"></i></label>`, { why: ['shoulder', 'How it works'] })}
-    ${sec('Rest timer', seg('rest', [[0, 'Auto'], [60, '1:00'], [90, '1:30'], [120, '2:00'], [150, '2:30'], [180, '3:00'], [240, '4:00']], s.rest, 'scroll') + para(s.rest ? 'The same rest after every set.' : 'Auto: 2:30 after exercises that use several big muscles, 1:30 after small ones, 1:00 after holds.'), { why: ['rest', 'Why'] })}
-    ${sec('Equipment', `<h3>Barbell</h3>${seg('bar', [[20, '20 kg'], [15, '15 kg'], [10, '10 kg'], [0, 'No plate maths']], s.bar)}
-      <h3>Smallest dumbbell step</h3>${seg('dbstep', [[1, '1 kg'], [2, '2 kg'], [2.5, '2.5 kg']], s.dbStep)}${para('When a dumbbell exercise earns more weight, it goes up by this much.')}`)}
-    ${sec('Train in openGym', part(ogPlanBlock))}`;
+    ${sec('Rest between sets', seg('rest', [[0, 'Auto'], [60, '1:00'], [90, '1:30'], [120, '2:00'], [150, '2:30'], [180, '3:00'], [240, '4:00']], s.rest, 'scroll') + para(`Goes into the plan file as each exercise's rest in openGym. ${s.rest ? 'The same rest after every set.' : 'Auto: 2:30 after exercises that use several big muscles, 1:30 after small ones, 1:00 after holds.'}`), { why: ['rest', 'Why'] })}
+    ${sec('Smallest dumbbell step', `${seg('dbstep', [[1, '1 kg'], [2, '2 kg'], [2.5, '2.5 kg']], s.dbStep)}${para('When a dumbbell exercise earns more weight, it goes up by this much, in openGym too.')}`)}`;
 }
 
 // ---------- profile ----------
@@ -85,11 +85,25 @@ function vSetProfile() {
     <button class="solid wide" data-act="profile">Save profile</button>`;
 }
 
+// ---------- reminders ----------
+function vSetRemind() {
+  const s = S.settings;
+  if (!NATIVE) return para('Reminders come from the Android app, which can notify you even when it is closed. In Chrome, Today lists what is due each time you open it.');
+  const off = REMIND.allowed === false;
+  const times = (k, list) => seg(k, [['off', 'Off'], ...list.map(t => [t, t])], s[k], 'scroll');
+  return `${para('Each reminder is only sent if the thing is still undone: a morning check already done, or a waist measured this week, is not reminded about. Today also lists everything due.')}
+    ${off ? `<p class="flag">Notifications for Health are switched off on this phone.</p><div class="rowb"><button class="solid" data-act="remask">Allow notifications</button></div>` : ''}
+    ${sec('Morning check and weigh-in', times('remAm', ['05:30', '06:00', '06:30', '07:00', '07:30', '08:00', '08:30', '09:00']) + para('At your usual waking time. The HRV range is built from these mornings, and the weight trend from the weigh-ins.'), { why: ['checkin', 'Why regularly'] })}
+    ${sec('Waist, once a week', seg('remWk', [['off', 'Off'], ['1', 'Mon'], ['3', 'Wed'], ['5', 'Fri'], ['6', 'Sat'], ['0', 'Sun']], s.remWk, 'scroll') + para('Fifteen minutes after the morning reminder on that day, or at 08:15.'), { why: ['waist', 'Why the waist'] })}
+    ${sec('Food log, evening', times('remPm', ['20:00', '20:30', '21:00', '21:30', '22:00', '22:30']) + para('Says what is logged so far, and skips days with all three meals in. Whole days are what the burn estimate learns from.'), { why: ['logging', 'Why whole days'] })}
+    <p class="note">Android may deliver a reminder a few minutes late to save battery.</p>`;
+}
+
 // ---------- feel ----------
 function vSetFeel() {
   const s = S.settings;
-  return `${sec('Haptics', seg('haptics', [['full', 'Full'], ['subtle', 'Subtle'], ['off', 'Off']], s.haptics) + para(s.haptics === 'off' ? 'No vibration at all.' : s.haptics === 'subtle' ? 'Only for finished sets, saves and warnings.' : 'A light tick for every change, a firmer pulse for a finished set, a pattern for a finished session.') +
-      `<div class="rowb tight">${['tick', 'ok', 'done', 'warn'].map(k => `<button class="mini" data-act="trybuzz" data-v="${k}">${{ tick: 'Tick', ok: 'Set done', done: 'Session done', warn: 'Warning' }[k]}</button>`).join('')}</div>`)}
+  return `${sec('Haptics', seg('haptics', [['full', 'Full'], ['subtle', 'Subtle'], ['off', 'Off']], s.haptics) + para(s.haptics === 'off' ? 'No vibration at all.' : s.haptics === 'subtle' ? 'Only for finished sets, saves and warnings.' : 'A light tick for every change and each gesture threshold, a click when something is saved, a triple click when a check or session is finished, a double for a refusal.') +
+      `<div class="rowb tight">${['tick', 'ok', 'done', 'warn'].map(k => `<button class="mini" data-act="trybuzz" data-v="${k}">${{ tick: 'Tick', ok: 'Saved', done: 'Finished', warn: 'Refused' }[k]}</button>`).join('')}</div>`)}
     ${sec('Motion', seg('motion', [['system', 'As the phone'], ['full', 'Full'], ['reduced', 'Reduced']], s.motion) + para('Screens slide and numbers count up. Reduced switches all of it off.'))}
     ${sec('Theme', seg('theme', [['system', 'As the phone'], ['light', 'Light'], ['dark', 'Dark']], s.theme))}`;
 }
@@ -175,12 +189,17 @@ function setAct(a, el) {
     case 'pace': return set('pace', v, `Pace: ${PACE[v][0].toLowerCase()}. Targets recalculated.`);
     case 'protein': return set('protein', v);
     case 'retarget': S.meta.tgt = null; settleTargets(); buzz('ok'); render(); toast(`Target now ${fmt(targets().kcal)} kcal`); return true;
-    case 'prog': if (s.prog !== v) { s.prog = v; p.days = PROGRAMS[v].per; trainDay = null; openEx = null; } return set('prog', v, `${PROGRAMS[v].short}: ${PROGRAMS[v].per} days a week`);
+    case 'prog': if (s.prog !== v) { s.prog = v; p.days = PROGRAMS[v].per; } return set('prog', v, `${PROGRAMS[v].short}: ${PROGRAMS[v].per} days a week`);
     case 'equip': p.equip = v; save(); buzz('tick'); render(); return true;
     case 'rest': return set('rest', +v);
-    case 'bar': return set('bar', +v);
     case 'dbstep': return set('dbStep', +v);
     case 'haptics': s.haptics = v; save(); buzz('ok'); render(); return true;
+    case 'remAm': case 'remWk': case 'remPm': {
+      s[a] = v; save(); buzz('tick');
+      if (v !== 'off' && NATIVE && REMIND.allowed !== true) nat('remindAsk');
+      remindPlan(); render(); return true;
+    }
+    case 'remask': nat('remindAsk'); return true;
     case 'trybuzz': { const was = s.haptics; if (was === 'off') toast('Haptics are off'); buzz(v); return true; }
     case 'motion': return set('motion', v);
     case 'theme': s.theme = v; save(); applyTheme(); buzz('tick'); render(); return true;

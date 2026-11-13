@@ -10,7 +10,10 @@ const MANUAL = ['weights', 'steps', 'sleep'];   // streams the watch can fill; w
 const BAD = new Set(['__proto__', 'constructor', 'prototype']);
 const SETTINGS = {
   pace: [Object.keys(PACE), 'steady'], protein: [['std', 'high'], 'std'], prog: [Object.keys(PROGRAMS), 'hfb'],
-  rest: [[0, 60, 90, 120, 150, 180, 240], 0], bar: [BARS, 20], dbStep: [[1, 2, 2.5], 2.5],
+  rest: [[0, 60, 90, 120, 150, 180, 240], 0], dbStep: [[1, 2, 2.5], 2.5],
+  // Reminders on the phone: the morning check and weigh-in, the weekly waist, and an evening look at the food log.
+  remAm: [['off', '05:30', '06:00', '06:30', '07:00', '07:30', '08:00', '08:30', '09:00'], 'off'],
+  remWk: [['off', '0', '1', '2', '3', '4', '5', '6'], 'off'], remPm: [['off', '20:00', '20:30', '21:00', '21:30', '22:00', '22:30'], 'off'],
   haptics: [['full', 'subtle', 'off'], 'full'], motion: [['system', 'full', 'reduced'], 'system'], theme: [['system', 'light', 'dark'], 'system'],
 };
 let loadNote = '', saveFailed = false, loadedMain = false, recovered = '';
@@ -86,7 +89,28 @@ function cleanCardio(c) {
   if (!Array.isArray(c.z)) return null;
   const avg = num(c.avg, 30, 230), max = num(c.max, 30, 230);
   if (avg == null || max == null) return null;
-  return Object.assign(r, { avg, max, z: [0, 1, 2, 3].map(i => num(c.z[i], 0, 36000) || 0) });
+  Object.assign(r, { avg, max, z: [0, 1, 2, 3].map(i => num(c.z[i], 0, 36000) || 0) });
+  // The session as it happened: heart rate every 5 seconds (0 where the strap lost contact), and the α1 of each
+  // two-minute window of beats with the heart rate it was measured at, from which the threshold estimate comes.
+  if (Array.isArray(c.tr)) { const tr = c.tr.slice(0, 1440).map(x => Math.round(num(x, 30, 230) || 0)); if (tr.some(Boolean)) r.tr = tr; }
+  if (Array.isArray(c.a1)) {
+    const a1 = c.a1.slice(0, 300).filter(x => Array.isArray(x) && num(x[0], 0, 36000) != null && num(x[1], 0.1, 2.5) != null && num(x[2], 30, 230) != null).map(x => [Math.round(x[0]), Math.round(x[1] * 1000) / 1000, Math.round(x[2])]);
+    if (a1.length) r.a1 = a1;
+  }
+  const vt1 = num(c.vt1, 60, 220);
+  if (vt1 != null) r.vt1 = Math.round(vt1);
+  return r;
+}
+// A morning check: RMSSD and heart rate, the share of clean beats, SDNN, and the recorded minute of beats itself
+// (RR in ms), so the reading can be looked at again and recalculated if the method ever improves.
+function cleanHrv(v) {
+  if (!obj(v) || num(v.rmssd, 1, 300) == null || num(v.hr, 25, 220) == null) return null;
+  const r = { rmssd: +v.rmssd, hr: +v.hr };
+  if (num(v.q, 0, 100) != null) r.q = +v.q;
+  if (num(v.sd, 1, 400) != null) r.sd = +v.sd;
+  if (num(v.t, 1e12, 1e13) != null) r.t = +v.t;
+  if (Array.isArray(v.rr)) { const rr = v.rr.slice(0, 240).map(x => num(x, 250, 2500)).filter(x => x != null).map(Math.round); if (rr.length >= 20) r.rr = rr; }
+  return r;
 }
 function cleanSleepx(v) {
   if (!obj(v)) return null;
@@ -109,7 +133,10 @@ function cleanEx(e) {
   const s = num(e.s, 1e12, 1e13), en = num(e.e, 1e12, 1e13);
   if (s == null || en == null || en <= s || en - s > 864e5) return null;
   const h = Array.isArray(e.h) ? e.h.slice(0, 240).map(x => Array.isArray(x) ? [num(x[0], 30, 230), num(x[1], 0, 86400)] : null).filter(x => x && x[0] != null && x[1] != null) : [];
-  return { s, e: en, k: str(e.k, 24) || 'Workout', src: str(e.src, 30), h, kcal: num(e.kcal, 0, 5000) };
+  const r = { s, e: en, k: str(e.k, 24) || 'Workout', src: str(e.src, 30), h, kcal: num(e.kcal, 0, 5000) };
+  // Written by openGym: its routine's name, so the session can be matched with the sets openGym's backup brings.
+  if (e.og === true) { r.og = true; const ti = str(e.ti, 60).trim(); if (ti) r.ti = ti; }
+  return r;
 }
 function cleanSettings(v) {
   v = obj(v) || {};
@@ -155,7 +182,7 @@ function sanitize(raw) {
     lifts: dated(raw.lifts, cleanLift), prehab: dated(raw.prehab, v => v === true ? true : null),
     swaps: dated(raw.swaps, v => { const r = {}; if (obj(v)) for (const a of Object.keys(v).slice(0, 12)) if (EXD[a] && EXD[v[a]]) r[a] = v[a]; return Object.keys(r).length ? r : null; }, 30),
     cleared: ids(raw.cleared),
-    hrv: dated(raw.hrv, v => obj(v) && num(v.rmssd, 1, 300) != null && num(v.hr, 25, 220) != null ? Object.assign({ rmssd: +v.rmssd, hr: +v.hr }, num(v.q, 0, 100) != null ? { q: +v.q } : {}) : null),
+    hrv: dated(raw.hrv, cleanHrv),
     cardio: dated(raw.cardio, a => { const x = list(a, 10, cleanCardio); return x.length ? x : null; }),
     pairs,
     custom: list(raw.custom, 300, e => cleanFood(e, false)), freq,

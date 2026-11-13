@@ -21,8 +21,11 @@
     <uses-permission android:name="android.permission.health.READ_VO2_MAX" />
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
 
-    <!-- The rest timer vibrates when it ends, even with the screen off. Haptic taps need no permission. -->
+    <!-- Haptics come from the phone's vibration engine. -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Reminders: notifications, and setting them again after the phone restarts. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Bluetooth for the Polar H9. Location is only needed for scanning on Android 11 and older. -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
@@ -63,6 +66,14 @@
                 <data android:host="import" android:scheme="app.health" />
             </intent-filter>
         </activity>
+
+        <!-- Reminders fire here, and are set again after a restart or an update. -->
+        <receiver android:name=".RemindReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Health Connect shows this when you ask why the app wants access. -->
         <activity

@@ -27,6 +27,28 @@ const OG_BACK = Object.assign(Object.fromEntries(Object.entries(OG_OF).map(([h, 
   '0404': 'db-shoulder-press', '0312': 'hammer-curl', '0979': 'pallof-press', '0488': 'back-extension', '1860': 'back-extension',
 });
 const OG_PLAN_NAME = 'Health plan for openGym.json';
+// Planned backups for each exercise, hand-picked from openGym's catalogue: the same main muscle, a different machine or
+// tool for when the station is taken, and nothing that loads the shoulder at its end range (no overhead pressing, flyes
+// behind the body, dips or upright rows). * marks one that needs only dumbbells, a band or the floor, so at home only
+// those go. openGym swaps one in with a tap and keeps the slot's sets, reps and progression.
+const OG_SUBS = {
+  'incline-db-press': ['0324', '0321', '0169', '0493*'], 'machine-chest-press': ['0576', '0151', '0289*'], 'cable-fly': ['0596', '0188', '0308*'],
+  pushup: ['0493*', '0279*', '1254*'], 'db-bench': ['0289*', '0340*', '0576'], 'db-floor-press': ['0662*', '0493*', '1254*'],
+  'landmine-press': ['1265', '0324*', '0576'], 'half-kneeling-press': ['0324*', '0493*'], 'db-shoulder-press': ['0404*', '0603', '0219'],
+  'cable-lateral': ['0334*', '0584', '0396*'], 'db-lateral': ['0396*', '0356*', '0178'], 'face-pull': ['0203', '0602', '0993*', '0383*'],
+  'rear-delt-fly': ['0602', '0225', '0348*', '0993*'], 'neutral-pulldown': ['0818', '0198', '0651', '0974*'], 'band-pulldown': ['0974*', '1013*', '0292*'],
+  'chest-supported-row': ['1350', '0861', '1331*', '0293*'], 'cable-row': ['0861', '1350', '0327*', '3144*'], 'db-row': ['0189', '0589', '0293*', '0988*'],
+  shrug: ['0095', '0604', '1018*'], 'back-extension': ['0573', '0488*'], 'ez-curl': ['0031', '0868', '0294*', '0968*'],
+  'db-curl': ['0285*', '0315*', '0868', '0968*'], 'hammer-curl': ['0165', '0298*', '0320*'], 'triceps-pushdown': ['0200', '0241', '0333*', '0259*'],
+  skullcrusher: ['0060', '0200', '0296*'], 'db-kickback': ['0333*', '0259*', '0296*'], 'cable-crunch': ['0212', '0595', '0872*', '0274*'],
+  'pallof-press': ['0222', '2399'], 'dead-bug': ['0872*', '0865*'], plank: ['0715*'], 'side-plank': ['0463*'], 'leg-raise': ['0872*', '0472', '0620*'],
+  'hip-thrust': ['1409', '0196', '3335*', '1408*'], 'glute-bridge': ['1408*', '0431*', '2808*'], rdl: ['1459*', '0432*', '0196', '0044'],
+  'leg-curl': ['0586', '3195', '1459*'], 'db-leg-curl': ['1459*', '0432*', '1757*'], 'hack-squat': ['0739', '0741', '1760*'],
+  'leg-press': ['0743', '1425', '0413*', '1760*'], 'goblet-squat': ['0413*', '0534*', '0410*'], 'split-squat': ['0410*', '0336*', '0381*', '0431*'],
+  cossack: ['0168', '1775*'], adduction: ['0168', '1775*', '2569*'], 'standing-calf': ['1391', '1375', '0417*', '0409*'],
+  'seated-calf': ['1371', '1379*', '0605'],
+};
+
 
 // ---------- an openGym exercise, in Health ----------
 // A Health exercise when openGym's number is one of Health's, 'og:<number>' when openGym's library has it, or 'x:' and
@@ -260,8 +282,8 @@ function ogCustom(id) {
 }
 // One exercise of a session: Health's rep range under double progression (or a hold that adds time), the next load,
 // the rest Health would give it, and the notes that make it yours.
-function ogSlot(L, k, custom) {
-  const id = OG_OF[L.id] || 'health-' + L.id, G = progression(L, k), hold = isHold(L.id);
+function ogSlot(L, k, custom, first) {
+  const id = OG_OF[L.id] || 'health-' + L.id, G = progression(L, k), hold = isHold(L.id), e = EXD[L.id] || {};
   if (!OG_OF[L.id] && !custom.has(id)) custom.set(id, ogCustom(L.id));
   const o = { id, sets: L.sets };
   if (hold) Object.assign(o, { mode: 'time', sec: G.kind === 'first' ? L.lo : clamp(G.reps[0] || L.lo, L.lo, L.hi), prog: 'time' });
@@ -269,25 +291,42 @@ function ogSlot(L, k, custom) {
     Object.assign(o, { reps: L.hi, repsMin: L.lo, prog: 'double' });
     if (G.kg > 0) o.weight = G.kg;
     if (!isBw(L.id)) o.inc = stepFor(L.id);
+    // A ramp of lighter sets before the session's first big lift; openGym works the weights out from the work load.
+    if (first && !isBw(L.id) && ogBig(L.id)) o.warmup = 'auto';
   }
   o.restSec = restFor(L.id);
-  const note = [L.note, S.profile.shoulder ? SHOULDER_CUE[L.id] : '', L.from ? `In place of ${exName(L.from)}. ${L.why}` : ''].filter(Boolean).join(' ');
+  const home = S.profile.equip === 'home';
+  const subs = (OG_SUBS[L.id] || []).filter(x => !home || x.endsWith('*')).map(x => x.replace('*', '')).filter(x => x !== id).slice(0, 3);
+  if (subs.length) o.subs = subs;
+  const note = [L.note, S.profile.shoulder ? SHOULDER_CUE[L.id] : '', L.from ? `In place of ${exName(L.from)}. ${L.why}` : '', e.error ? `Avoid: ${e.error.replace(/^./, c => c.toLowerCase())}` : '']
+    .filter(Boolean).join(' ');
   if (note) o.note = note.slice(0, 500);
   return o;
 }
+// Several big muscles at once, or technically demanding: the lifts that earn a warm-up ramp and the longer rest.
+function ogBig(id) { const h = EXD[id]?.hits || {}; return Object.values(h).filter(v => v === 1).length >= 2 || EXD[id]?.demand >= 2; }
+// The training block that comes with the plan: openGym runs the routines as a rotation (A, B, C, A...), the same rule
+// Health uses, so a missed day never skips a session, and shows a week-wide effort target of RPE 8 (about two reps
+// left in the tank). There is no planned deload week: in a randomised trial a one-week break mid-programme bought no
+// extra muscle and cost some strength (Coleman 2024). Stalls already trigger a 10% step back, and a low HRV week eases
+// the session from Health's side.
+const OG_BLOCK_WEEKS = 8, OG_BLOCK_RPE = 8;
 // k: the day the plan is for. Tomorrow by default, so today's reports count and today's one-off swaps do not.
 function ogPlan(k = shift(todayKey(), 1)) {
   const P = prog(), custom = new Map(), routines = [], week = {};
   for (const did of Object.keys(P.days)) {
     const plan = sessionPlan(k, did);
-    routines.push({ id: 'health-' + did, name: ogRoutineName(P.days[did]), prog: 'double', ex: plan.lifts.map(L => ogSlot(L, k, custom)) });
+    let firstBig = true;
+    const ex = plan.lifts.map(L => { const big = firstBig && ogBig(L.id) && !isHold(L.id); if (big) firstBig = false; return ogSlot(L, k, custom, big); });
+    routines.push({ id: 'health-' + did, name: ogRoutineName(P.days[did]), prog: 'double', ex });
   }
   (OG_DAYS[P.per] || OG_DAYS[3]).forEach((wd, i) => { week[wd] = [routines[i % routines.length].id]; });
-  return { opengym_plan: 1, exported: todayKey(), name: `Health · ${P.n}`, unit: 'kg', week, routines, customEx: [...custom.values()] };
+  const block = { id: 'health-block', name: `Health · ${P.short} block`, weeks: Array.from({ length: OG_BLOCK_WEEKS }, () => ({ rpe: OG_BLOCK_RPE })), sequence: routines.map(r => r.id) };
+  return { opengym_plan: 1, exported: todayKey(), name: `Health · ${P.n}`, unit: 'kg', week, routines, customEx: [...custom.values()], programme_fmt: 1, programmes: [block] };
 }
 // What the plan is, without its loads: when this changes, the copy in openGym is out of date.
 function ogPlanSig(plan = ogPlan()) {
-  const t = JSON.stringify([plan.name, plan.routines.map(r => r.ex.map(e => [e.id, e.sets, e.reps, e.repsMin, e.sec]))]);
+  const t = JSON.stringify([plan.name, plan.routines.map(r => r.ex.map(e => [e.id, e.sets, e.reps, e.repsMin, e.sec, e.subs]))]);
   let h = 0x811c9dc5;
   for (let i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), 16777619);
   return (h >>> 0).toString(36);
@@ -373,33 +412,25 @@ function ogSourcesBlock() {
     : `${para('Workouts you log in openGym come in by themselves: every set counts in Review, the muscle map, strength and your next targets. Days logged in Health are never overwritten.')}
       <ol class="sub steps"><li>In openGym: Settings › Data &amp; backup › turn on <b>Auto-backup on changes</b>.</li><li>Here: tap <b>Link openGym’s folder</b> and choose <b>Documents › openGym</b>, or the backup folder you picked in openGym.</li></ol>
       <div class="rowb"><button class="solid" data-act="oglink">Link openGym’s folder</button></div>`;
-  return `${link}<details class="inner"><summary>Or bring in a file by hand</summary>${byHand}</details>`;
+  const hc = `<h3>Through Health Connect</h3>${para('openGym writes each finished workout to Health Connect, where Health reads it with the heart rate your watch saved during it. The session shows on Training straight away; its sets arrive with openGym’s next backup.')}
+    <ol class="sub steps"><li>In openGym: Settings › Integrations › <b>Health Connect</b> › turn on <b>Workouts</b>, <b>Heart rate from your watch</b> and <b>Weigh-ins from other apps</b>.</li><li>In Zepp: Profile › Health Connect › allow heart rate, so openGym and Health both get it.</li></ol>`;
+  return `${link}${hc}<details class="inner"><summary>Or bring in a file by hand</summary>${byHand}</details>`;
 }
 // Me › Training: Health's plan going out.
 function ogPlanBlock() {
   const P = prog(), p = S.profile, retired = new Set(Object.keys(P.days).flatMap(d => sessionPlan(shift(todayKey(), 1), d).retired)).size;
-  const sent = S.meta.ogplan, stale = ogPlanStale();
+  const sent = S.meta.ogplan, stale = ogPlanStale(), plan = ogPlan();
+  const nEx = plan.routines.reduce((a, r) => a + r.ex.length, 0), nSubs = plan.routines.reduce((a, r) => a + r.ex.reduce((b, e) => b + (e.subs?.length || 0), 0), 0);
   const what = [esc(P.n), p.equip === 'home' ? 'dumbbells at home' : 'the gym', p.shoulder ? 'shoulder care' : '', retired ? `${plural(retired, 'exercise')} out after pain` : ''].filter(Boolean).join(', ');
   const folder = NATIVE && OGF.folder;
-  return `${para(`Train in openGym with Health’s plan: its animations, rest timer and watch app, with your programme as Health has it now: ${what}. Rep ranges, the next loads, rest times and notes go with it, and openGym moves the weights up by the same double progression Health uses.`)}
-    ${stale ? para(`Your plan has changed since the file made on ${dateLabel(sent.at)}. Make it again and import it in openGym, so openGym has the new one.`, 'flag') : sent ? para(`Plan file made on ${dateLabel(sent.at)}; it still matches your plan.`) : ''}
+  return `${para(`Your plan as Health has it today: ${what}. In the file: ${plural(plan.routines.length, 'routine')} with ${plural(nEx, 'exercise')}, each with its rep range, next load, rest and notes, ${nSubs} backup exercises from openGym’s catalogue for a taken machine, a warm-up ramp before each session’s first big lift, and an ${OG_BLOCK_WEEKS}-week block that runs the routines in rotation at RPE ${OG_BLOCK_RPE}. openGym moves the loads by the same double progression Health uses.`)}
+    ${stale ? para(`Your plan has changed since the file made on ${dateLabel(sent.at)}. Make it again and import it in openGym.`, 'flag') : sent ? para(`Plan file made on ${dateLabel(sent.at)}; it still matches your plan. New loads alone need no new file.`) : ''}
     <div class="rowb">${folder ? '<button class="solid" data-act="ogplan" data-v="folder">Put the plan in the openGym folder</button><button class="ghost" data-act="ogplan">Save it elsewhere</button>' : '<button class="solid" data-act="ogplan">Save the plan file</button>'}</div>
-    <ol class="sub steps"><li>In openGym: <b>Plan</b> › share icon (top right) › <b>Import a plan file</b>.</li><li>Pick <b>${OG_PLAN_NAME}</b>${folder ? ` in ${esc(OGF.folder)}` : ''}.</li><li>Turn on <b>Use this weekly schedule</b>, then <b>Add to my plan</b>.</li>
-      <li>Sending a newer version later? In openGym, delete the old routines marked “(Health)” first, so there are not two of each.</li></ol>
-    ${para(NATIVE ? 'Then link openGym’s folder in Me › Data sources, and what you lift there comes back here by itself.' : 'Then bring openGym’s backup in from Me › Data sources, and what you lift there counts here too.')}`;
-}
-// Train: a session that came from openGym, and what it holds beyond today's plan.
-function ogTrainNote(k, plan) {
-  const L = S.lifts[k];
-  if (L?.src !== 'og') return '';
-  const extra = Object.keys(L.ex).filter(id => !plan.lifts.some(x => x.id === id)).map(exName);
-  return `<p class="note">Logged in openGym${extra.length ? `, also: ${esc(extra.join(', '))}` : ''}. Changes made in openGym come through here; change a set here and the day becomes Health’s own.</p>`;
-}
-function ogTrainStrip() {
-  if (!S.meta.og && !S.meta.ogplan) return '';
-  const stale = ogPlanStale();
-  return `<div class="strip ${stale ? 'lv-care' : ''}">${stale ? '<span class="dot"></span>' : ''}<span class="grow"><b>${stale ? 'Your plan changed: send it to openGym again' : 'Training in openGym?'}</b><span class="sub">${stale ? 'Me › Training › Train in openGym.' : NATIVE && OGF.folder ? 'Sessions come in by themselves when you open Health.' : 'Bring its backup in from Me › Data sources.'}</span></span>
-    ${stale ? '<a class="mini" href="#set-train">Send</a>' : NATIVE && OGF.app ? '<button class="mini" data-act="ogopen">Open openGym</button>' : ''}</div>`;
+    <ol class="sub steps"><li>In openGym: <b>Plan</b> › share icon (top right) › <b>Import a plan file</b>, and pick <b>${OG_PLAN_NAME}</b>${folder ? ` in ${esc(OGF.folder)}` : ''}.</li>
+      <li>Turn on <b>Use this weekly schedule</b>, then <b>Add to my plan</b>. The routines are named “(Health)”.</li>
+      <li>To train in rotation with the effort target: <b>Plan</b> › menu › <b>Programmes</b> › <b>${esc(plan.programmes[0].name)}</b> › <b>Start programme</b>.</li>
+      <li>Sending a newer version later? Delete the old “(Health)” routines and the old block in openGym first, so there are not two of each.</li></ol>
+    ${para(`Then in Me › Data sources link openGym both ways, and what you lift comes back by itself. ${why('block', 'Why the block is set up this way')}`)}`;
 }
 function ogAct(a, el) {
   switch (a) {
