@@ -8,7 +8,7 @@ const PACE = { maintain: ['Maintain', 0, 'Hold your weight; train for strength a
 
 const MEALS = [['breakfast', 'Breakfast'], ['lunch', 'Lunch'], ['snack', 'Snacks'], ['dinner', 'Dinner']];
 const CATS = [['usual', 'Usual'], ['quick', 'Quick'], ['thali', 'Thali'], ['roti', 'Poli & bhaat'], ['dal', 'Dal & usal'], ['bhaji', 'Bhaji'], ['protein', 'Protein'],
-  ['nashta', 'Nashta'], ['snack', 'Snacks'], ['sweet', 'God'], ['drink', 'Drinks'], ['fruit', 'Fruit'], ['kerala', 'South Indian'], ['nonveg', 'Egg & non-veg'], ['mine', 'Mine']];
+  ['nashta', 'Nashta'], ['snack', 'Snacks'], ['sweet', 'God'], ['festival', 'Faral & sana'], ['drink', 'Drinks'], ['fruit', 'Fruit'], ['kerala', 'South Indian'], ['nonveg', 'Egg & non-veg'], ['mine', 'Mine']];
 
 // [id, name, household unit, kcal, protein, carbs, fat, fibre, category]
 // Raw ingredients follow IFCT 2017 (ICMR-NIN). Cooked dishes are estimates from
@@ -29,6 +29,12 @@ const FOODS = [
   ['rice', 'Bhaat (rice)', '1 katori', 195, 4, 43, 0.5, 0.5, 'roti'],
   ['masale_bhaat', 'Masale bhaat', '1 plate', 330, 7, 52, 10, 4, 'roti'],
   ['khichdi', 'Dal khichdi', '1 plate', 300, 11, 48, 7, 5, 'roti'],
+  ['phulka', 'Phulka, no tup', '1', 70, 2.5, 14, 0.5, 2, 'roti'],
+  ['bhakri_nachni', 'Nachnichi bhakri', '1 medium', 160, 4, 33, 1.5, 5, 'roti'],
+  ['puri', 'Puri', '1', 100, 2, 12, 5, 0.8, 'roti'],
+  ['naan', 'Naan / kulcha', '1', 260, 8, 45, 5, 2, 'roti'],
+  ['jeera_rice', 'Jeera rice / fried rice', '1 katori', 230, 4, 42, 5, 0.6, 'roti'],
+  ['brown_rice', 'Brown / hand-pound rice', '1 katori', 180, 4, 38, 1.5, 2, 'roti'],
   ['ghee', 'Tup / oil', '1 tsp', 45, 0, 0, 5, 0, 'roti'],
 
   ['varan', 'Varan', '1 katori', 120, 7, 17, 3, 3, 'dal'],
@@ -39,6 +45,8 @@ const FOODS = [
   ['chavli', 'Chavli / vatana usal', '1 katori', 180, 10, 24, 5, 7, 'dal'],
   ['chole', 'Chole / rajma', '1 katori', 200, 10, 27, 6, 8, 'dal'],
   ['sprouts', 'Mod aleli matki, vafavleli', '1 katori', 100, 7, 15, 0.5, 5, 'dal'],
+  ['masoor', 'Masoor dal', '1 katori', 150, 9, 20, 3.5, 4, 'dal'],
+  ['dal_makhani', 'Dal makhani', '1 katori', 260, 9, 24, 14, 6, 'dal'],
   ['pithla', 'Pithla', '1 katori', 180, 8, 18, 8, 4, 'dal'],
   ['zunka', 'Zunka', '1 katori', 220, 10, 20, 11, 5, 'dal'],
   ['kadhi', 'Kadhi', '1 katori', 110, 4, 9, 6, 0.5, 'dal'],
@@ -50,6 +58,7 @@ const FOODS = [
   ['vangi', 'Bharli vangi', '1 katori', 200, 4, 12, 15, 5, 'bhaji'],
   ['paneer_bhaji', 'Paneer bhaji', '1 katori', 280, 15, 8, 21, 2, 'bhaji'],
   ['soya_bhaji', 'Soya chunks bhaji', '1 katori', 190, 17, 13, 8, 5, 'bhaji'],
+  ['bharit', 'Vangyache bharit / baingan bharta', '1 katori', 130, 3, 10, 9, 4, 'bhaji'],
   ['koshimbir', 'Koshimbir', '1 katori', 60, 2, 6, 3, 2, 'bhaji'],
   ['salad', 'Kakdi / tomato / gajar', '1 katori', 25, 1, 5, 0, 2, 'bhaji'],
   ['thecha', 'Thecha', '1 tsp', 25, 0.5, 1, 2, 0.5, 'bhaji'],
@@ -65,6 +74,10 @@ const FOODS = [
   ['taak', 'Taak', '1 glass', 40, 2.5, 4, 1.5, 0, 'protein'],
   ['milk', 'Milk, toned', '1 glass (250 ml)', 150, 8, 12, 7.5, 0, 'protein'],
   ['chilla', 'Dhirde / besan chilla', '2', 220, 11, 26, 8, 5, 'protein'],
+  ['paneer_tikka', 'Paneer tikka', '6 pieces (150 g)', 330, 20, 8, 24, 1, 'protein'],
+  ['moong_chilla', 'Moong dal chilla', '2', 200, 12, 26, 5, 5, 'protein'],
+  ['sattu', 'Sattu, in water', '2 tbsp (20 g)', 80, 4.5, 12.5, 1.2, 2, 'protein'],
+  ['soy_milk', 'Soy milk, unsweetened', '1 glass (250 ml)', 100, 7, 8, 4, 1, 'protein'],
   ['almonds', 'Badam (almonds)', '10 pieces', 70, 2.5, 2.5, 6, 1.5, 'protein'],
   ['pb', 'Peanut butter', '1 tbsp', 95, 4, 3, 8, 1, 'protein'],
   ['makhana', 'Makhana, roasted', '1 katori (25 g)', 110, 2.5, 19, 3, 2, 'snack'],
@@ -84,6 +97,9 @@ const FOODS = [
   ['medu_vada', 'Medu vada', '1', 130, 4, 14, 7, 2, 'nashta'],
   ['dhokla', 'Dhokla', '2 pieces', 150, 6, 20, 5, 2, 'nashta'],
   ['dosa', 'Dosa, plain', '1', 135, 3, 22, 4, 1, 'nashta'],
+  ['pesarattu', 'Pesarattu', '1', 160, 8, 22, 4.5, 4, 'nashta'],
+  ['rava_dosa', 'Rava dosa', '1', 180, 3, 25, 7.5, 1, 'nashta'],
+  ['shevai', 'Shevai upma', '1 plate', 230, 5, 38, 6.5, 2, 'nashta'],
   ['bread', 'Bread', '2 slices', 140, 5, 26, 1.5, 2, 'nashta'],
 
   ['vadapav', 'Vada pav', '1', 300, 6, 40, 13, 3, 'snack'],
@@ -99,6 +115,15 @@ const FOODS = [
   ['maggi', 'Maggi', '1 packet', 310, 7, 45, 12, 2, 'snack'],
   ['veg_biryani', 'Veg biryani / pulao', '1 plate', 450, 10, 65, 16, 5, 'snack'],
   ['pizza', 'Pizza', '2 slices', 520, 22, 60, 20, 4, 'snack'],
+  ['pani_puri', 'Pani puri', '6 pieces', 210, 4, 32, 7, 3, 'snack'],
+  ['sev_puri', 'Sev puri / dahi puri', '1 plate (6)', 300, 6, 38, 14, 3, 'snack'],
+  ['dabeli', 'Dabeli', '1', 300, 6, 42, 12, 4, 'snack'],
+  ['kachori', 'Kachori', '1', 190, 3.5, 18, 11.5, 1.5, 'snack'],
+  ['kanda_bhaji', 'Kanda bhaji / pakode', '4 pieces', 200, 4, 18, 12.5, 2, 'snack'],
+  ['momos', 'Veg momos, steamed', '6 pieces', 210, 7, 35, 4.5, 2, 'snack'],
+  ['khakhra', 'Khakhra', '1', 80, 2.5, 13, 2, 2, 'snack'],
+  ['bakarwadi', 'Bakarwadi', '30 g, a handful', 150, 3, 16, 8.5, 1.5, 'snack'],
+  ['mathri', 'Mathri / namak pare', '30 g, a handful', 155, 3, 16, 9, 1, 'snack'],
   ['out', 'Hotel meal, rough guess', '1 meal', 750, 20, 85, 35, 5, 'snack'],
 
   ['sheera', 'Sheera', '1 katori', 280, 3, 40, 12, 1, 'sweet'],
@@ -108,6 +133,30 @@ const FOODS = [
   ['ice_cream', 'Ice cream', '1 cup', 140, 2.5, 17, 7, 0, 'sweet'],
   ['sugar', 'Sakhar / gul', '1 tsp', 20, 0, 5, 0, 0, 'sweet'],
 
+  ['chakli', 'Chakli / murukku', '1', 75, 1.5, 8, 4.5, 0.7, 'festival'],
+  ['karanji', 'Karanji / gujiya', '1', 160, 2, 18, 9, 1, 'festival'],
+  ['shankarpali', 'Shankarpali', '30 g, a handful', 150, 2, 18, 8, 0.5, 'festival'],
+  ['anarse', 'Anarse', '1', 140, 1.5, 20, 6, 0.5, 'festival'],
+  ['rava_ladoo', 'Rava ladoo', '1', 180, 2.5, 24, 8.5, 0.5, 'festival'],
+  ['motichoor', 'Motichoor / boondi ladoo', '1', 175, 2.5, 24, 8, 0.5, 'festival'],
+  ['til_ladoo', 'Tilgul / til ladoo', '1', 95, 2.5, 10, 5.5, 1.5, 'festival'],
+  ['modak', 'Ukadiche modak', '1', 140, 1.5, 22, 5, 1.5, 'festival'],
+  ['modak_fried', 'Talleley modak', '1', 170, 2, 20, 9, 1, 'festival'],
+  ['kaju_katli', 'Kaju katli', '1 piece', 55, 1, 6.5, 3, 0.2, 'festival'],
+  ['barfi', 'Barfi (khoya)', '1 piece', 130, 3, 16, 6, 0, 'festival'],
+  ['peda', 'Peda', '1', 100, 2.5, 15, 3.5, 0, 'festival'],
+  ['mysore_pak', 'Mysore pak', '1 piece', 170, 1.5, 14, 12, 0.5, 'festival'],
+  ['soan_papdi', 'Soan papdi', '1 piece', 120, 1.5, 15, 6, 0.5, 'festival'],
+  ['nankhatai', 'Nankhatai', '1', 75, 1, 9, 4, 0.3, 'festival'],
+  ['jalebi', 'Jalebi', '2 pieces', 220, 1.5, 32, 10, 0.2, 'festival'],
+  ['rasgulla', 'Rasgulla', '1', 120, 2.5, 25, 1.5, 0, 'festival'],
+  ['malpua', 'Malpua', '1', 200, 3, 26, 9.5, 0.5, 'festival'],
+  ['kheer', 'Kheer / payasam', '1 katori', 220, 6, 32, 7.5, 0.3, 'festival'],
+  ['gajar_halwa', 'Gajar halwa', '1 katori', 300, 5, 38, 14, 2.5, 'festival'],
+  ['basundi', 'Basundi / rabdi', '1 katori', 280, 8, 32, 13, 0, 'festival'],
+  ['sakharbhat', 'Sakharbhat', '1 katori', 280, 3, 50, 8, 0.5, 'festival'],
+  ['sheer_khurma', 'Sheer khurma', '1 katori', 300, 7, 38, 13, 1.5, 'festival'],
+  ['thandai', 'Thandai', '1 glass', 230, 7, 30, 9, 1, 'festival'],
   ['chai', 'Chaha with sugar', '1 cup', 70, 2, 10, 2.5, 0, 'drink'],
   ['coffee', 'Coffee, milk and sugar', '1 cup', 70, 2, 10, 2.5, 0, 'drink'],
   ['black_coffee', 'Black coffee, no sugar', '1 cup', 2, 0, 0, 0, 0, 'drink'],
@@ -115,6 +164,9 @@ const FOODS = [
   ['lassi', 'Lassi, sweet', '1 glass', 180, 6, 28, 5, 0, 'drink'],
   ['usacha_ras', 'Usacha ras', '1 glass', 180, 0, 45, 0, 0, 'drink'],
   ['nimbu', 'Limbu sarbat', '1 glass', 50, 0, 13, 0, 0, 'drink'],
+  ['panha', 'Kairiche panha', '1 glass', 120, 0.5, 30, 0, 0.5, 'drink'],
+  ['kokum', 'Kokum sarbat', '1 glass', 90, 0, 22, 0, 0, 'drink'],
+  ['masala_doodh', 'Masala doodh', '1 glass', 220, 8, 26, 9, 0, 'drink'],
   ['colddrink', 'Cold drink / packaged juice', '250 ml', 105, 0, 27, 0, 0, 'drink'],
   ['coconut_water', 'Shahalyache pani', '1 glass', 45, 0.5, 10, 0, 0, 'drink'],
 
@@ -126,6 +178,12 @@ const FOODS = [
   ['mango', 'Amba', '1 medium', 150, 1.5, 37, 0.5, 4, 'fruit'],
   ['dates', 'Khajur', '2', 55, 0.5, 15, 0, 1.5, 'fruit'],
 
+  ['chikoo', 'Chikoo', '1 medium', 85, 0.5, 20, 1, 5, 'fruit'],
+  ['pomegranate', 'Dalimb (pomegranate)', '1 katori', 85, 1.5, 19, 1, 4, 'fruit'],
+  ['sitaphal', 'Sitaphal', '1 medium', 95, 2, 23, 0.3, 4, 'fruit'],
+  ['watermelon', 'Kalingad (watermelon)', '1 katori', 45, 1, 11, 0, 0.6, 'fruit'],
+  ['grapes', 'Draksha (grapes)', '1 katori', 70, 0.7, 17, 0.2, 1, 'fruit'],
+  ['pineapple', 'Ananas', '1 katori', 75, 0.8, 19, 0.2, 2, 'fruit'],
   ['matta_rice', 'Matta rice', '1 katori', 190, 4, 41, 0.5, 1.5, 'kerala'],
   ['sambar', 'Sambar', '1 katori', 100, 5, 14, 3, 3, 'kerala'],
   ['kadala', 'Kadala curry', '1 katori', 200, 9, 22, 8, 7, 'kerala'],
@@ -145,6 +203,11 @@ const FOODS = [
   ['chicken', 'Chicken rassa', '1 katori', 240, 22, 5, 15, 1, 'nonveg'],
   ['chicken_breast', 'Chicken breast, cooked', '100 g', 165, 31, 0, 3.5, 0, 'nonveg'],
   ['fish', 'Fish curry', '1 katori', 200, 20, 4, 12, 0.5, 'nonveg'],
+  ['egg_curry', 'Egg curry', '2 eggs', 260, 14, 8, 19, 1.5, 'nonveg'],
+  ['mutton', 'Mutton rassa', '1 katori', 300, 22, 5, 21, 1, 'nonveg'],
+  ['prawns', 'Kolambi masala (prawns)', '1 katori', 200, 20, 6, 10.5, 1, 'nonveg'],
+  ['fish_fry', 'Bangda / surmai fry', '1 piece (100 g)', 220, 20, 6, 13, 0, 'nonveg'],
+  ['tandoori', 'Tandoori chicken', '2 pieces (200 g)', 290, 38, 5, 13, 1, 'nonveg'],
   ['biryani', 'Chicken biryani', '1 plate', 550, 25, 65, 20, 3, 'nonveg'],
 ];
 
@@ -156,6 +219,9 @@ const THALI = [
   ['Varan-bhaat', [['rice', 1], ['varan', 1], ['ghee', 1]]],
   ['Whey and banana', [['whey', 1], ['banana', 1]]],
   ['Kerala meals', [['matta_rice', 1.5], ['sambar', 1], ['thoran', 1], ['moru', 1]]],
+  ['Diwali faral plate', [['chakli', 2], ['karanji', 1], ['ladoo', 1], ['chivda', 1], ['shankarpali', 1]]],
+  ['Ganpati naivedya', [['modak', 2], ['varan', 1], ['rice', 1], ['ghee', 1]]],
+  ['Puran poli jevan', [['puran_poli', 1], ['ghee', 1], ['amti', 1], ['rice', 1]]],
 ];
 
 const USUAL = {

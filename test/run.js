@@ -255,6 +255,17 @@ test('manual cardio counts by effort toward WHO minutes', c => {
   run(c, "S.cardio[todayKey()] = [cleanCardio({ t: Date.now(), kind: 'walk', dur: 1800, m: 1, eff: 'vig' })]; memo.clear()");
   assert.strictEqual(Math.round(run(c, 'activityWeek().who')), 60);
 });
+test('every food has a unique id, a known category, and calories that match its protein, carbs and fat', c => {
+  const F = run(c, 'FOODS'), cats = new Set(run(c, 'CATS').map(x => x[0])), ids = new Set();
+  for (const f of F) {
+    assert.ok(!ids.has(f[0]), `duplicate ${f[0]}`); ids.add(f[0]);
+    assert.ok(cats.has(f[8]), `${f[0]}: category ${f[8]}`);
+    const e = 4 * f[4] + 4 * f[5] + 9 * f[6];
+    if (f[3] > 20) assert.ok(Math.abs(e - f[3]) / f[3] <= 0.15, `${f[0]}: ${f[3]} kcal vs ${e} from macros`);
+  }
+  for (const [name, parts] of run(c, 'THALI')) for (const [id] of parts) assert.ok(ids.has(id), `${name}: ${id}`);
+  for (const id of [...Object.values(run(c, 'USUAL')).flat(), ...run(c, 'GAP')]) assert.ok(ids.has(id), id);
+});
 test('every programme exercise exists and every rep range is sane', c => {
   for (const [p, P] of Object.entries(run(c, 'PROGRAMS'))) for (const [d, D] of Object.entries(P.days)) for (const l of D.lifts) {
     assert.ok(run(c, `!!EXD['${l[0]}']`), `${p}/${d}/${l[0]}`);
