@@ -51,22 +51,79 @@ function welcome() {
   return `<div class="callout"><button class="x" data-act="welcomed" aria-label="Dismiss">×</button><b>New here, or reinstalled?</b><span class="sub">If you have a backup from before, bring it in first. Otherwise choose a folder and the app keeps a copy there every day.</span>
     <div class="rowb"><button class="solid" data-act="import">Import a backup</button><button class="ghost" data-act="bkpick">Choose backup folder</button></div><input type="file" id="imp" accept="application/json,.json" hidden></div>`;
 }
-function readinessStrip() {
-  const R = readiness(), V = R.V, sl = S.sleep[day];
-  if (R.level === 'unknown' && !V.now) return '';
-  const word = { go: 'Train as planned', care: 'Train, but listen to your body', easy: 'Keep today easy', unknown: 'Recovery' }[R.level];
-  const bits = [V.now ? `HRV ${r1(V.now.rmssd)} ms` : null, restingHR(day) ? `resting ${Math.round(restingHR(day).v)} bpm` : null, sl != null ? `${r1(sl)} h sleep` : null].filter(Boolean);
-  return `<a class="strip lv-${R.level}" href="#recovery"><span class="dot"></span><span class="grow"><b>${word}</b><span class="sub">${bits.join(' · ') || 'Do a morning check with the H9'}</span></span><span class="chev">›</span></a>`;
+// ---------- the top of Today ----------
+// The day in one look: the verdict as a ring, and the three things behind it, each against your own normal.
+function briefCard() {
+  const R = readiness(), V = R.V, rt = R.R, sl = S.sleep[day], L = sleepStats(14, shift(day, -1));
+  const word = { go: 'Train as planned', care: 'Train, but listen to your body', easy: 'Keep today easy', unknown: 'Building your baseline' }[R.level];
+  const h = new Date().getHours(), greet = h < 5 ? 'Late night' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  // Each signal: value, a 0–1 position against your normal (the band is the middle), and a short reading.
+  const sig = [];
+  if (V.now || V.roll) {
+    const v = V.now ? V.now.rmssd : V.roll, pos = V.lo ? clamp((Math.log(v) - Math.log(V.lo * 0.75)) / (Math.log(V.hi * 1.3) - Math.log(V.lo * 0.75)), 0.03, 0.97) : null;
+    sig.push(['HRV', `${Math.round(v)}<i> ms</i>`, pos, V.lo ? `${V.now ? 'today' : '7-day avg'} ${{ low: 'below', high: 'above' }[V.now ? V.day : V.state] || 'in'} ${Math.round(V.lo)}–${Math.round(V.hi)}` : `${V.need ?? 0} more for your range`, (V.now ? V.day : V.state) === 'low' ? 'bad' : 'good', V.lo ? [(Math.log(V.lo) - Math.log(V.lo * 0.75)) / (Math.log(V.hi * 1.3) - Math.log(V.lo * 0.75)), (Math.log(V.hi) - Math.log(V.lo * 0.75)) / (Math.log(V.hi * 1.3) - Math.log(V.lo * 0.75))] : null]);
+  }
+  const r = restingHR(day);
+  if (r) sig.push(['Resting', `${Math.round(r.v)}<i> bpm</i>`, rt.delta != null ? clamp(0.5 + rt.delta / 16, 0.03, 0.97) : null, rt.delta != null ? `${sign(rt.delta, 1)} vs 3 weeks` : 'from the ' + (r.src === 'strap' ? 'strap' : 'watch'), rt.delta != null && rt.delta >= 3 ? 'bad' : 'good', [0.5 - 3 / 16, 0.5 + 3 / 16]]);
+  if (sl != null) sig.push(['Sleep', `${r1(sl)}<i> h</i>`, clamp((sl - 4) / 6, 0.03, 0.97), L.avg ? `usually ${r1(L.avg)} h` : 'last night', sl < 6 ? 'bad' : 'good', [0.5, 5 / 6]]);
+  const frac = { go: 1, care: 0.66, easy: 0.33, unknown: 0.12 }[R.level];
+  return `<a class="brief lv-${R.level}" href="#recovery">
+    <div class="ring"><svg viewBox="0 0 44 44" aria-hidden="true"><circle class="bg" cx="22" cy="22" r="19" pathLength="100"/><circle class="fg" cx="22" cy="22" r="19" pathLength="100" stroke-dasharray="0 100" data-dash="${(frac * 100).toFixed(0)}"/></svg><span>${{ go: 'Go', care: 'Care', easy: 'Easy', unknown: '·' }[R.level]}</span></div>
+    <div class="grow"><div class="eyebrow">${greet}</div><b class="bw">${word}</b>
+      ${sig.length ? `<div class="sigs">${sig.map(([n, v, p, t, c, band]) => `<div class="sg"><span class="sn">${n}</span><b class="num">${v}</b><span class="meter">${band ? `<i class="bd" style="left:${(band[0] * 100).toFixed(0)}%;width:${((band[1] - band[0]) * 100).toFixed(0)}%"></i>` : ''}${p != null ? `<i class="pt ${c}" style="left:${(p * 100).toFixed(0)}%"></i>` : ''}</span><span class="st">${t}</span></div>`).join('')}</div>`
+        : '<span class="sub">A morning check with the H9, or a synced night from the watch, and this fills in.</span>'}
+      ${R.why[0] ? `<span class="sub why1">${esc(R.why[0][1])}</span>` : ''}</div></a>`;
 }
-// What training is next in openGym, and how hard to go today.
-function trainStrip() {
-  const k = todayKey(), L = S.lifts[k], R = readiness();
+// One tap to whatever is most often done next.
+function nextMeal() { const h = new Date().getHours(); return h < 11 ? 'breakfast' : h < 15 ? 'lunch' : h < 18 ? 'snack' : 'dinner'; }
+const QICON = {
+  food: '<svg viewBox="0 0 24 24"><path d="M7 3v8a2 2 0 0 0 4 0V3M9 11v10M16 3c-2 2-2 6 0 8v10"/></svg>',
+  weigh: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M9 9a3 3 0 0 1 6 0M12 9l1.5-1.5"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><path d="M3 12h4l2-5 3 10 2.5-7 1.5 2H21"/></svg>',
+  breathe: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7" opacity=".55"/><circle cx="12" cy="12" r="10.5" opacity=".25"/></svg>',
+  cardio: '<svg viewBox="0 0 24 24"><circle cx="15" cy="4.5" r="2"/><path d="M8 21l3-6 3 2v5M6 12l3-4 4 1 3 4h3"/></svg>',
+  day: '<svg viewBox="0 0 24 24"><path d="M3 15c3 0 3-6 6-6s3 9 6 9 3-12 6-12"/></svg>',
+};
+function quickDock() {
+  const m = nextMeal(), strap = S.meta.h9 || Object.keys(S.hrv).length, needCheck = strap && !S.hrv[todayKey()] && new Date().getHours() < 12;
+  const items = [
+    ['food', `Log ${MEALS.find(x => x[0] === m)[1].toLowerCase()}`, `href="#add-${m}"`],
+    ['weigh', S.weights[todayKey()] != null ? `${kg(S.weights[todayKey()])} kg` : 'Weigh in', 'data-act="qweigh"'],
+    needCheck ? ['check', 'Morning check', 'href="#recovery"'] : ['breathe', 'Breathe', 'href="#lab-breathe"'],
+    needCheck ? ['breathe', 'Breathe', 'href="#lab-breathe"'] : ['check', 'Spot check', 'href="#lab-spot"'],
+    ['cardio', 'Cardio', 'data-act="cardioadd"'],
+    ['day', 'Your day', `data-act="dayx" data-k="${todayKey()}"`],
+  ];
+  return `<nav class="dock" aria-label="Quick actions">${items.map(([ic, l, at]) => `<${at.startsWith('href') ? 'a' : 'button'} class="qa q-${ic}" ${at}><span class="qi">${QICON[ic]}</span><span class="ql">${l}</span></${at.startsWith('href') ? 'a' : 'button'}>`).join('')}</nav>`;
+}
+// Sideways cards: last night, movement, body and the next session. Each opens its detail.
+function cardRow() {
+  const k = todayKey(), cards = [], sx = S.sleepx[k], sl = S.sleep[k];
+  if (sl != null || sx) {
+    const prev = range(28, shift(k, -1)), V = versus(sl, prev.map(d => S.sleep[d])), H = versus(sx?.hr, prev.map(d => S.sleepx[d]?.hr));
+    cards.push(`<button class="hc c-sleep" data-act="dayx" data-k="${k}"><span class="eyebrow">Last night</span><b class="num big">${sl != null ? `${Math.floor(sl)}<i>h</i> ${Math.round((sl % 1) * 60)}<i>m</i>` : DASH}</b>
+      ${sx ? miniStages(sx) : ''}<span class="sub">${[sx?.hr ? `sleeping ${Math.round(sx.hr)} bpm${H.word && H.word !== 'usual' ? `, ${H.word}` : ''}` : '', V.word && V.word !== 'usual' ? `${V.word.replace('low', 'short').replace('high', 'long')} night for you` : ''].filter(Boolean).join(' · ') || 'From the watch'}</span></button>`);
+  }
+  const T = targets(), st = S.steps[k] || 0, A = activityWeek();
+  cards.push(`<a class="hc c-move" href="#training"><span class="eyebrow">Move</span>${ringSvg(st / T.stepGoal, 'leaf')}<b class="num">${fmt(st)}<i> / ${fmt(T.stepGoal)}</i></b><span class="sub">${Math.round(A.who)} of 150 active minutes this week</span></a>`);
+  const ser = series().filter(x => gapDays(x.k, k) < 30);
+  if (ser.length >= 2) {
+    const wk = T.slope == null ? null : T.slope * 7, v = ser.map(x => x.t), lo = Math.min(...v), hi = Math.max(...v);
+    const d = ser.map((x, i) => `${i ? 'L' : 'M'}${(gapDays(ser[0].k, x.k) / Math.max(1, gapDays(ser[0].k, k)) * 120).toFixed(1)},${(36 - (x.t - lo) / (hi - lo || 1) * 30).toFixed(1)}`).join('');
+    cards.push(`<a class="hc c-body" href="#review"><span class="eyebrow">Body</span><b class="num big">${r1(T.wt)}<i> kg</i></b><svg class="mspark" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"><path d="${d}"/></svg><span class="sub">${wk != null ? `${sign(wk, 2)} kg a week` : 'trend, 30 days'}</span></a>`);
+  }
   const did = nextDay(shift(k, 1)), plan = sessionPlan(shift(k, 1), did);
-  if (!plan.lifts.length) return '';
-  const today = L ? dayName(k) : null, ease = EASE[R.level][0];
-  const text = today ? `${esc(today)} done today` : `${esc(plan.name)} is next in openGym`;
-  return `<a class="strip lv-${L ? 'go' : R.level === 'unknown' ? 'none' : R.level}" href="#training"><span class="ic">${ICON.lift}</span><span class="grow"><b>${text}</b>
-    <span class="sub">${today ? `Next: ${esc(plan.name)}, ${esc(plan.focus)}` : `${esc(plan.focus)} · ${ease.toLowerCase()}`}</span></span><span class="chev">›</span></a>`;
+  if (plan.lifts.length) cards.push(`<a class="hc c-train" href="#training"><span class="eyebrow">${S.lifts[k] ? 'Done today · next' : 'Next in openGym'}</span><b>${esc(plan.name)}</b><span class="sub">${esc(plan.focus)}</span><span class="sub ease lv-${readiness().level}"><span class="dot"></span>${EASE[readiness().level][0]}</span></a>`);
+  return `<div class="cards" role="list">${cards.join('')}</div>`;
+}
+function ringSvg(f, cls) { return `<svg class="mring2 ${cls}" viewBox="0 0 36 36" aria-hidden="true"><circle class="bg" cx="18" cy="18" r="15" pathLength="100"/><circle class="fg" cx="18" cy="18" r="15" pathLength="100" stroke-dasharray="0 100" data-dash="${clamp(f * 100, 0, 100).toFixed(1)}"/></svg>`; }
+function miniStages(sx) {
+  if (sx.seg?.length) {
+    const end = Math.max(...sx.seg.map(([o, l]) => o + l));
+    return `<svg class="mhyp" viewBox="0 0 120 24" preserveAspectRatio="none" aria-hidden="true">${sx.seg.map(([o, l, c]) => `<rect class="st${c}" x="${(o / end * 120).toFixed(2)}" y="${STAGE[c][1] * 6}" width="${Math.max(0.5, l / end * 120).toFixed(2)}" height="5" rx="1"/>`).join('')}</svg>`;
+  }
+  const t = sx.d + sx.l + sx.r + sx.w;
+  return t ? `<div class="zbar thin">${[['st1', sx.w], ['st2', sx.l], ['st3', sx.d], ['st4', sx.r]].map(([c, v]) => v ? `<i class="${c}" style="flex:${v}"></i>` : '').join('')}</div>` : '';
 }
 // The measurements the app relies on that are due today and not done yet, each one tap away. Nothing here is
 // nagging for its own sake: each one feeds a number elsewhere (the HRV range, the weight trend, the waist line).
@@ -100,7 +157,7 @@ function vToday() {
   const T = targets(), t = totals(day), isToday = day === todayKey(), y = shift(day, -1);
   const meals = MEALS.map(([m, label]) => {
     const mt = totals(day, m), main = m !== 'snack';
-    const items = (S.food[day] || []).map((e, i) => [e, i]).filter(([e]) => e.m === m).map(([e, i]) => `<li data-flash="${esc(m + e.id)}"><button class="grow rowbtn" data-act="fedit" data-i="${i}"><span class="nm">${esc(e.n)}</span><span class="sub">${e.q} × ${esc(e.u)} · ${fmt(e.k * e.q)} kcal · ${r1(e.p * e.q)} g</span></button>
+    const items = (S.food[day] || []).map((e, i) => [e, i]).filter(([e]) => e.m === m).map(([e, i]) => `<li data-flash="${esc(m + e.id)}" data-swipe="fdelrow" data-i="${i}"><button class="grow rowbtn" data-act="fedit" data-i="${i}"><span class="nm">${esc(e.n)}</span><span class="sub">${e.q} × ${esc(e.u)} · ${fmt(e.k * e.q)} kcal · ${r1(e.p * e.q)} g</span></button>
         <button class="step" data-act="q" data-m="${m}" data-id="${esc(e.id)}" data-d="-0.5" aria-label="Less ${esc(e.n)}">−</button><button class="step" data-act="q" data-m="${m}" data-id="${esc(e.id)}" data-d="0.5" aria-label="More ${esc(e.n)}">+</button></li>`).join('');
     const canCopy = !mt.n && totals(y, m).n;
     const pOk = main && mt.p >= T.perMeal * 0.8;
@@ -112,7 +169,7 @@ function vToday() {
   const nav = d => `<button class="nav" data-act="day" data-d="${d}" ${d > 0 && isToday ? 'disabled' : ''} aria-label="${d < 0 ? 'Previous' : 'Next'} day">${d < 0 ? '‹' : '›'}</button>`;
   const title = isToday ? 'Today' : day === shift(todayKey(), -1) ? 'Yesterday' : dateLabel(day);
   return `${masthead(title, dateLabel(day, { weekday: 'long', day: 'numeric', month: 'long' }), { center: true, before: nav(-1), after: nav(1), h1: isToday ? '' : 'data-act="today" class="tap"' })}
-    ${isToday ? welcome() + syncLine() + part(readinessStrip) + part(trainStrip) + part(checkins) : ''}
+    ${isToday ? welcome() + syncLine() + part(briefCard) + part(quickDock) + part(checkins) + part(cardRow) : ''}
     <section class="hero">${gauge(T, t)}
       <div class="legend"><div>${why('kcal', 'Calories')}<b class="num">${fmt(t.k)}<i> / ${fmt(T.kcal)}</i></b></div>
         <div>${why('protein', 'Protein')}<b class="num pr">${Math.round(t.p)}<i> / ${T.protein} g</i></b></div>
@@ -186,15 +243,22 @@ function bump(meal, f, d) {
 function vFoodEdit(i) {
   const e = (S.food[day] || [])[i];
   if (!e) return '';
-  return `<div class="scrim" data-act="popclose"></div><aside class="sheet" role="dialog" aria-label="${esc(e.n)}" data-key="fedit-${i}"><div class="grab"></div>
-    <div class="eyebrow">${esc(e.u)} · ${fmt(e.k)} kcal · ${e.p} g protein each</div><h1>${esc(e.n)}</h1>
+  return `${sheetTop(`${esc(e.u)} · ${fmt(e.k)} kcal · ${e.p} g protein each`, esc(e.n), `fedit-${i}`)}
     <div class="wstep big"><button class="step" data-act="fq" data-d="-0.5" data-repeat="fq-">−</button><span class="grow"><b class="num" id="fq">${e.q}</b> × ${esc(e.u)}</span><button class="step" data-act="fq" data-d="0.5" data-repeat="fq+">+</button></div>
     ${seg('fqset', [0.5, 1, 1.5, 2, 3].map(q => [q, q === 0.5 ? '½' : q === 1.5 ? '1½' : String(q)]), e.q, 'tight')}
     <p class="num center fsum" id="fsum">${fmt(e.k * e.q)} kcal · ${r1(e.p * e.q)} g protein · ${r1(e.fb * e.q)} g fibre</p>
     <h3>Meal</h3>${seg('fmeal', MEALS, e.m)}
     <div class="rowb"><button class="danger" data-act="fdel">Remove</button><span class="grow"></span><button class="solid" data-act="popclose">Done</button></div></aside>`;
 }
+SWIPE.fdelrow = el => {
+  const k = day, list = S.food[k] || [], i = +el.dataset.i, e = list[i];
+  if (!e) return render();
+  list.splice(i, 1); if (!list.length) delete S.food[k];
+  save(); render();
+  undoable(`${e.n} removed`, () => { (S.food[k] ||= []).splice(i, 0, e); });
+};
 function foodAct(a, el) {
+  if (a === 'qweigh') { const i = document.querySelector('input[data-log="weights"]'); if (i) { i.scrollIntoView({ block: 'center', behavior: motionOK() ? 'smooth' : 'auto' }); setTimeout(() => i.focus(), motionOK() ? 350 : 0); } return true; }
   if (a === 'fedit') { openPop({ kind: 'fedit', i: +el.dataset.i }); return true; }
   if (!['fq', 'fqset', 'fmeal', 'fdel'].includes(a)) return false;
   const list = S.food[day] || [], i = pop?.i, e = list[i];

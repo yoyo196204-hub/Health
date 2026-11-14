@@ -14,6 +14,10 @@ const SETTINGS = {
   // Reminders on the phone: the morning check and weigh-in, the weekly waist, and an evening look at the food log.
   remAm: [['off', '05:30', '06:00', '06:30', '07:00', '07:30', '08:00', '08:30', '09:00'], 'off'],
   remWk: [['off', '0', '1', '2', '3', '4', '5', '6'], 'off'], remPm: [['off', '20:00', '20:30', '21:00', '21:30', '22:00', '22:30'], 'off'],
+  // The morning check (recorded minutes after one to settle, and position) and the Lab's choices.
+  hrvDur: [[60, 120, 180, 300], 60], hrvPos: [['lying', 'sitting'], 'lying'],
+  brPat: [['rf', 'sigh', 'box'], 'rf'], brRate: [[4.5, 5, 5.5, 6, 6.5, 7], 6], brMin: [[2, 3, 5, 10, 15, 20], 5], brHaptic: [['on', 'off'], 'on'],
+  spDur: [[60, 120, 180, 300], 120], spPos: [['sitting', 'lying', 'standing'], 'sitting'],
   haptics: [['full', 'subtle', 'off'], 'full'], motion: [['system', 'full', 'reduced'], 'system'], theme: [['system', 'light', 'dark'], 'system'],
 };
 let loadNote = '', saveFailed = false, loadedMain = false, recovered = '';
@@ -99,6 +103,9 @@ function cleanCardio(c) {
   }
   const vt1 = num(c.vt1, 60, 220);
   if (vt1 != null) r.vt1 = Math.round(vt1);
+  // Heart-rate recovery: the heart rate at stopping and how far it fell in the next minute.
+  const hr0 = num(c.hr0, 40, 230), hrr = num(c.hrr, -30, 120);
+  if (hr0 != null && hrr != null) { r.hr0 = Math.round(hr0); r.hrr = Math.round(hrr); }
   return r;
 }
 // A morning check: RMSSD and heart rate, the share of clean beats, SDNN, and the recorded minute of beats itself
@@ -109,13 +116,45 @@ function cleanHrv(v) {
   if (num(v.q, 0, 100) != null) r.q = +v.q;
   if (num(v.sd, 1, 400) != null) r.sd = +v.sd;
   if (num(v.t, 1e12, 1e13) != null) r.t = +v.t;
-  if (Array.isArray(v.rr)) { const rr = v.rr.slice(0, 240).map(x => num(x, 250, 2500)).filter(x => x != null).map(Math.round); if (rr.length >= 20) r.rr = rr; }
+  hrvExtras(v, r);
+  if (v.pos === 'lying' || v.pos === 'sitting' || v.pos === 'standing') r.pos = v.pos;
+  if (Array.isArray(v.rr)) { const rr = v.rr.slice(0, 600).map(x => num(x, 250, 2500)).filter(x => x != null).map(Math.round); if (rr.length >= 20) r.rr = rr; }
+  return r;
+}
+// The fuller measures a reading can carry (hrv.js): pNN50, Poincaré, spectral bands, breathing rate, length.
+const HRVX = { pnn: [0, 100], sd1: [0, 400], sd2: [0, 600], hf: [0, 1e6], lf: [0, 1e6], br: [3, 40], dur: [10, 1200] };
+function hrvExtras(v, r) { for (const k in HRVX) { const x = num(v[k], ...HRVX[k]); if (x != null) r[k] = x; } return r; }
+// A Lab session (lab.js). Only known kinds and known numeric fields survive.
+const LABN = { t: [1e12, 1e13], dur: [10, 7200], rate: [1, 30], cyc: [0, 2000], q: [0, 100], hr: [25, 220], rmssd: [1, 400], sd: [1, 400], rsa: [0, 120],
+  hr1: [25, 220], hr2: [25, 220], share: [0, 100], best: [1, 30], hrSup: [25, 220], rmSup: [1, 400], hrPeak: [25, 230], hrStd: [25, 220], rmStd: [1, 400] };
+function cleanLab(v) {
+  if (!obj(v) || !['breathe', 'rf', 'ortho', 'spot'].includes(v.kind) || num(v.t, 1e12, 1e13) == null) return null;
+  const r = { kind: v.kind };
+  for (const k in LABN) { const x = num(v[k], ...LABN[k]); if (x != null) r[k] = x; }
+  if (v.kind === 'breathe') { if (!['rf', 'sigh', 'box'].includes(v.pat)) return null; r.pat = v.pat; }
+  if (v.kind === 'rf') {
+    const seg = Array.isArray(v.seg) ? v.seg.slice(0, 8).filter(x => Array.isArray(x) && num(x[0], 1, 30) != null).map(x => [+x[0], num(x[1], 0, 120), num(x[2], 0, 1e7)]) : [];
+    if (seg.length < 3 || r.best == null) return null;
+    r.seg = seg;
+  }
+  if (v.kind === 'ortho' && (r.hrSup == null || r.hrStd == null || r.rmSup == null || r.rmStd == null)) return null;
+  if (v.kind === 'spot') {
+    if (r.rmssd == null || r.hr == null) return null;
+    hrvExtras(v, r);
+    if (['lying', 'sitting', 'standing'].includes(v.pos)) r.pos = v.pos;
+    if (Array.isArray(v.rr)) { const rr = v.rr.slice(0, 600).map(x => num(x, 250, 2500)).filter(x => x != null).map(Math.round); if (rr.length >= 20) r.rr = rr; }
+  }
   return r;
 }
 function cleanSleepx(v) {
   if (!obj(v)) return null;
   const r = { d: num(v.d, 0, 1440) || 0, l: num(v.l, 0, 1440) || 0, r: num(v.r, 0, 1440) || 0, w: num(v.w, 0, 1440) || 0, on: num(v.on, -720, 720) };
-  for (const [k, lo, hi] of [['off', -720, 2160], ['bed', 0, 1440], ['nap', 0, 1440], ['hr', 25, 150]]) { const x = num(v[k], lo, hi); if (x != null) r[k] = x; }
+  for (const [k, lo, hi] of [['off', -720, 2160], ['bed', 0, 1440], ['nap', 0, 1440], ['hr', 25, 150], ['lo', 25, 150]]) { const x = num(v[k], lo, hi); if (x != null) r[k] = x; }
+  // The night as it happened: [minutes from going to sleep, length in minutes, stage 1 awake 2 light 3 deep 4 REM].
+  if (Array.isArray(v.seg)) {
+    const seg = v.seg.slice(0, 200).filter(x => Array.isArray(x) && num(x[0], 0, 1440) != null && num(x[1], 1, 1440) != null && [1, 2, 3, 4].includes(x[2])).map(x => [Math.round(x[0]), Math.round(x[1]), x[2]]);
+    if (seg.length) r.seg = seg;
+  }
   return r;
 }
 // Extra daily figures from the watch: distance m, active and total kcal, body fat %, SpO2 %, breaths/min, VO2max, watch HRV ms.
@@ -142,6 +181,16 @@ function cleanSettings(v) {
   v = obj(v) || {};
   const r = {};
   for (const [k, [allowed, def]] of Object.entries(SETTINGS)) r[k] = allowed.includes(v[k]) ? v[k] : def;
+  return r;
+}
+const GONE = ['steps', 'sleep', 'rhr', 'weights', 'wx', 'sleepx', 'hrd', 'ex'];
+function gone(v) {
+  const r = {};
+  for (const s of GONE) {
+    r[s] = {};
+    const o = obj(v) && obj(v[s]);
+    if (o) for (const k of Object.keys(o).slice(-2000)) if ((s === 'ex' ? /^\d{13}$/.test(k) : DATE.test(k)) && o[k] === 1) r[s][k] = 1;
+  }
   return r;
 }
 function sanitize(raw) {
@@ -183,6 +232,11 @@ function sanitize(raw) {
     swaps: dated(raw.swaps, v => { const r = {}; if (obj(v)) for (const a of Object.keys(v).slice(0, 12)) if (EXD[a] && EXD[v[a]]) r[a] = v[a]; return Object.keys(r).length ? r : null; }, 30),
     cleared: ids(raw.cleared),
     hrv: dated(raw.hrv, cleanHrv),
+    lab: dated(raw.lab, a => { const x = list(a, 30, cleanLab); return x.length ? x : null; }),
+    // The watch's heart rate through each day, in 5-minute steps (288 a day, 0 where there was none); recent days only.
+    hrd: dated(raw.hrd, a => Array.isArray(a) && a.length === 288 ? a.map(x => Math.round(num(x, 25, 230) || 0)) : null, 45),
+    // Data you deleted that came from the watch or a scale: a later sync must not bring it back.
+    gone: gone(raw.gone),
     cardio: dated(raw.cardio, a => { const x = list(a, 10, cleanCardio); return x.length ? x : null; }),
     pairs,
     custom: list(raw.custom, 300, e => cleanFood(e, false)), freq,
@@ -193,6 +247,7 @@ function sanitize(raw) {
       tgt: tg && num(tg.k, 800, 6000) != null && DATE.test(tg.at) ? { k: +tg.k, p: num(tg.p, 20, 400) || 0, at: tg.at, sig: str(tg.sig, 80) } : null,
       welcomed: meta.welcomed === true, imported: str(meta.imported, 40) || null,
       og: obj(meta.og) && num(meta.og.at, 1e12, 1e13) != null ? { at: +meta.og.at, file: str(meta.og.file, 60), seen: str(meta.og.seen, 90) } : null,
+      rf: obj(meta.rf) && num(meta.rf.rate, 3, 10) != null && DATE.test(meta.rf.at) ? { rate: +meta.rf.rate, at: meta.rf.at } : null,
       ogplan: obj(meta.ogplan) && DATE.test(meta.ogplan.at) ? { sig: str(meta.ogplan.sig, 16), at: meta.ogplan.at } : null,
     },
   };
@@ -242,6 +297,7 @@ function dailyBackup() {
 }
 // A typed value marks the day as yours; clearing it hands the day back to the watch.
 function setManual(stream, k, v) {
+  delete S.gone?.[stream]?.[k];
   if (v == null) { delete S[stream][k]; delete S.manual[stream]?.[k]; }
   else { S[stream][k] = v; if (S.manual[stream]) S.manual[stream][k] = 1; }
 }
@@ -270,7 +326,7 @@ function restoreSnapshot() {
 const STREAMS = {
   food: ['Food log', ['food', 'full']],
   body: ['Weigh-ins and waist', ['weights', 'waist']],
-  activity: ['Watch and recovery', ['steps', 'sleep', 'sleepx', 'rhr', 'wx', 'ex', 'hrv']],
+  activity: ['Watch and recovery', ['steps', 'sleep', 'sleepx', 'rhr', 'wx', 'ex', 'hrv', 'hrd', 'lab']],
   training: ['Training', ['lifts', 'cardio', 'prehab', 'swaps']],
 };
 function usage() {

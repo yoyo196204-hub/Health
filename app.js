@@ -29,7 +29,9 @@ let cat = 'usual', query = '', installEvt = null, softQueued = false;
 const VIEWS = { today: vToday, recovery: vRecovery, training: vTraining, review: vReview, me: vMe };
 const TABS = Object.keys(VIEWS);
 const ALIAS = { heart: 'recovery', trend: 'review', train: 'training' };
-const POPS = { fedit: p => vFoodEdit(p.i), exinfo: p => vExInfo(p.id), cardioadd: () => vCardioAdd(), cardioinfo: p => vCardioInfo(p), sess: p => vSession(p) };
+const POPS = { fedit: p => vFoodEdit(p.i), exinfo: p => vExInfo(p.id), cardioadd: () => vCardioAdd(), cardioinfo: p => vCardioInfo(p), sess: p => vSession(p),
+  hrvinfo: p => vHrvInfo(p), labinfo: p => vLabInfo(p), recedit: p => vRecEdit(p), dayx: p => vDayDetail(p) };
+const PAGES = ['add', 'why', 'set', 'lab'];
 const scrollMem = {};
 const BUILD = (document.querySelector('script[src^="app.js"]')?.getAttribute('src').split('v=')[1]) || 'dev';
 
@@ -37,10 +39,12 @@ const BUILD = (document.querySelector('script[src^="app.js"]')?.getAttribute('sr
 function render() {
   memo.clear(); softQueued = false;
   settleTargets();
-  const adding = overlay?.type === 'add' && MEALS.some(m => m[0] === overlay.key), setting = overlay?.type === 'set';
+  // An evidence sheet opened from a page keeps that page underneath it.
+  const base = overlay?.type === 'why' ? overlay.under : overlay;
+  const adding = base?.type === 'add' && MEALS.some(m => m[0] === base.key), setting = base?.type === 'set' || base?.type === 'lab';
   try {
     const banner = (loadNote ? `<p class="flag banner">${loadNote} <button class="link" data-act="dismissnote">OK</button></p>` : '') + (saveFailed ? '<p class="flag banner">Storage is full or blocked: changes are not being kept. Export a backup from Me › Backup and data.</p>' : '');
-    $('#view').innerHTML = banner + (adding ? vAdd(overlay.key) : setting ? vSet(overlay.key) : VIEWS[tab]());
+    $('#view').innerHTML = banner + (adding ? vAdd(base.key) : base?.type === 'lab' ? vLab(base.key) : setting ? vSet(base.key) : VIEWS[tab]());
     $('#sheet').innerHTML = pending ? (pending.type === 'halftone' ? vHalftone(pending) : pending.type === 'opengym' ? vOpenGym(pending) : vImport(pending)) : pop && POPS[pop.kind] ? part(POPS[pop.kind], pop) : overlay?.type === 'why' ? vWhy(overlay.key) : '';
   } catch (err) {
     console.error(err);
@@ -54,7 +58,7 @@ function render() {
   $$('#tabs a').forEach(a => a.classList.toggle('on', a.hash === '#' + tab));
   $('#tabs').style.setProperty('--i', TABS.indexOf(tab));
   document.documentElement.classList.toggle('still', !motionOK());
-  sheetEntered(); settle();
+  sheetEntered(); settle(); liveKick(); labKick();
 }
 // Renders caused by the watch or the strap wait until you have finished typing in a field.
 function renderSoft() {
@@ -68,12 +72,14 @@ function route() {
   a = ALIAS[a] || a;
   const was = overlay, wasTab = tab;
   let next = null, nextTab = tab;
-  if (a === 'add' || a === 'why' || a === 'set') next = { type: a, key: b };
+  if (PAGES.includes(a)) next = { type: a, key: b };
   else if (VIEWS[a]) nextTab = a;
+  if (next?.type === 'why' && was) next.under = was.type === 'why' ? was.under : was;
   if (next?.type === 'add' && was?.type !== 'add') { query = ''; cat = 'usual'; }
-  const page = o => o && (o.type === 'add' || o.type === 'set');
+  const page = o => o && (o.type === 'add' || o.type === 'set' || o.type === 'lab');
   let dir = null, top = false;
-  if (page(next) && !(page(was) && was.key === next.key)) { dir = 'push'; top = true; if (!page(was)) scrollMem[wasTab] = scrollY; }
+  if (next?.type === 'why' || was?.type === 'why') dir = null;
+  else if (page(next) && !(page(was) && was.key === next.key)) { dir = 'push'; top = true; if (!page(was)) scrollMem[wasTab] = scrollY; }
   else if (!page(next) && page(was)) dir = 'pop';
   else if (!next && !was && nextTab !== wasTab) { dir = TABS.indexOf(nextTab) > TABS.indexOf(wasTab) ? 'fwd' : 'back'; top = true; buzz('tick'); }
   const go = () => {
@@ -144,9 +150,12 @@ const ACT = {
   rmread: el => {
     const s = el.dataset.s, k = el.dataset.k, was = S[s][k], man = S.manual[s]?.[k];
     if (was == null) return;
+    // A value the watch or a scale sent would come back with the next sync; remembering the removal keeps it gone.
+    const tomb = !man && GONE.includes(s);
     delete S[s][k]; if (S.manual[s]) delete S.manual[s][k];
+    if (tomb) S.gone[s][k] = 1;
     save(); render();
-    undoable(`${dateLabel(k)} removed`, () => { S[s][k] = was; if (man) S.manual[s][k] = man; });
+    undoable(`${dateLabel(k)} removed`, () => { S[s][k] = was; if (man) S.manual[s][k] = man; if (tomb) delete S.gone[s][k]; });
   },
   refresh: () => refreshAll(),
   install: () => { installEvt?.prompt(); installEvt = null; },
@@ -168,6 +177,7 @@ const ACT = {
   shareweek: () => { const T = targets(); shareText('Health · week', shareWeek(T, range(7).map(k => dayCells(k, T)), energy())); },
 };
 
+SWIPE.rmread = el => ACT.rmread(el);
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
   if (!el || el.tagName === 'INPUT') return;
@@ -175,7 +185,7 @@ document.addEventListener('click', e => {
   if (el.dataset.repeat && e.isTrusted && repeated === el.dataset.repeat) { repeated = ''; return; }
   const a = el.dataset.act;
   if (ACT[a]) return ACT[a](el);
-  if (trainAct(a, el) || foodAct(a, el) || setAct(a, el) || ogAct(a, el)) return;
+  if (trainAct(a, el) || foodAct(a, el) || setAct(a, el) || ogAct(a, el) || labAct(a, el) || recAct(a, el)) return;
   if (a.startsWith('hr')) return hrAct(a, el);
   if (a.startsWith('w')) return watchAct(a);
 });
@@ -247,6 +257,7 @@ navigator.storage?.persist?.().catch(() => {});
 if (NATIVE) { document.documentElement.classList.add('native'); hcCheck(); backupInfo(); autoBackup(); ogInfo(); ogAuto(); remindStatus(); remindPlan(); }
 if (recovered === 'mirror') save();
 route();
+fresh('fwd');
 if (!NATIVE && 'serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');
 // Loaded: this file ran to the end.
 (self.LOADED ||= []).push('app.js');

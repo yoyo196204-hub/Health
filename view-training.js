@@ -103,13 +103,12 @@ function vSession(p) {
     return `<li><span class="grow"><span class="nm">${esc(exName(id))}${best ? ' <b class="up">★ best</b>' : ''}${L.sx?.[id] ? ` <span class="src s-${L.sx[id] === 'ok' ? 'ok' : 'adj'}">${SX[L.sx[id]][0]}</span>` : ''}</span>
       <span class="sub num">${ss.filter(s => s[1] > 0).map(s => `${s[0] ? kg(s[0]) + '×' : ''}${s[1]}${isHold(id) ? 's' : ''}`).join('  ')}${now ? ` · est. 1RM ${Math.round(now)} kg` : ''}</span></span></li>`;
   }).join('');
-  return `<div class="scrim" data-act="popclose"></div><aside class="sheet" role="dialog" aria-label="${esc(dayName(k))}" data-key="sess-${k}"><div class="grab"></div>
-    <div class="eyebrow">${dateLabel(k, { weekday: 'long', day: 'numeric', month: 'long' })}${L.src === 'og' ? ' · logged in openGym' : ''}</div><h1>${esc(dayName(k))}</h1>
+  return `${sheetTop(`${dateLabel(k, { weekday: 'long', day: 'numeric', month: 'long' })}${L.src === 'og' ? ' · logged in openGym' : ''}`, esc(dayName(k)), `sess-${k}`)}
     ${stats([[St.sets, 'sets'], [fmt(St.load), 'kg lifted'], [St.mins ? dur(St.mins) : DASH, 'duration']])}
     ${h?.avg ? para(`Heart rate from ${esc(h.app || 'the watch')}: average ${Math.round(h.avg)}, max ${Math.round(h.max)} bpm${h.corrected ? ', corrected to the strap' : ''}. Wrist readings drift during lifting, so this is a rough guide. ${why('devices', 'Why')}`) : ''}
     <ul class="list">${rows}</ul>
     ${L.src === 'og' ? para('Edits made in openGym come through on the next read; change it there.') : ''}
-    <div class="rowb">${L.src === 'og' ? '' : `<button class="danger" data-hold="sessdel" data-k="${k}">Hold to delete</button>`}<button class="ghost" data-act="popclose">Close</button></div></aside>`;
+    ${L.src === 'og' ? '' : `<div class="rowb"><button class="danger" data-hold="sessdel" data-k="${k}">Hold to delete</button></div>`}</aside>`;
 }
 
 // ---------- strength ----------
@@ -186,15 +185,13 @@ function vExInfo(id) {
   const e = EXD[id];
   if (!e) return '';
   const h = liftLog(id, shift(todayKey(), 1), 6), best = (liftHistory()[id] || []).reduce((a, x) => Math.max(a, x.v), 0);
-  return `<div class="scrim" data-act="popclose"></div><aside class="sheet" role="dialog" aria-label="${esc(e.n)}" data-key="ex-${esc(id)}"><div class="grab"></div>
-    <div class="eyebrow">${esc(e.eq)}${e.sh === 'caution' ? ' · <span class="flag">shoulder caution</span>' : ''}</div><h1>${esc(e.n)}</h1>
+  return `${sheetTop(`${esc(e.eq)}${e.sh === 'caution' ? ' · <span class="flag">shoulder caution</span>' : ''}`, esc(e.n), `ex-${id}`)}
     <div class="exmus"><div class="bodymap small">${bodySvg('anterior', e.hits, null, true)}${bodySvg('posterior', e.hits, null, true)}</div>
       <p class="sub">${Object.entries(e.hits).sort((a, b) => b[1] - a[1]).map(([m, f]) => `${f === 1 ? '<b>' : ''}${MUS[m][0]}${f === 1 ? '</b>' : ''}`).join(' · ')}</p></div>
     <h3>Why it is in the plan</h3><p>${esc(e.why)}</p><h3>The usual mistake</h3><p>${esc(e.error)}</p>
     ${SHOULDER_CUE[id] ? `<h3>Shoulder</h3><p>${esc(SHOULDER_CUE[id])}</p>` : ''}
     ${h.length ? `<h3>Your last sessions${best ? ` · best estimate ${Math.round(best)} kg` : ''}</h3>${table(h.map(x => trow(dateLabel(x.k, { weekday: 'short', day: 'numeric', month: 'short' }), x.sets.map(s => `${s[0] ? kg(s[0]) + '×' : ''}${s[1]}`).join('  '))))}` : ''}
-    ${para('openGym has the animation and step-by-step instructions.')}
-    <button class="solid wide" data-act="popclose">Close</button></aside>`;
+    ${para('openGym has the animation and step-by-step instructions.')}</aside>`;
 }
 function vCardioAdd() {
   const c = pop.c ||= { kind: 'walk', min: 30, eff: 'mod' };
@@ -210,13 +207,13 @@ function vCardioInfo(p) {
   const s = sessions(p.k).find(x => String(x.t || '') === p.t && x.src === p.src);
   if (!s) return '';
   const c = s.src === 'strap' ? S.cardio[p.k]?.[s.i] : null, del = s.src !== 'watch';
-  return `<div class="scrim" data-act="popclose"></div><aside class="sheet" role="dialog" aria-label="${esc(s.kind)}" data-key="cardio-${p.k}-${p.t}"><div class="grab"></div>
-    <div class="eyebrow">${dateLabel(p.k, { weekday: 'long', day: 'numeric', month: 'long' })}${s.t ? ` · ${hm(new Date(s.t).getHours() * 60 + new Date(s.t).getMinutes())}` : ''}</div><h1>${esc(s.kind)}</h1>
+  return `${sheetTop(`${dateLabel(p.k, { weekday: 'long', day: 'numeric', month: 'long' })}${s.t ? ` · ${hm(new Date(s.t).getHours() * 60 + new Date(s.t).getMinutes())}` : ''}`, esc(s.kind), `cardio-${p.k}-${p.t}`)}
     ${stats([[dur(s.dur / 60), 'duration'], [s.avg ? `${Math.round(s.avg)} / ${Math.round(s.max)}` : DASH, 'avg / max bpm'], [Math.round((s.z[1] + 2 * (s.z[2] + s.z[3])) / 60), 'WHO minutes']])}
     ${c ? traceChart(c) : ''}${s.src !== 'manual' ? zoneBar(s.z) : ''}
+    ${c?.hrr != null ? para(`Heart-rate recovery: <b>${c.hrr} bpm</b> in the first minute, from ${c.hr0}. ${why('hrr', 'Why')}`) : ''}
     ${c?.vt1 ? para(`Aerobic threshold estimate from this session: <b>${c.vt1} bpm</b>. ${why('dfa', 'How')}`) : c?.a1?.length ? para(`α1 in ${c.a1.length} windows, from ${Math.min(...c.a1.map(x => x[1])).toFixed(2)} to ${Math.max(...c.a1.map(x => x[1])).toFixed(2)}: it did not cross 0.75 cleanly, so no threshold from this one.`) : ''}
     ${s.src === 'watch' ? para(`Recorded by ${esc(s.app || 'the watch')}. Delete it there; the next sync removes it here too.`) : s.src === 'manual' ? para(`Typed in, ${s.eff === 'vig' ? 'vigorous' : 'moderate'}.`) : ''}
-    <div class="rowb">${del ? `<button class="danger" data-hold="cardiodel" data-k="${p.k}" data-i="${s.i}">Hold to delete</button>` : ''}<button class="ghost" data-act="popclose">Close</button></div></aside>`;
+    ${del ? `<div class="rowb"><button class="danger" data-hold="cardiodel" data-k="${p.k}" data-i="${s.i}">Hold to delete</button></div>` : ''}</aside>`;
 }
 
 // ---------- actions ----------

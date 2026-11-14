@@ -14,7 +14,7 @@ function sandbox() {
   };
   ctx.self = ctx;
   vm.createContext(ctx);
-  for (const f of ['lib.js', 'data.js', 'exercises.js', 'opengym-ids.js', 'body-data.js', 'store.js', 'model.js', 'train.js'])
+  for (const f of ['lib.js', 'hrv.js', 'data.js', 'exercises.js', 'opengym-ids.js', 'body-data.js', 'store.js', 'model.js', 'train.js'])
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
   // What native.js would define outside the app, then the openGym link, which uses it.
   ctx.window = ctx; ctx.location = { origin: 'https://x', pathname: '/' };
@@ -139,6 +139,69 @@ test('RR artefacts are corrected and counted; the threshold needs a real crossin
   assert.ok(Math.abs(run(c, 'hrvThreshold(win).hr') - 150) <= 3);
   c.flat = noise(11, (g, i) => [i * 30, 0.95 + 0.02 * g(), 110 + 5 * i]);
   assert.strictEqual(run(c, 'hrvThreshold(flat)'), null, 'never crossed 0.75');
+});
+// Beats with a known breathing rhythm: RR = base + amp·sin(2π·rate·t) + noise.
+function breathing(n, perMin, amp, base = 1000, jit = 6) { let t = 0; return noise(n, g => { const x = base + amp * Math.sin(2 * Math.PI * perMin / 60 * t) + jit * g(); t += x / 1000; return x; }); }
+test('HRV engine: breathing rate is read from the beats, and the spectrum puts it in the right band', c => {
+  c.rr = breathing(300, 15, 40);
+  const m = run(c, 'hrvMetrics(rr)');
+  assert.ok(Math.abs(m.br - 15) < 0.3, `breathing ${m.br}`);
+  assert.ok(m.hf > 10 * m.lf, 'a 15/min rhythm is high-frequency power');
+  assert.strictEqual(m.q, 100);
+  assert.ok(Math.abs(m.sd1 - m.rmssd / Math.SQRT2) < 0.5, 'SD1 is RMSSD/√2');
+  c.slow = breathing(300, 6, 220);
+  const s = run(c, 'hrvMetrics(slow)');
+  assert.ok(Math.abs(s.br - 6) < 0.3, `slow breathing ${s.br}`);
+  assert.strictEqual(s.q, 100, 'big swings from slow breathing are real beats, not artefacts');
+  assert.ok(s.lf > s.hf, '6/min sits in the low-frequency band');
+  assert.strictEqual(run(c, 'hrvMetrics(rr.slice(0, 50)).lf'), undefined, 'no LF under two minutes');
+});
+test('HRV engine: missed, ectopic and out-of-range beats are corrected, and the result stays close to the truth', c => {
+  c.rr = breathing(120, 12, 30);
+  const truth = run(c, 'hrvMetrics(rr).rmssd');
+  run(c, 'var bad = rr.slice(); bad.splice(50, 2, bad[50] + bad[51]); bad[80] *= 0.6; bad[81] *= 1.4; bad[100] = 120');
+  const m = run(c, 'hrvMetrics(bad)');
+  assert.ok(Math.abs(m.rmssd - truth) / truth < 0.06, `${m.rmssd} vs ${truth}`);
+  assert.ok(m.kinds.missed === 1 && m.kinds.ectopic === 1 && m.kinds.range === 1, JSON.stringify(m.kinds));
+  assert.ok(m.q < 100 && m.q > 90);
+  assert.strictEqual(run(c, 'hrvMetrics([800, 810, 790])'), null, 'too few beats');
+});
+test('HRV engine: RSA per breath, the rhythm share at resonance, and a value read against your own history', c => {
+  c.rr = breathing(240, 6, 150, 900, 3);
+  const end = run(c, 'rr.reduce((a, b) => a + b, 0)');
+  c.end = end;
+  const R = run(c, 'rsaCycles(beatTimes(rr, end), 0, 10000)');
+  assert.ok(R.n >= 15 && R.amp > 15, `RSA ${R.amp} over ${R.n}`);
+  assert.ok(run(c, 'rhythmShare(rr, 0.1)') > 0.6, 'most of the power sits at the breathing rate');
+  c.wh = breathing(240, 6, 0, 900, 30);
+  assert.ok(run(c, 'rhythmShare(wh, 0.1)') < 0.2, 'not for noise');
+  const v = run(c, 'versus(70, [60, 61, 62, 59, 60, 63, 61, 60])');
+  assert.strictEqual(v.word, 'very high'); assert.strictEqual(v.rec, 'highest');
+  assert.strictEqual(run(c, 'versus(60, [60, 61]).word'), null, 'no usual from two values');
+});
+test('deleted watch data stays deleted through a sync; typed values win; the day curve and night stages are kept', c => {
+  const k = run(c, 'shift(todayKey(), -1)'), hd = Array.from({ length: 288 }, (_, i) => i < 100 ? 60 : 0);
+  c.P = { days: { [k]: { st: 9000, rh: 58, wt: 90.2, hd, sl: { d: 60, l: 240, r: 90, w: 20, on: -60, seg: [[0, 30, 2], [30, 60, 3], [90, 20, 4], [999, 1, 9]] } } } };
+  run(c, 'mergeSync(P)');
+  assert.strictEqual(run(c, `S.hrd['${k}'].length`), 288);
+  assert.deepStrictEqual(run(c, `S.sleepx['${k}'].seg`), [[0, 30, 2], [30, 60, 3], [90, 20, 4]], 'a bad stage is dropped');
+  run(c, `delete S.rhr['${k}']; S.gone.rhr['${k}'] = 1; delete S.steps['${k}']; S.gone.steps['${k}'] = 1; mergeSync(P)`);
+  assert.strictEqual(run(c, `S.rhr['${k}']`), undefined, 'deleted resting HR not refilled');
+  assert.strictEqual(run(c, `S.steps['${k}']`), undefined);
+  run(c, `setManual('steps', '${k}', 4321); mergeSync(P)`);
+  assert.strictEqual(run(c, `S.steps['${k}']`), 4321, 'typing clears the deletion and wins over the watch');
+  assert.strictEqual(run(c, `S.gone.steps['${k}']`), undefined);
+  const again = run(c, 'JSON.stringify(sanitize(JSON.parse(JSON.stringify(S))))');
+  assert.strictEqual(again, run(c, 'JSON.stringify(sanitize(JSON.parse(JSON.stringify(sanitize(JSON.parse(JSON.stringify(S)))))))'), 'idempotent with the new fields');
+});
+test('Lab sessions: only known kinds and fields are kept, and a resonance result needs its rates', c => {
+  c.L = [{ kind: 'breathe', t: Date.now(), dur: 300, pat: 'rf', rate: 6, rsa: 12.5, evil: '<b>' }, { kind: 'rf', t: Date.now(), seg: [[6, 10]], best: 6 }, { kind: 'nope', t: Date.now() },
+    { kind: 'ortho', t: Date.now(), hrSup: 55, hrStd: 70, rmSup: 60, rmStd: 30 }];
+  const r = run(c, 'L.map(cleanLab)');
+  assert.deepStrictEqual(Object.keys(r[0]).sort(), ['dur', 'kind', 'pat', 'rate', 'rsa', 't']);
+  assert.strictEqual(r[1], null, 'three rates at least'); assert.strictEqual(r[2], null); assert.ok(r[3]);
+  c.cx = { t: Date.now(), dur: 900, avg: 140, max: 170, z: [0, 0, 900, 0], hr0: 165, hrr: 31 };
+  assert.strictEqual(run(c, 'cleanCardio(cx).hrr'), 31, 'heart-rate recovery is kept with the session');
 });
 test('a strap session keeps its trace, α1 windows and threshold; a morning check keeps its beats', c => {
   c.cx = { t: Date.now(), kind: 'run', dur: 1800, avg: 140, max: 171, z: [10, 600, 900, 290], tr: [120, 0, 999, 131], a1: [[150, 1.02, 121], ['x'], [180, 0.7, 150]], vt1: 148 };

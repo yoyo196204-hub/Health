@@ -139,11 +139,34 @@ class HealthReader(private val a: MainActivity) {
         daily("total", "tk", TotalCaloriesBurnedRecord.ENERGY_TOTAL) { it.inKilocalories }
 
         // Sleep: the night is filed under the morning it ends. The longest session is the main sleep; others are naps.
-        class Night(val start: Instant, val end: Instant, val d: Long, val l: Long, val r: Long, val w: Long)
+        // seg: the night as it happened, [minutes after the start, length, stage 1 awake, 2 light, 3 deep, 4 REM].
+        class Night(val start: Instant, val end: Instant, val d: Long, val l: Long, val r: Long, val w: Long, val seg: JSONArray)
         val nights = HashMap<LocalDate, MutableList<Night>>()
         safe("sleep") {
             readAll(c, SleepSessionRecord::class, instants) { s ->
                 var d = 0L; var l = 0L; var r = 0L; var w = 0L
+                val seg = JSONArray()
+                var lastCode = 0; var lastStart = -1L; var lastLen = 0L
+                for (st in s.stages.sortedBy { it.startTime }) {
+                    val code = when (st.stage) {
+                        SleepSessionRecord.STAGE_TYPE_DEEP -> 3
+                        SleepSessionRecord.STAGE_TYPE_REM -> 4
+                        SleepSessionRecord.STAGE_TYPE_LIGHT, SleepSessionRecord.STAGE_TYPE_SLEEPING -> 2
+                        SleepSessionRecord.STAGE_TYPE_AWAKE, SleepSessionRecord.STAGE_TYPE_AWAKE_IN_BED, SleepSessionRecord.STAGE_TYPE_OUT_OF_BED -> 1
+                        else -> 0
+                    }
+                    if (code == 0) continue
+                    val off = Duration.between(s.startTime, st.startTime).toMinutes().coerceAtLeast(0)
+                    val len = Duration.between(st.startTime, st.endTime).toMinutes()
+                    if (len <= 0) continue
+                    // Neighbouring pieces of the same stage become one.
+                    if (code == lastCode && lastStart + lastLen >= off - 1) lastLen = off + len - lastStart
+                    else {
+                        if (lastCode != 0 && seg.length() < 200) seg.put(JSONArray().put(lastStart).put(lastLen).put(lastCode))
+                        lastCode = code; lastStart = off; lastLen = len
+                    }
+                }
+                if (lastCode != 0 && seg.length() < 200) seg.put(JSONArray().put(lastStart).put(lastLen).put(lastCode))
                 for (st in s.stages) {
                     val m = Duration.between(st.startTime, st.endTime).toMinutes()
                     when (st.stage) {
@@ -154,7 +177,7 @@ class HealthReader(private val a: MainActivity) {
                     }
                 }
                 if (d + l + r == 0L) l = Duration.between(s.startTime, s.endTime).toMinutes() - w
-                if (d + l + r >= 15) nights.getOrPut(s.endTime.atZone(s.endZoneOffset ?: zone).toLocalDate()) { ArrayList() }.add(Night(s.startTime, s.endTime, d, l, r, w))
+                if (d + l + r >= 15) nights.getOrPut(s.endTime.atZone(s.endZoneOffset ?: zone).toLocalDate()) { ArrayList() }.add(Night(s.startTime, s.endTime, d, l, r, w, seg))
             }
         }
         val mainSleep = HashMap<LocalDate, Night>()
@@ -166,7 +189,7 @@ class HealthReader(private val a: MainActivity) {
             val off = m.end.atZone(zone).toLocalTime().let { it.hour * 60 + it.minute }
             val naps = list.filter { it !== m }.sumOf { it.d + it.l + it.r }
             o.put("sl", JSONObject().put("d", m.d).put("l", m.l).put("r", m.r).put("w", m.w).put("on", on).put("off", off)
-                .put("bed", Duration.between(m.start, m.end).toMinutes()).put("nap", naps))
+                .put("bed", Duration.between(m.start, m.end).toMinutes()).put("nap", naps).apply { if (m.seg.length() > 0) put("seg", m.seg) })
         }
 
         // Point readings: daily average, or the morning value for weight and body fat.
@@ -217,10 +240,31 @@ class HealthReader(private val a: MainActivity) {
             val byDay = HashMap<LocalDate, ArrayList<Int>>()
             for (i in hrT.indices) byDay.getOrPut(dateOf(Instant.ofEpochMilli(hrT[i]))) { ArrayList() }.add(hrB[i])
             for ((d, v) in byDay) { val o = day(d) ?: continue; if (!o.has("rh") && v.size >= 30) o.put("rp", v.sorted()[(v.size * 0.05).toInt()]) }
-            // 2. Sleeping heart rate: the average across the main sleep.
+            // 2. Sleeping heart rate: the average across the main sleep, and its low point (the 5th percentile, so a
+            //    single dropped reading cannot set it).
             for ((d, m) in mainSleep) {
                 val r = samples(m.start.toEpochMilli(), m.end.toEpochMilli())
-                if (r.last - r.first >= 20) day(d)?.optJSONObject("sl")?.put("hr", Math.round(r.map { hrB[it] }.average() * 10) / 10.0)
+                if (r.last - r.first >= 20) {
+                    val sl = day(d)?.optJSONObject("sl") ?: continue
+                    val v = r.map { hrB[it] }
+                    sl.put("hr", Math.round(v.average() * 10) / 10.0)
+                    sl.put("lo", v.sorted()[(v.size * 0.05).toInt()])
+                }
+            }
+            // 2b. The whole day's heart rate in 5-minute steps (the median of each), for the 24-hour curve.
+            val bins = HashMap<LocalDate, Array<ArrayList<Int>?>>()
+            for (i in hrT.indices) {
+                val z = Instant.ofEpochMilli(hrT[i]).atZone(zone)
+                val b = bins.getOrPut(z.toLocalDate()) { arrayOfNulls(288) }
+                val slot = (z.hour * 60 + z.minute) / 5
+                (b[slot] ?: ArrayList<Int>().also { b[slot] = it }).add(hrB[i])
+            }
+            for ((d, b) in bins) {
+                val o = day(d) ?: continue
+                val arr = JSONArray()
+                var n = 0
+                for (x in b) { if (x.isNullOrEmpty()) arr.put(0) else { val s2 = x.sorted(); arr.put(s2[s2.size / 2]); n++ } }
+                if (n >= 12) o.put("hd", arr)
             }
             // 3. Each workout's heart rate as seconds at each bpm, so the page can apply your own zones.
             for (x in sessions) {

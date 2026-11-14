@@ -87,11 +87,15 @@ you log in openGym arrives with its name and the muscles it trains, from `opengy
 
 | Tab | What it is for |
 | --- | --- |
-| Today | What is due (morning check, weigh-in, weekly waist, shoulder check, a plan to resend); calories, protein and fibre left; one concrete suggestion; weight, steps, sleep; what is next in openGym and how hard to go; the meals |
-| Recovery | One verdict for the day; the H9 morning check with its live beats and a result card; HRV against your normal range, read with morning heart rate; resting and sleeping heart rate; sleep; the watch's overnight HRV and breathing rate against their own baselines; watch-vs-strap agreement |
+| Today | The day brief: the verdict as a ring with HRV, resting heart rate and sleep each against your own normal; a dock of quick actions; what is due; sideways cards for last night (with its stages), movement, body trend and the next openGym session; calories, protein and fibre left; one concrete suggestion; the meals (swipe one left to remove it) |
+| Recovery | One verdict for the day; the H9 morning check (1–5 minutes, lying or sitting) with live beats, skin contact and signal quality, and a result with its tachogram, Poincaré plot and every measure; the strap Lab; night by night, each opening a day in detail; HRV against your normal range, read with morning heart rate; resting and sleeping heart rate; sleep; the watch's overnight HRV and breathing rate against their own baselines; watch-vs-strap agreement |
 | Training | The next openGym session with today's recovery guidance; the shoulder check; sessions with their sets and watch heart rate; strength per lift; the muscle map; cardio with the H9 (live trace, zones, α1) and the aerobic threshold it gives |
 | Review | The week as a matrix, the actions it triggers, the energy ledger, body trend and projections, links in your own data |
-| Me | Your numbers, and a page each for goal, training, profile, data sources, backup and data, feel, and the evidence |
+| Lab (from Recovery or Today) | Breathe (resonance, cyclic sighing, box; with or without the strap, haptic cues per breath), the resonance finder, the orthostatic test, spot checks; every session kept |
+| A day in detail (tap a night, or Your day) | The watch's heart rate across 24 hours with sleep and workouts marked, the night stage by stage, and every number against your previous four weeks |
+| Me | Your numbers, and a page each for goal, training, profile, data sources, all your data (see, change or delete any record), backup and data, feel, and the evidence |
+
+Gestures: swipe sideways to change tab, swipe right on a page to go back, swipe a row left to delete it (with undo), swipe a result card or a toast away, drag a sheet down or tap outside it to close.
 
 ## How the numbers are made
 
@@ -102,6 +106,11 @@ you log in openGym arrives with its name and the muscles it trains, from `opengy
   days imply. The target is recalculated on Mondays and moves by at most 150 kcal per update; changing goal,
   pace or profile recalculates at once. Pace is a setting: maintain, slow 0.4%, steady 0.6%, faster 0.8% a week,
   never more than a quarter of daily burn.
+- **Every strap reading** (`hrv.js`): artefacts corrected with thresholds that adapt to your own beat-to-beat spread
+  (Lipponen & Tarvainen 2019), so slow breathing is never mistaken for noise; RMSSD, SDNN, pNN50, Poincaré SD1/SD2, the
+  Lomb–Scargle spectrum (HF from one minute, LF from two) and breathing rate from the rhythm in the beats. Each packet
+  is timestamped where Bluetooth delivers it, and beat times come from the intervals themselves.
+- **Heart-rate recovery**: after a strap cardio session, the fall in heart rate over one still minute, read against your own.
 - **Aerobic threshold**: during strap cardio, α1 of detrended fluctuation analysis over each two minutes of beats,
   every 30 seconds, windows with over 5% corrected beats dropped; the heart rate where α1 crosses 0.75 (Rogers 2021).
 - **Overnight watch data**: the Bip's HRV and breathing rate each against their own 4-week baseline, never mixed with
@@ -120,6 +129,9 @@ you log in openGym arrives with its name and the muscles it trains, from `opengy
   file in your backup folder.
 - Anything that removes data (removing old data, erasing, importing) keeps a copy first and offers Undo;
   the removals themselves need a press and hold.
+- Me › All your data lists every record by kind: tap to change it, swipe left to delete it. Anything deleted that came
+  from the watch or a scale stays deleted when the watch syncs again; a typed value always wins over the watch.
+- A strap cardio session is saved every 15 seconds while it runs, so a crash or a closed app offers it back.
 - Me › Backup and data shows what is stored and can **remove data older than** 3, 6, 12 or 24 months, for food,
   weigh-ins, watch data or training separately.
 - **openGym**: see [Training in openGym](#training-in-opengym).
@@ -134,6 +146,7 @@ Plain JavaScript, no build step. Scripts load in this order:
 | File | Holds |
 | --- | --- |
 | `lib.js` | Dates, formatting, statistics (Theil–Sen, Bland–Altman agreement) |
+| `hrv.js` | Beat-to-beat analysis: artefact correction, every HRV measure, the spectrum, breathing rate, RSA, reading a value against your own |
 | `data.js` | Foods, goal paces, the evidence library |
 | `exercises.js` | The exercise library, programmes, home substitutes, shoulder rules, warm-up |
 | `opengym-ids.js` | openGym's exercise numbers with their names and muscles (see Credits) |
@@ -144,10 +157,11 @@ Plain JavaScript, no build step. Scripts load in this order:
 | `native.js` | The bridge to the Android app; one merge path for every outside data source |
 | `feel.js` | Haptics, screen transitions, sheets, undo toasts, press and hold, pull to refresh |
 | `ui.js` | Shared building blocks, the chart and the muscle map |
-| `h9.js` | The strap: connection, live trace, morning HRV check, cardio with α1 |
+| `h9.js` | The strap: connection, the beat timeline, live trace, morning HRV check, cardio with α1, heart-rate recovery, crash-safe drafts |
+| `lab.js` | The Lab: breathing pacer, resonance finder, orthostatic test, spot check |
 | `watch.js` | Zepp CSV import |
 | `opengym.js` | openGym: its backup and CSV coming in, the folder link, Health's plan as an openGym plan file with backups and the block |
-| `view-*.js` | One file per screen |
+| `view-*.js` | One file per screen; `view-records.js` is all your data and a day in detail |
 | `app.js` | State, routing, events |
 
 Exercise animations live in openGym. Tests: `node test/run.js`.

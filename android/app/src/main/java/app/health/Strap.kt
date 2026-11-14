@@ -128,7 +128,13 @@ class Strap(private val a: MainActivity) {
 
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
-            if (newState == BluetoothProfile.STATE_CONNECTED) { a.main.post { g.discoverServices() }; return }
+            if (newState == BluetoothProfile.STATE_CONNECTED) {
+                // A short pause before discovery avoids the stalls some phones show right after connecting, and a
+                // watchdog drops a connection whose discovery never answers, so the retry below can take over.
+                a.main.postDelayed({ if (gatt === g) g.discoverServices() }, 250)
+                a.main.postDelayed({ if (gatt === g && !connected) g.disconnect() }, 9000)
+                return
+            }
             if (newState != BluetoothProfile.STATE_DISCONNECTED) return
             val was = connected
             connected = false
@@ -148,6 +154,8 @@ class Strap(private val a: MainActivity) {
 
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
             val ch = g.getService(hrService)?.getCharacteristic(hrMeasure) ?: return run { fail("This device has no heart-rate service."); g.disconnect() }
+            // The shortest connection interval: each packet reaches the phone as soon as the strap sends it.
+            try { g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH) } catch (e: Exception) { }
             g.setCharacteristicNotification(ch, true)
             val d = ch.getDescriptor(cccd) ?: return
             if (Build.VERSION.SDK_INT >= 33) g.writeDescriptor(d, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
@@ -173,7 +181,8 @@ class Strap(private val a: MainActivity) {
     }
 
     private fun beat(ch: BluetoothGattCharacteristic, v: ByteArray) {
-        if (ch.uuid == hrMeasure) a.emit("hr", v.joinToString(",", "[", "]") { (it.toInt() and 0xFF).toString() })
+        // Stamped here, the moment Bluetooth delivers it, before any queue: beat times on the page stay true to the strap.
+        if (ch.uuid == hrMeasure) a.emit("hr", "{\"t\":${System.currentTimeMillis()},\"v\":" + v.joinToString(",", "[", "]") { (it.toInt() and 0xFF).toString() } + "}")
     }
     private fun battery(ch: BluetoothGattCharacteristic, v: ByteArray) {
         if (ch.uuid == batteryLevel && v.isNotEmpty()) state("battery") { put("battery", v[0].toInt() and 0xFF) }
