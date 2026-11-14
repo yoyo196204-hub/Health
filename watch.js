@@ -44,16 +44,21 @@ function parseWatch(name, text) {
     }
   } else if (col('heartrate') >= 0 && col('time') >= 0) {
     out.kind = 'heart rate';
-    const iH = col('heartrate'), iT = col('time'), byDay = {};
+    const iH = col('heartrate'), iT = col('time'), byDay = {}, bins = {};
     for (const l of lines) {
       const c = l.split(','), h = num(c[iH], 30, 220);
       if (h == null) continue;
       let k = iDate >= 0 ? c[iDate] : null;
-      if (!k) { const d = when(c[iT]); k = d ? dk(d) : null; }
-      if (k && DATE.test(k)) (byDay[k] ||= []).push(h);
+      const d = when(iDate >= 0 && c[iT] && !/[-T]/.test(c[iT]) ? `${c[iDate]} ${c[iT]}` : c[iT]);
+      if (!k) k = d ? dk(d) : null;
+      if (!k || !DATE.test(k)) continue;
+      (byDay[k] ||= []).push(h);
+      // The 5-minute step it falls in, for the day's 24-hour curve.
+      if (d && dk(d) === k) ((bins[k] ||= {})[Math.floor((d.getHours() * 60 + d.getMinutes()) / 5)] ||= []).push(h);
     }
     // Resting estimate: the 5th percentile of the day's readings, which falls in sleep or quiet rest.
     for (const k in byDay) if (byDay[k].length >= 30) day(k).rp = Math.round(quantile(byDay[k], 0.05));
+    for (const k in bins) { const hd = Array.from({ length: 288 }, (_, i) => bins[k][i] ? Math.round(median(bins[k][i])) : 0); if (hd.filter(Boolean).length >= 12) day(k).hd = hd; }
   }
   out.counts = countDays(days);
   return out;

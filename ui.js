@@ -29,8 +29,16 @@ const ICON = {
   box: '<svg viewBox="0 0 24 24"><path d="M4 7l8-4 8 4v10l-8 4-8-4z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg>',
   hand: '<svg viewBox="0 0 24 24"><path d="M12 3v9M9 5v8M15 5v8M6 9v6a6 6 0 0 0 12 0V9"/></svg>',
   bell: '<svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>',
+  list: '<svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>',
   book: '<svg viewBox="0 0 24 24"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10"/></svg>',
 };
+
+// The top of a sheet: the scrim (tap it to close), the grab handle (drag down to close), a small × for anyone who
+// wants a button, the eyebrow and the title. The caller closes the aside. Back gesture, Escape and swipe work too.
+function sheetTop(eyebrow, title, key, act = 'popclose') {
+  return `<div class="scrim" data-act="${act}"></div><aside class="sheet" role="dialog" aria-label="${esc(String(title).replace(/<[^>]+>/g, ''))}" data-key="${esc(key)}"><div class="grab"></div><button class="x shx" data-act="${act}" aria-label="Close">×</button>
+    <div class="eyebrow">${eyebrow}</div><h1>${title}</h1>`;
+}
 
 // ---------- the muscle map ----------
 // vol: sets per muscle (or an exercise's hits when fixed). Level by the evidence: under 4, 4–10, 10 and more.
@@ -89,8 +97,8 @@ function legend(items) { return `<p class="key">${items.map(([cls, label]) => `<
 // A collapsible list of dated readings, each removable (with undo). stream names where they live in S.
 function historyList(title, rows, stream) {
   if (!rows.length) return '';
-  return `<details class="inner hist"><summary>${title} · ${rows.length}</summary><ul class="list">${rows.map(([k, text]) =>
-    `<li><span class="grow"><span class="nm">${dateLabel(k, { weekday: 'short', day: 'numeric', month: 'short', year: '2-digit' })}</span><span class="sub">${text}</span></span><button class="mini" data-act="rmread" data-s="${stream}" data-k="${k}">Remove</button></li>`).join('')}</ul></details>`;
+  return `<details class="inner hist"><summary>${title} · ${rows.length}</summary><p class="sub small">Swipe a row left to remove it.</p><ul class="list swipelist">${rows.map(([k, text]) =>
+    `<li data-swipe="rmread" data-s="${stream}" data-k="${k}"><span class="grow" ${stream === 'hrv' ? `data-act="hrinfo" data-k="${k}"` : ''}><span class="nm">${dateLabel(k, { weekday: 'short', day: 'numeric', month: 'short', year: '2-digit' })}</span><span class="sub">${text}</span></span>${stream === 'hrv' ? '<span class="chev">›</span>' : `<button class="mini" data-act="rmread" data-s="${stream}" data-k="${k}">Remove</button>`}</li>`).join('')}</ul></details>`;
 }
 // Loaded: this file ran to the end.
 (self.LOADED ||= []).push('ui.js');

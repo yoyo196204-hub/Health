@@ -56,27 +56,29 @@ function paintSync() { const el = $('#syncline'); if (el) el.outerHTML = syncLin
 function mergeSync(P) {
   const today = todayKey(), got = { days: 0, steps: 0, sleep: 0, rhr: 0, weight: 0, workouts: 0, pairs: 0 };
   let last = S.meta.watch || '';
-  const days = obj(P.days) || {};
+  const days = obj(P.days) || {}, G = S.gone, no = (s, k) => !!G[s]?.[k];
   for (const k of Object.keys(days).slice(0, 400)) {
     const d = obj(days[k]);
     if (!DATE.test(k) || k > today || !d) continue;
     let any = false;
     const st = num(d.st, ...LIMITS.steps);
-    if (st != null) { any = true; got.steps++; if (!S.manual.steps[k]) S.steps[k] = Math.round(st); }
+    if (st != null) { any = true; got.steps++; if (!S.manual.steps[k] && !no('steps', k)) S.steps[k] = Math.round(st); }
     const sx = cleanSleepx(d.sl), tot = sx ? sx.d + sx.l + sx.r + (sx.nap || 0) : 0;
-    if (sx && tot >= 30 && tot <= 1440) { any = true; got.sleep++; S.sleepx[k] = sx; if (!S.manual.sleep[k]) S.sleep[k] = Math.round(tot / 6) / 10; }
+    if (sx && tot >= 30 && tot <= 1440) { any = true; got.sleep++; if (!no('sleepx', k)) S.sleepx[k] = sx; if (!S.manual.sleep[k] && !no('sleep', k)) S.sleep[k] = Math.round(tot / 6) / 10; }
     const rh = num(d.rh ?? d.rp, ...LIMITS.rhr);
-    if (rh != null) { any = true; got.rhr++; S.rhr[k] = Math.round(rh); }
+    if (rh != null) { any = true; got.rhr++; if (!no('rhr', k)) S.rhr[k] = Math.round(rh); }
     const w = num(d.wt, ...LIMITS.weights);
-    if (w != null) { got.weight++; if (!S.manual.weights[k]) S.weights[k] = r1(w); }
+    if (w != null) { got.weight++; if (!S.manual.weights[k] && !no('weights', k)) S.weights[k] = r1(w); }
     const x = cleanWx(Object.assign({}, d, { rp: d.rh == null && d.rp != null }));
-    if (x) S.wx[k] = x;
+    if (x && !no('wx', k)) S.wx[k] = x;
+    // The day's heart rate in 5-minute steps, for the 24-hour curve.
+    if (Array.isArray(d.hd) && d.hd.length === 288 && !no('hrd', k)) { const h = d.hd.map(v => Math.round(num(v, 25, 230) || 0)); if (h.filter(Boolean).length >= 12) S.hrd[k] = h; }
     if (any) { got.days++; if (k > last) last = k; }
   }
   // Workouts: the synced range is replaced as a whole, so a workout deleted in Zepp disappears here too.
   if (Array.isArray(P.ex) && DATE.test(P.from)) {
     const by = {};
-    for (const e of P.ex.slice(0, 600)) { const c = cleanEx(e); if (c) (by[dk(new Date(c.s))] ||= []).push(c); }
+    for (const e of P.ex.slice(0, 600)) { const c = cleanEx(e); if (c && !no('ex', String(c.s))) (by[dk(new Date(c.s))] ||= []).push(c); }
     for (let k = P.from; k <= today; k = shift(k, 1)) { if (by[k]) { S.ex[k] = by[k].slice(0, 20); got.workouts += by[k].length; } else delete S.ex[k]; }
   }
   if (Array.isArray(P.win)) for (const w of P.win.slice(0, 200)) {
@@ -84,6 +86,8 @@ function mergeSync(P) {
     if (s != null && a != null && n != null) { S.pairs[String(Math.round(s))] = { a: r1(a), n }; got.pairs++; }
   }
   S.meta.watch = last || null;
+  // Only the last 45 days of 24-hour curves are kept: they are for looking at days, not for long trends.
+  for (const k of Object.keys(S.hrd)) if (gapDays(k, today) > 45) delete S.hrd[k];
   return got;
 }
 

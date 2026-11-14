@@ -5,6 +5,7 @@
 const SETPAGES = {
   goal: ['Goal and targets', () => vSetGoal()], train: ['Training', () => vSetTrain()], profile: ['Profile', () => vSetProfile()],
   sources: ['Data sources', () => sourcesSection()], data: ['Backup and data', () => vSetData()], remind: ['Reminders', () => vSetRemind()], feel: ['Feel', () => vSetFeel()],
+  records: ['All your data', () => vRecords()],
   evid: ['The evidence', () => `<ul class="list evid">${Object.entries(EVID).map(([k, e]) => `<li><a href="#why-${k}"><span class="nm">${e.t} ${pill(e.lv)}</span><span class="sub">${e.g}</span></a></li>`).join('')}</ul>`],
 };
 function vMe() {
@@ -29,6 +30,7 @@ function vMe() {
       ${navrow('#set-train', 'Training', `${esc(P.short)} · ${p.equip === 'home' ? 'home' : 'gym'}${p.shoulder ? ' · shoulder care' : ''}${ogPlanStale() ? ' · plan changed: send it to openGym' : ''}`, ICON.lift)}
       ${navrow('#set-profile', 'Profile', `${p.sex === 'm' ? 'Male' : 'Female'} · ${p.h} cm · started at ${p.w0} kg`, ICON.person)}
       ${navrow('#set-sources', 'Data sources', (NATIVE ? (SYNC.status?.granted?.length ? `Health Connect · synced ${S.meta.sync ? ago(S.meta.sync) : 'not yet'}` : 'Health Connect not connected') : 'Zepp files, H9') + (OGF.folder || S.meta.og ? ' · openGym' : ''), ICON.link)}
+      ${navrow('#set-records', 'All your data', 'See, change or delete any record', ICON.list)}
       ${navrow('#set-data', 'Backup and data', bk, ICON.box)}
       ${navrow('#set-remind', 'Reminders', !NATIVE ? 'In the Android app' : remindOn() ? [S.settings.remAm !== 'off' && `morning ${S.settings.remAm}`, S.settings.remWk !== 'off' && `waist ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][+S.settings.remWk]}`, S.settings.remPm !== 'off' && `food ${S.settings.remPm}`].filter(Boolean).join(' · ') : 'Off', ICON.bell)}
       ${navrow('#set-feel', 'Feel', `Haptics ${S.settings.haptics} · motion ${S.settings.motion} · ${S.settings.theme} theme`, ICON.hand)}
@@ -170,9 +172,8 @@ function vHalftone(P) {
 function vWhy(key) {
   const e = EVID[key];
   if (!e) return '';
-  return `<div class="scrim" data-act="close"></div><aside class="sheet" role="dialog" aria-label="${e.t}" data-key="why-${key}"><div class="grab"></div>
-    <div class="eyebrow">${pill(e.lv)} ${e.g}</div><h1>${e.t}</h1><p>${part(e.b)}</p>
-    <ol class="refs">${e.s.map(s => `<li>${s}</li>`).join('')}</ol><button class="solid wide" data-act="close">Close</button></aside>`;
+  return `${sheetTop(`${pill(e.lv)} ${e.g}`, e.t, `why-${key}`, 'close')}<p>${part(e.b)}</p>
+    <ol class="refs">${e.s.map(s => `<li>${s}</li>`).join('')}</ol></aside>`;
 }
 function vImport(P) {
   return `<div class="scrim"></div><aside class="sheet" role="dialog" aria-label="Bring in data" data-key="import"><div class="grab"></div>
