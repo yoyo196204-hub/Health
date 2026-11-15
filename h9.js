@@ -43,6 +43,23 @@ async function strapConnect() {
   }
   render();
 }
+// The remembered strap connects by itself when the app opens with it on your chest: no dialogs and no errors.
+function strapAuto() {
+  if (!NATIVE || typeof NATIVE.bleAuto !== 'function' || S.settings.strapAuto === 'off' || !S.meta.h9?.id) return;
+  if (HR.conn !== 'idle' || HR.noAuto || Date.now() - (HR.autoAt || 0) < 30000) return;
+  HR.autoAt = Date.now(); nat('bleAuto', S.meta.h9.id);
+}
+// Before 11, with no check yet today, the morning check starts by itself once the strap is on and beating: the
+// settling minute covers putting the phone down. Only from Today or Recovery, and only at a resting heart rate.
+function amAuto() {
+  const fresh = Date.now() - HR.amTry < 20000, h = new Date().getHours();
+  HR.amTry = 0;
+  if (!fresh || S.settings.amAuto === 'off' || HR.mode || S.hrv[todayKey()] || h < 3 || h >= 11) return;
+  if (HR.contact === false || overlay || !['today', 'recovery'].includes(tab) || HR.bpm > hrProfile().rest + 30) return;
+  if (tab !== 'recovery') location.hash = 'recovery';
+  hrStart('morning');
+  toast('Morning check started. Lie still.');
+}
 function strapDisconnect() { if (NATIVE) nat('bleDisconnect'); else HR.gatt?.disconnect?.(); }
 function strapForget() { S.meta.h9 = null; save(); if (NATIVE) nat('bleForget'); strapDisconnect(); }
 function strapLost(msg) {
@@ -57,7 +74,7 @@ NEV.ble = e => {
   if (!e) return;
   if (e.battery != null) HR.battery = e.battery;
   if (e.state === 'connected') {
-    if (HR.conn !== 'on') buzz('ok');
+    if (HR.conn !== 'on') { buzz('ok'); HR.amTry = Date.now(); }
     Object.assign(HR, { conn: 'on', name: e.name || 'Strap' });
     if (e.id && S.meta.h9?.id !== e.id) { S.meta.h9 = { id: e.id, name: e.name || 'Strap' }; save(); }
   } else if (e.state === 'connecting' || e.state === 'scanning') HR.conn = 'connecting';
@@ -101,6 +118,7 @@ function hrData(v, now = Date.now()) {
     HR.sum += bpm; HR.n++; HR.max = Math.max(HR.max, bpm);
   }
   HR.last = now;
+  if (HR.amTry) amAuto();
   if (first && !overlay?.type?.match?.(/add|set/)) return renderSoft();
   if (now - HR.painted > 180) hrPaint();
 }
@@ -333,11 +351,12 @@ function hrvRecord(m) {
 }
 
 function hrAct(a, el) {
-  if (a === 'hrconnect') { buzz('tick'); return strapConnect(); }
-  if (a === 'hrdisconnect') { buzz('tick'); return strapDisconnect(); }
+  if (a === 'hrconnect') { buzz('tick'); HR.noAuto = false; return strapConnect(); }
+  if (a === 'hrdisconnect') { buzz('tick'); HR.noAuto = true; return strapDisconnect(); }
   if (a === 'hrforget') { strapForget(); buzz('heavy'); return render(); }
   if (a === 'hrworkout') return hrStart('workout');
   if (a === 'hrmorning') return hrStart('morning');
+  if (a === 'strapauto' || a === 'amauto') { S.settings[a === 'amauto' ? 'amAuto' : 'strapAuto'] = el.dataset.v; save(); buzz('ok'); return render(); }
   if (a === 'hrkind') { HR.kind = el.dataset.k; buzz('tick'); return render(); }
   if (a === 'hrdur') { S.settings.hrvDur = +el.dataset.v; save(); buzz('tick'); return render(); }
   if (a === 'hrpos') { S.settings.hrvPos = el.dataset.v; save(); buzz('tick'); return render(); }
@@ -363,6 +382,12 @@ function strapIdle(purpose) {
     <button class="solid" data-act="hrconnect">${S.meta.h9 && NATIVE ? `Connect ${esc(S.meta.h9.name)}` : 'Connect Polar H9'}</button></div>`;
   if (HR.bpm == null) return '<div class="strap st-connecting"><div class="seek" aria-hidden="true"><i></i><i></i><i></i></div><p class="sub center">Connected. Waiting for the first beat…</p></div>';
   return null;
+}
+function autoOpts() {
+  if (!NATIVE || typeof NATIVE.bleAuto !== 'function') return '';
+  const s = S.settings;
+  return `<div class="opts"><span class="sub">Connect by itself</span>${seg('strapauto', [['on', 'On'], ['off', 'Off']], s.strapAuto, 'tight')}
+    <span class="sub">Start before 11</span>${seg('amauto', [['on', 'By itself'], ['off', 'By hand']], s.amAuto, 'tight')}</div>`;
 }
 function strapBlock(purpose) {
   const H = hrProfile(), res = HR.result;
@@ -390,6 +415,7 @@ function strapBlock(purpose) {
       <div class="opts"><span class="sub">Record</span>${seg('hrdur', [[60, '1 min'], [120, '2 min'], [180, '3 min'], [300, '5 min']], s.hrvDur, 'tight')}
       <span class="sub">Position</span>${seg('hrpos', [['lying', 'Lying'], ['sitting', 'Sitting']], s.hrvPos, 'tight')}</div>
       <button class="solid wide" data-act="hrmorning">Start morning check · ${dur((SETTLE + s.hrvDur) / 60)}</button>
+      ${autoOpts()}
       <p class="sub center small">${s.hrvDur >= 120 ? 'Two minutes or more adds the low-frequency band and a steadier breathing rate.' : 'One minute agrees closely with longer recordings for RMSSD.'} Keep the same length and position every morning. ${why('hrv', 'Why')}</p></div>`;
   }
   return `<div class="strap st-live">${liveHead()}<p class="sub">Zones today: moderate ${H.zones[0]}–${H.zones[1] - 1}, vigorous ${H.zones[1]}–${H.zones[2] - 1} bpm. For an aerobic-threshold estimate, start easy and build gradually over 15–20 minutes.</p>

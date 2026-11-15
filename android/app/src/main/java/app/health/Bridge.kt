@@ -23,6 +23,7 @@ class Bridge(private val a: MainActivity) {
 
     // The heart-rate strap
     @JavascriptInterface fun bleConnect(id: String) = a.main.post { a.strap.connect(id.ifBlank { null }) }
+    @JavascriptInterface fun bleAuto(id: String) = a.main.post { if (id.isNotBlank()) a.strap.auto(id) }
     @JavascriptInterface fun bleDisconnect() = a.main.post { a.strap.disconnect() }
     @JavascriptInterface fun bleForget() = a.main.post { a.strap.disconnect() }
     @JavascriptInterface fun keepAwake(on: Boolean) { a.keepAwake(on) }

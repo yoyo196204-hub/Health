@@ -15,6 +15,7 @@ const SETTINGS = {
   remAm: [['off', '05:30', '06:00', '06:30', '07:00', '07:30', '08:00', '08:30', '09:00'], 'off'],
   remWk: [['off', '0', '1', '2', '3', '4', '5', '6'], 'off'], remPm: [['off', '20:00', '20:30', '21:00', '21:30', '22:00', '22:30'], 'off'],
   // The morning check (recorded minutes after one to settle, and position) and the Lab's choices.
+  strapAuto: [['on', 'off'], 'on'], amAuto: [['on', 'off'], 'on'],
   hrvDur: [[60, 120, 180, 300], 60], hrvPos: [['lying', 'sitting'], 'lying'],
   brPat: [['rf', 'sigh', 'box'], 'rf'], brRate: [[4.5, 5, 5.5, 6, 6.5, 7], 6], brMin: [[2, 3, 5, 10, 15, 20], 5], brHaptic: [['on', 'off'], 'on'],
   spDur: [[60, 120, 180, 300], 120], spPos: [['sitting', 'lying', 'standing'], 'sitting'],

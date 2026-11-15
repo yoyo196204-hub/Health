@@ -7,10 +7,18 @@ const VERDICT = {
   easy: ['Keep today easy', 'Walk, mobility or a light session. Rule out illness if it lasts.'],
   unknown: ['Not enough data yet', 'A week of morning checks with the H9, or a few synced nights, and this fills in.'],
 };
+// What today's verdict rests on, and what would sharpen it: the strap leads, the watch fills the days it misses.
+function basis(R, short) {
+  const s = R.src, strap = s.strap ? "this morning's strap check" : s.week ? "the strap's 7-day average" : '', watch = s.night ? 'last night from the watch' : '';
+  if (short) return s.strap && s.night ? 'strap + watch' : s.strap ? 'strap' : s.night ? (s.week ? 'watch + strap week' : 'watch standing in') : s.week ? 'strap week' : '';
+  if (!strap && !watch) return '';
+  const am = new Date().getHours() < 11;
+  return `Based on ${[strap, watch].filter(Boolean).join(' and ')}.${s.strap ? '' : s.night ? ` No morning check today, so the watch stands in: it can advise care, and a strap reading is what settles it.${am ? ' There is still time for one.' : ''}` : ''}${s.night ? '' : ' No night from the watch yet: open Zepp so it syncs.'}`;
+}
 function verdictCard() {
   const R = readiness(), [head, sub] = VERDICT[R.level];
   return `<section class="verdict lv-${R.level}"><div class="eyebrow">Today</div><h2>${head}</h2><p class="sub">${sub}</p>
-    ${R.why.length ? `<ul class="reasons">${R.why.map(([, t, ev]) => `<li><a href="#why-${ev}">${t}</a></li>`).join('')}</ul>` : ''}</section>`;
+    ${R.why.length ? `<ul class="reasons">${R.why.map(([, t, ev]) => `<li><a href="#why-${ev}">${t}</a></li>`).join('')}</ul>` : ''}${basis(R) ? `<p class="sub small">${basis(R)}</p>` : ''}</section>`;
 }
 function hrvSection() {
   const V = hrvState(), days = range(30), dots = {}, line = {};

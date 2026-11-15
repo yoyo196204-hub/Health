@@ -69,7 +69,7 @@ function briefCard() {
   const frac = { go: 1, care: 0.66, easy: 0.33, unknown: 0.12 }[R.level];
   return `<a class="brief lv-${R.level}" href="#recovery">
     <div class="ring"><svg viewBox="0 0 44 44" aria-hidden="true"><circle class="bg" cx="22" cy="22" r="19" pathLength="100"/><circle class="fg" cx="22" cy="22" r="19" pathLength="100" stroke-dasharray="0 100" data-dash="${(frac * 100).toFixed(0)}"/></svg><span>${{ go: 'Go', care: 'Care', easy: 'Easy', unknown: '·' }[R.level]}</span></div>
-    <div class="grow"><div class="eyebrow">${greet}</div><b class="bw">${word}</b>
+    <div class="grow"><div class="eyebrow">${greet}${basis(R, true) ? ` · ${basis(R, true)}` : ''}</div><b class="bw">${word}</b>
       ${sig.length ? `<div class="sigs">${sig.map(([n, v, p, t, c, band]) => `<div class="sg"><span class="sn">${n}</span><b class="num">${v}</b><span class="meter">${band ? `<i class="bd" style="left:${(band[0] * 100).toFixed(0)}%;width:${((band[1] - band[0]) * 100).toFixed(0)}%"></i>` : ''}${p != null ? `<i class="pt ${c}" style="left:${(p * 100).toFixed(0)}%"></i>` : ''}</span><span class="st">${t}</span></div>`).join('')}</div>`
         : '<span class="sub">A morning check with the H9, or a synced night from the watch, and this fills in.</span>'}
       ${R.why[0] ? `<span class="sub why1">${esc(R.why[0][1])}</span>` : ''}</div></a>`;

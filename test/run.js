@@ -194,6 +194,18 @@ test('deleted watch data stays deleted through a sync; typed values win; the day
   const again = run(c, 'JSON.stringify(sanitize(JSON.parse(JSON.stringify(S))))');
   assert.strictEqual(again, run(c, 'JSON.stringify(sanitize(JSON.parse(JSON.stringify(sanitize(JSON.parse(JSON.stringify(S)))))))'), 'idempotent with the new fields');
 });
+test('verdict: on a day without a morning check a very low night from the watch nudges, and a strap reading takes over', c => {
+  const t = run(c, 'todayKey()');
+  run(c, `for (let i = 1; i <= 30; i++) S.wx[shift('${t}', -i)] = { hv: i % 2 ? 40 : 65 }; S.wx['${t}'] = { hv: 25 }; S.sleep['${t}'] = 7.5;`);
+  const R = run(c, 'readiness()');
+  assert.strictEqual(R.level, 'care');
+  assert.ok(/No morning check today/.test(R.why[0][1]));
+  assert.deepStrictEqual(R.src, { strap: false, week: false, night: true });
+  run(c, `S.hrv['${t}'] = { rmssd: 60, hr: 55 }; memo.clear();`);
+  const R2 = run(c, 'readiness()');
+  assert.strictEqual(R2.level, 'go', 'a strap reading today outranks the night');
+  assert.strictEqual(R2.src.strap, true);
+});
 test('Lab sessions: only known kinds and fields are kept, and a resonance result needs its rates', c => {
   c.L = [{ kind: 'breathe', t: Date.now(), dur: 300, pat: 'rf', rate: 6, rsa: 12.5, evil: '<b>' }, { kind: 'rf', t: Date.now(), seg: [[6, 10]], best: 6 }, { kind: 'nope', t: Date.now() },
     { kind: 'ortho', t: Date.now(), hrSup: 55, hrStd: 70, rmSup: 60, rmStd: 30 }];

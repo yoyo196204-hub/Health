@@ -216,11 +216,14 @@ function readiness(k = todayKey()) {
     // The watch overnight: only when the strap has no verdict of its own this week, and never more than a nudge.
     const WH = nightly('hv', k, true), BR = nightly('br', k);
     if (!V.state && WH.state === 'low') why.push([1, `The watch's overnight HRV, 7-day average ${Math.round(WH.roll)} ms, is below its own range of ${Math.round(WH.lo)}–${Math.round(WH.hi)}`, 'night']);
+    // A day without a morning check: last night stands in, read against the watch's own nights, and still only a nudge.
+    else if (!V.now && WH.z != null && WH.z <= -1.5) why.push([1, `No morning check today, and the watch's overnight HRV last night (${Math.round(WH.now)} ms) is well below its usual ${Math.round(WH.base)}`, 'night']);
     // Breathing rate during sleep rises with fever and infection, often before you feel it (Natarajan 2020).
     if (BR.now != null && BR.base != null && BR.now - BR.base >= Math.max(1, 2 * BR.sd)) why.push([1, `Breathing rate in sleep ${r1(BR.now)} a minute, ${r1(BR.now - BR.base)} above your usual ${r1(BR.base)}`, 'night']);
     const score = why.reduce((a, w) => a + w[0], 0), known = V.state || WH.state || R.delta != null || sl != null;
     const level = !known ? 'unknown' : score >= 3 ? 'easy' : score >= 1 ? 'care' : 'go';
-    return { level, why: why.sort((a, b) => b[0] - a[0]), V, R, WH, BR };
+    const src = { strap: !!V.now, week: !!V.state, night: sl != null || !!sx || !!S.wx[k] };
+    return { level, why: why.sort((a, b) => b[0] - a[0]), V, R, WH, BR, src };
   });
 }
 
