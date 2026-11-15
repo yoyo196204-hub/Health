@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
         fileCallback?.onReceiveValue(uris.toTypedArray()); fileCallback = null
     }
     val createJson = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { files.saved(it) }
+    val createCsv = registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { files.saved(it) }
     val pickFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { files.folderPicked(it) }
     val pickOgFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { og.picked(it) }
     val healthPermissions = registerForActivityResult(PermissionController.createRequestPermissionResultContract()) { health.status() }

@@ -549,6 +549,24 @@ test('openGym round trip: a session trained from Health’s plan comes back as t
 
 // ---- the web app as files: these guard against the failures that only show up on a phone ----
 const scripts = [...fs.readFileSync(path.join(root, 'index.html'), 'utf8').matchAll(/<script src="([a-z0-9-]+\.js)/g)].map(m => m[1]);
+test('the page root keeps its default overflow, so the page scrolls by touch', () => {
+  const css = fs.readFileSync(path.join(root, 'styles.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const m of css.matchAll(/(?:^|})\s*(?:html|:root)\s*\{([^}]*)\}/g)) assert.ok(!/overflow(-[xy])?\s*:/.test(m[1]), 'html must not set overflow: ' + m[1].trim());
+});
+test('a Live session is kept with its stretches, its chart and its beats; unknown marks are dropped', c => {
+  c.L = { kind: 'live', t: Date.now(), dur: 9000, rmssd: 40, hr: 60, q: 97, sd: 50, a1: 1.1, rr: Array.from({ length: 5000 }, () => 1000),
+    ser: [[5, 60, 40], [10, 61, null], ['x', 1, 1]], seg: [['rest', 0, 300, 60, 40, 12, 99, 1.2], ['nope', 300, 60, 70, 20, 14, 90, 1], ['move', 360, 100, 80, null, null, null, null]] };
+  const r = run(c, 'cleanLab(L)');
+  assert.strictEqual(r.dur, 9000); assert.strictEqual(r.rr.length, 4000);
+  assert.deepStrictEqual(r.ser, [[5, 60, 40], [10, 61, null]]);
+  assert.deepStrictEqual(r.seg.map(x => x[0]), ['rest', 'move']);
+  assert.strictEqual(run(c, 'cleanLab({ kind: "live", t: Date.now(), dur: 100 })'), null);
+});
+test('the beat timeline is read from its end, with the same result as searching all of it', c => {
+  vm.runInContext('var HR = { beats: [] }; for (let i = 0; i < 500; i++) HR.beats.push([1000 + i * 10, 800]);' + fs.readFileSync(path.join(root, 'h9.js'), 'utf8').match(/function beatsSince[\s\S]*?\n}/)[0], c);
+  for (const [a, b] of [[0, Infinity], [3000, Infinity], [3000, 4000], [5990, 9000], [9000, Infinity], [1000, 1010]])
+    assert.deepStrictEqual(run(c, `beatsSince(${a}, ${b})`), run(c, `HR.beats.filter(x => x[0] >= ${a} && x[0] < ${b})`), `${a}..${b}`);
+});
 test('every file carries the current version stamp, the same one everywhere', () => {
   const { stamp, current } = require('./stamp.js');
   const c = current();

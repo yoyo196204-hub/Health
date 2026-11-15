@@ -17,9 +17,10 @@ class Files(private val a: MainActivity) {
     private var pendingText: String? = null
     private var pendingName = ""
 
-    fun save(name: String, text: String) {
+    /** A backup is JSON; a recording's beats are a CSV file, saved as one so other apps offer to open it. */
+    fun save(name: String, text: String, mime: String = "application/json") {
         pendingText = text; pendingName = name
-        try { a.createJson.launch(name) } catch (e: Exception) { pendingText = null; result(false, "No file picker on this phone.") }
+        try { (if (mime == "text/csv") a.createCsv else a.createJson).launch(name) } catch (e: Exception) { pendingText = null; result(false, "No file picker on this phone.") }
     }
     fun saved(uri: Uri?) {
         val text = pendingText ?: return

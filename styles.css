@@ -17,8 +17,10 @@
 :root[data-theme="dark"] { --bg: #14110d; --raise: #1d1913; --sunk: #191510; --ink: #f0e8d8; --soft: #a39883; --line: #332d23;
   --haldi: #eda33a; --leaf: #93c283; --alarm: #ef8a72; --track: #2a251d; --sky: #8fb8d8; --plate: #ece5d6; --lift: 0 10px 26px -18px rgba(0, 0, 0, .8); color-scheme: dark; }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html { background: var(--bg); overscroll-behavior-y: none; overflow-x: clip; }
-/* Clipped, not scrolled: a part sliding in or a swiped screen never widens the page. */
+/* The root must keep its default overflow: the page itself is what scrolls. Setting overflow on html (even overflow-x: clip)
+   takes the scrolling away from the screen and gives it to body, and the page then cannot be scrolled by touch at all.
+   test/run.js fails if this comes back. Sideways overflow is clipped on main instead. */
+html { background: var(--bg); overscroll-behavior-y: none; }
 main { overflow-x: clip; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 var(--sans); padding-bottom: calc(80px + env(safe-area-inset-bottom)); overflow-x: hidden; overscroll-behavior-y: none; }
 main { max-width: 600px; margin: 0 auto; padding: 14px var(--gut) 8px; }
@@ -507,7 +509,8 @@ details.prehab ol .sub { font-size: 13px; }
 #view.fresh[data-dir="fwd"] { --fx: 26px; } #view.fresh[data-dir="back"] { --fx: -26px; }
 #view.fresh[data-dir="push"] { --fx: 40px; } #view.fresh[data-dir="pop"] { --fx: -34px; }
 @keyframes settle-in { from { opacity: 0; transform: translate(var(--fx, 0), 10px) scale(.985); } }
-#view { will-change: transform; transition: transform .38s var(--spring), opacity .3s var(--ease); }
+/* No permanent will-change here: it would turn the whole page into one huge layer and unpin the fixed footer inside it. */
+#view { transition: transform .38s var(--spring), opacity .3s var(--ease); }
 button:active:not(:disabled), .plus:active, .navrow:active, .strip:active, a.solid:active, a.mini:active, .qa:active, .tile:active, .hc:active { transform: scale(.955); transition-duration: .06s; }
 .small { font-size: 12.5px; }
 
@@ -533,7 +536,7 @@ li[data-swipe].armed::after { background: var(--alarm); color: var(--bg); }
 .brief .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
 .brief .ring circle { fill: none; stroke-width: 4; stroke-linecap: round; }
 .brief .ring .bg { stroke: var(--track); }
-.brief .ring .fg { stroke: var(--lv); transition: stroke-dasharray 1.1s var(--spring); filter: drop-shadow(0 0 4px color-mix(in srgb, var(--lv) 45%, transparent)); }
+.brief .ring .fg { stroke: var(--lv); transition: stroke-dasharray 1.1s var(--spring); }
 .brief .ring span { position: absolute; inset: 0; display: grid; place-items: center; font: 600 17px var(--serif); color: var(--lv); }
 .brief .bw { display: block; font: 600 19px/1.2 var(--serif); margin: 1px 0 8px; }
 .sigs { display: grid; gap: 6px; }
@@ -579,7 +582,7 @@ li[data-swipe].armed::after { background: var(--alarm); color: var(--bg); }
 .beat.pulse { animation: pulse .5s var(--ease); }
 @keyframes pulse { 0% { transform: scale(1); opacity: .35; } 12% { transform: scale(1.9); opacity: 1; box-shadow: 0 0 0 6px color-mix(in srgb, var(--alarm) 25%, transparent); } 100% { transform: scale(1); opacity: .35; } }
 .wave path { transition: none; }
-.wave #wavedot { fill: var(--alarm); filter: drop-shadow(0 0 3px color-mix(in srgb, var(--alarm) 70%, transparent)); }
+.wave #wavedot { fill: var(--alarm); }
 .wave.morning #wavedot, .wave.spot #wavedot, .wave.idle #wavedot, .wave.ortho #wavedot { fill: var(--leaf); }
 .wave.idle path, .wave.spot path, .wave.ortho path { stroke: var(--leaf); }
 .wave.breathe path, .wave.rf path { stroke: var(--sky); } .wave.breathe #wavedot, .wave.rf #wavedot { fill: var(--sky); }
@@ -654,5 +657,18 @@ input.bignum:focus { border-color: var(--haldi); }
 .recs .rowbtn { min-height: 52px; }
 
 /* tabs: a lift for the open one */
-#tabs { backdrop-filter: saturate(1.4) blur(14px); background: color-mix(in srgb, var(--raise) 88%, transparent); }
 #tabs a.on svg { transform: translateY(-2px) scale(1.08); }
+
+/* ---------- Live sessions ---------- */
+.stats.lv { margin: 6px 0 2px; } .stats.lv b { font-size: 21px; font-variant-numeric: tabular-nums; } .stats.lv .sub { font-size: 11.5px; }
+.livech { width: 100%; height: 90px; display: block; margin: 8px 0 2px; background: var(--sunk); border-radius: 10px; }
+.livech path { fill: none; stroke-width: 1.8; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.livech .hr { stroke: var(--alarm); } .livech .rm { stroke: var(--leaf); }
+.livech .mk { stroke: var(--soft); stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.k.rm { height: 2.5px; background: var(--leaf); border-radius: 2px; } .k.mk { height: 0; border-top: 1.5px dashed var(--soft); }
+table.segt { width: 100%; border-collapse: collapse; margin: 10px 0 4px; font-variant-numeric: tabular-nums; }
+table.segt th { font: 600 11px var(--sans); letter-spacing: .04em; text-transform: uppercase; color: var(--soft); text-align: right; padding: 4px 0 6px 8px; }
+table.segt th:first-child { text-align: left; padding-left: 0; }
+table.segt td { padding: 8px 0 8px 8px; border-top: 1px solid var(--line); text-align: right; font-size: 15px; white-space: nowrap; }
+table.segt td:first-child { text-align: left; padding-left: 0; white-space: normal; }
+table.segt td i { display: block; font: 400 12px var(--sans); color: var(--soft); font-style: normal; }

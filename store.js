@@ -118,17 +118,20 @@ function cleanHrv(v) {
   if (num(v.t, 1e12, 1e13) != null) r.t = +v.t;
   hrvExtras(v, r);
   if (v.pos === 'lying' || v.pos === 'sitting' || v.pos === 'standing') r.pos = v.pos;
-  if (Array.isArray(v.rr)) { const rr = v.rr.slice(0, 600).map(x => num(x, 250, 2500)).filter(x => x != null).map(Math.round); if (rr.length >= 20) r.rr = rr; }
+  const rr = keepRR(v.rr, RR_KEEP); if (rr) r.rr = rr;
   return r;
 }
 // The fuller measures a reading can carry (hrv.js): pNN50, Poincaré, spectral bands, breathing rate, length.
 const HRVX = { pnn: [0, 100], sd1: [0, 400], sd2: [0, 600], hf: [0, 1e6], lf: [0, 1e6], br: [3, 40], dur: [10, 1200] };
 function hrvExtras(v, r) { for (const k in HRVX) { const x = num(v[k], ...HRVX[k]); if (x != null) r[k] = x; } return r; }
 // A Lab session (lab.js). Only known kinds and known numeric fields survive.
-const LABN = { t: [1e12, 1e13], dur: [10, 7200], rate: [1, 30], cyc: [0, 2000], q: [0, 100], hr: [25, 220], rmssd: [1, 400], sd: [1, 400], rsa: [0, 120],
-  hr1: [25, 220], hr2: [25, 220], share: [0, 100], best: [1, 30], hrSup: [25, 220], rmSup: [1, 400], hrPeak: [25, 230], hrStd: [25, 220], rmStd: [1, 400] };
+const LABN = { t: [1e12, 1e13], dur: [10, 36000], rate: [1, 30], cyc: [0, 2000], q: [0, 100], hr: [25, 220], rmssd: [1, 400], sd: [1, 400], rsa: [0, 120],
+  hr1: [25, 220], hr2: [25, 220], share: [0, 100], best: [1, 30], hrSup: [25, 220], rmSup: [1, 400], hrPeak: [25, 230], hrStd: [25, 220], rmStd: [1, 400], a1: [0.1, 2.5] };
+// A Live session keeps its beats (up to about an hour at rest), a reading every 5 seconds, and each marked stretch.
+const RR_KEEP = 600, RR_KEEP_LIVE = 4000;
+function keepRR(a, max) { const rr = Array.isArray(a) ? a.slice(0, max).map(x => num(x, 250, 2500)).filter(x => x != null).map(Math.round) : []; return rr.length >= 20 ? rr : null; }
 function cleanLab(v) {
-  if (!obj(v) || !['breathe', 'rf', 'ortho', 'spot'].includes(v.kind) || num(v.t, 1e12, 1e13) == null) return null;
+  if (!obj(v) || !['breathe', 'rf', 'ortho', 'spot', 'live'].includes(v.kind) || num(v.t, 1e12, 1e13) == null) return null;
   const r = { kind: v.kind };
   for (const k in LABN) { const x = num(v[k], ...LABN[k]); if (x != null) r[k] = x; }
   if (v.kind === 'breathe') { if (!['rf', 'sigh', 'box'].includes(v.pat)) return null; r.pat = v.pat; }
@@ -142,7 +145,16 @@ function cleanLab(v) {
     if (r.rmssd == null || r.hr == null) return null;
     hrvExtras(v, r);
     if (['lying', 'sitting', 'standing'].includes(v.pos)) r.pos = v.pos;
-    if (Array.isArray(v.rr)) { const rr = v.rr.slice(0, 600).map(x => num(x, 250, 2500)).filter(x => x != null).map(Math.round); if (rr.length >= 20) r.rr = rr; }
+    const rr = keepRR(v.rr, RR_KEEP); if (rr) r.rr = rr;
+  }
+  if (v.kind === 'live') {
+    if (r.rmssd == null || r.hr == null || r.dur == null) return null;
+    hrvExtras(v, r);
+    const rr = keepRR(v.rr, RR_KEEP_LIVE); if (rr) r.rr = rr;
+    // ser: [seconds in, heart rate, RMSSD of the minute before]; seg: [tag, start s, length s, bpm, RMSSD, breaths/min, % clean, α1].
+    if (Array.isArray(v.ser)) { const ser = v.ser.slice(0, 720).filter(x => Array.isArray(x) && num(x[0], 0, 36000) != null && num(x[1], 25, 230) != null).map(x => [Math.round(x[0]), Math.round(x[1]), num(x[2], 1, 400) != null ? r1(x[2]) : null]); if (ser.length) r.ser = ser; }
+    if (Array.isArray(v.seg)) { const seg = v.seg.slice(0, 16).filter(x => Array.isArray(x) && LIVETAGS[x[0]] && num(x[1], 0, 36000) != null && num(x[2], 1, 36000) != null)
+      .map(x => [x[0], Math.round(x[1]), Math.round(x[2]), num(x[3], 25, 230), num(x[4], 1, 400), num(x[5], 3, 40), num(x[6], 0, 100), num(x[7], 0.1, 2.5)]); if (seg.length) r.seg = seg; }
   }
   return r;
 }

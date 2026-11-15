@@ -91,7 +91,8 @@ function hrData(v, now = Date.now()) {
   if (rr.length) {
     // beatTimes gives [time, bpm]; the timeline keeps [time, RR].
     beatTimes(rr, now).forEach((b, j) => HR.beats.push([b[0], rr[j]]));
-    if (HR.beats.length > 6000) HR.beats.splice(0, HR.beats.length - 5000);
+    // About five hours of beats at rest: enough for a long Live session to be analysed and exported whole.
+    if (HR.beats.length > 24000) HR.beats.splice(0, HR.beats.length - 20000);
     const lr = rr[rr.length - 1];
     if (lr > 270 && lr < 2200) { HR.ibpm = 60000 / lr; HR.nextBeat = now + lr; }
   }
@@ -104,7 +105,17 @@ function hrData(v, now = Date.now()) {
   if (now - HR.painted > 180) hrPaint();
 }
 // The stretch of the timeline from t on: RR intervals, or [time, RR] pairs.
-function beatsSince(t, until = Infinity) { return HR.beats.filter(b => b[0] >= t && b[0] < until); }
+// The timeline is in time order, so the start is found by stepping back from the end: reading the last minute costs
+// a minute of beats, however long the strap has been connected. (This runs on every frame of the live trace.)
+function beatsSince(t, until = Infinity) {
+  const B = HR.beats;
+  let i = B.length;
+  while (i > 0 && B[i - 1][0] >= t) i--;
+  if (until === Infinity) return B.slice(i);
+  let j = B.length;
+  while (j > i && B[j - 1][0] >= until) j--;
+  return B.slice(i, j);
+}
 function rrSince(t, until) { return beatsSince(t, until).map(b => b[1]); }
 // Once a second while connected: RMSSD, signal quality and breathing rate over the last minute of beats.
 function liveMetrics() {
@@ -114,7 +125,7 @@ function liveMetrics() {
   const rr = rrSince(now - 60000), C = rr.length >= 10 ? rrClean(rr) : null;
   if (!C) return (HR.live = null);
   const m = C.rr.length >= 30 ? hrvMetrics(rr) : null;
-  return (HR.live = { q: Math.round((1 - C.bad) * 100), rmssd: m?.rmssd ?? null, br: m?.br ?? null, n: rr.length });
+  return (HR.live = { q: Math.round((1 - C.bad) * 100), rmssd: m?.rmssd ?? null, br: m?.br ?? null, sd: m?.sdnn ?? null, hr: m?.hr ?? null, sd1: m?.sd1 ?? null, sd2: m?.sd2 ?? null, pnn: m?.pnn50 ?? null, n: rr.length });
 }
 
 // ---------- the live trace ----------
@@ -123,7 +134,7 @@ function liveMetrics() {
 // where the rise and fall with each breath is visible. The scale eases to new limits instead of snapping.
 function wavePts(now) {
   if (HR.mode === 'workout' || HR.mode === 'hrr') return { pts: HR.wave.filter(w => now - w[0] <= WAVE_S * 1000).map(([t, b]) => [1 - (now - t) / (WAVE_S * 1000), b]), span: WAVE_S };
-  const bs = HR.beats.filter(b => now - b[0] <= BEAT_S * 1000 + 2000 && b[1] > 270 && b[1] < 2200);
+  const bs = beatsSince(now - BEAT_S * 1000 - 2000).filter(b => b[1] > 270 && b[1] < 2200);
   return { pts: bs.map(([t, r]) => [1 - (now - t) / (BEAT_S * 1000), 60000 / r]), span: BEAT_S };
 }
 function waveFrame() {
@@ -486,7 +497,7 @@ function vHrvInfo(p) {
     ${stats([[Math.round(x.hr), 'bpm'], [x.q != null ? `${x.q}%` : DASH, 'clean beats'], [V.lo ? `${Math.round(V.lo)}–${Math.round(V.hi)}` : DASH, 'your range, ms']])}
     ${beatsViz(x.rr)}${metricsTable(m || { sdnn: x.sd, pnn50: x.pnn, sd1: x.sd1, sd2: x.sd2, hf: x.hf, lf: x.lf, br: x.br })}
     ${x.pos ? para(`Recorded ${x.pos}${x.dur ? `, ${dur(x.dur / 60)}` : ''}.`) : ''}
-    <div class="rowb"><button class="danger" data-hold="hrvdel" data-k="${p.k}">Hold to delete</button></div></aside>`;
+    <div class="rowb">${x.rr ? `<button class="ghost" data-act="rrexp" data-k="${p.k}">Save the beats as a file</button>` : ''}<button class="danger" data-hold="hrvdel" data-k="${p.k}">Hold to delete</button></div></aside>`;
 }
 ACT_HOLD.hrvdel = el => { const k = el.dataset.k, was = S.hrv[k]; if (!was) return; delete S.hrv[k]; save(); closePop(); undoable(`Morning check of ${dateLabel(k)} deleted`, () => { S.hrv[k] = was; }); };
 // Loaded: this file ran to the end.

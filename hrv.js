@@ -119,7 +119,8 @@ function peakFreq(S, a, b, minProm = 2.5) {
 // ---------- one reading, in full ----------
 // From the raw beats of a recording: time-domain, Poincaré and, when long enough, frequency-domain measures and the
 // breathing rate. Durations follow the Task Force: HF needs about a minute, LF two. Returns null under 30 clean beats.
-function hrvMetrics(raw) {
+// spectrum = false leaves the frequency measures out: for a long session in mixed states they mean nothing.
+function hrvMetrics(raw, spectrum = true) {
   const C = rrClean(raw), rr = C.rr, n = rr.length;
   if (n < 30) return null;
   const m = mean(rr), dur = rr.reduce((a, b) => a + b, 0) / 1000;
@@ -130,7 +131,7 @@ function hrvMetrics(raw) {
   const sd1 = Math.sqrt(0.5) * sdsd, sd2 = Math.sqrt(Math.max(0, 2 * sdnn * sdnn - 0.5 * sdsd * sdsd));
   const out = { n: C.n, beats: n, dur, rr: m, hr: 60000 / m, rmssd: rm, ln: Math.log(rm), sdnn, pnn50: n50 / d.length * 100, sd1, sd2, ratio: sd2 ? sd1 / sd2 : null,
     q: Math.round((1 - C.bad) * 100), kinds: C.kinds, minHr: 60000 / Math.max(...rr), maxHr: 60000 / Math.min(...rr) };
-  if (dur >= 55) {
+  if (spectrum && dur >= 55) {
     const S = lombScargle(rr);
     if (S) {
       out.hf = bandPower(S, BAND.hf);

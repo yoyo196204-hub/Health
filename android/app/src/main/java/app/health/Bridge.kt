@@ -28,7 +28,7 @@ class Bridge(private val a: MainActivity) {
     @JavascriptInterface fun keepAwake(on: Boolean) { a.keepAwake(on) }
 
     // Files, sharing and the daily backup
-    @JavascriptInterface fun saveFile(name: String, mime: String, text: String) = a.main.post { a.files.save(name, text) }
+    @JavascriptInterface fun saveFile(name: String, mime: String, text: String) = a.main.post { a.files.save(name, text, mime) }
     @JavascriptInterface fun backupStatus(): String = JSONObject().put("folder", a.files.folderName() ?: JSONObject.NULL).toString()
     @JavascriptInterface fun backupPick() = a.main.post { a.files.pickFolder() }
     @JavascriptInterface fun backupWrite(json: String, manual: Boolean) { a.files.backup(json, manual) }
