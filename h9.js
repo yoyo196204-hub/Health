@@ -43,6 +43,23 @@ async function strapConnect() {
   }
   render();
 }
+// The remembered strap connects by itself when the app opens with it on your chest: no dialogs and no errors.
+function strapAuto() {
+  if (!NATIVE || typeof NATIVE.bleAuto !== 'function' || S.settings.strapAuto === 'off' || !S.meta.h9?.id) return;
+  if (HR.conn !== 'idle' || HR.noAuto || Date.now() - (HR.autoAt || 0) < 30000) return;
+  HR.autoAt = Date.now(); nat('bleAuto', S.meta.h9.id);
+}
+// Before 11, with no check yet today, the morning check starts by itself once the strap is on and beating: the
+// settling minute covers putting the phone down. Only from Today or Recovery, and only at a resting heart rate.
+function amAuto() {
+  const fresh = Date.now() - HR.amTry < 20000, h = new Date().getHours();
+  HR.amTry = 0;
+  if (!fresh || S.settings.amAuto === 'off' || HR.mode || S.hrv[todayKey()] || h < 3 || h >= 11) return;
+  if (HR.contact === false || overlay || !['today', 'recovery'].includes(tab) || HR.bpm > hrProfile().rest + 30) return;
+  if (tab !== 'recovery') location.hash = 'recovery';
+  hrStart('morning');
+  toast('Morning check started. Lie still.');
+}
 function strapDisconnect() { if (NATIVE) nat('bleDisconnect'); else HR.gatt?.disconnect?.(); }
 function strapForget() { S.meta.h9 = null; save(); if (NATIVE) nat('bleForget'); strapDisconnect(); }
 function strapLost(msg) {
@@ -57,7 +74,7 @@ NEV.ble = e => {
   if (!e) return;
   if (e.battery != null) HR.battery = e.battery;
   if (e.state === 'connected') {
-    if (HR.conn !== 'on') buzz('ok');
+    if (HR.conn !== 'on') { buzz('ok'); HR.amTry = Date.now(); }
     Object.assign(HR, { conn: 'on', name: e.name || 'Strap' });
     if (e.id && S.meta.h9?.id !== e.id) { S.meta.h9 = { id: e.id, name: e.name || 'Strap' }; save(); }
   } else if (e.state === 'connecting' || e.state === 'scanning') HR.conn = 'connecting';
@@ -91,7 +108,8 @@ function hrData(v, now = Date.now()) {
   if (rr.length) {
     // beatTimes gives [time, bpm]; the timeline keeps [time, RR].
     beatTimes(rr, now).forEach((b, j) => HR.beats.push([b[0], rr[j]]));
-    if (HR.beats.length > 6000) HR.beats.splice(0, HR.beats.length - 5000);
+    // About five hours of beats at rest: enough for a long Live session to be analysed and exported whole.
+    if (HR.beats.length > 24000) HR.beats.splice(0, HR.beats.length - 20000);
     const lr = rr[rr.length - 1];
     if (lr > 270 && lr < 2200) { HR.ibpm = 60000 / lr; HR.nextBeat = now + lr; }
   }
@@ -100,11 +118,22 @@ function hrData(v, now = Date.now()) {
     HR.sum += bpm; HR.n++; HR.max = Math.max(HR.max, bpm);
   }
   HR.last = now;
+  if (HR.amTry) amAuto();
   if (first && !overlay?.type?.match?.(/add|set/)) return renderSoft();
   if (now - HR.painted > 180) hrPaint();
 }
 // The stretch of the timeline from t on: RR intervals, or [time, RR] pairs.
-function beatsSince(t, until = Infinity) { return HR.beats.filter(b => b[0] >= t && b[0] < until); }
+// The timeline is in time order, so the start is found by stepping back from the end: reading the last minute costs
+// a minute of beats, however long the strap has been connected. (This runs on every frame of the live trace.)
+function beatsSince(t, until = Infinity) {
+  const B = HR.beats;
+  let i = B.length;
+  while (i > 0 && B[i - 1][0] >= t) i--;
+  if (until === Infinity) return B.slice(i);
+  let j = B.length;
+  while (j > i && B[j - 1][0] >= until) j--;
+  return B.slice(i, j);
+}
 function rrSince(t, until) { return beatsSince(t, until).map(b => b[1]); }
 // Once a second while connected: RMSSD, signal quality and breathing rate over the last minute of beats.
 function liveMetrics() {
@@ -114,7 +143,7 @@ function liveMetrics() {
   const rr = rrSince(now - 60000), C = rr.length >= 10 ? rrClean(rr) : null;
   if (!C) return (HR.live = null);
   const m = C.rr.length >= 30 ? hrvMetrics(rr) : null;
-  return (HR.live = { q: Math.round((1 - C.bad) * 100), rmssd: m?.rmssd ?? null, br: m?.br ?? null, n: rr.length });
+  return (HR.live = { q: Math.round((1 - C.bad) * 100), rmssd: m?.rmssd ?? null, br: m?.br ?? null, sd: m?.sdnn ?? null, hr: m?.hr ?? null, sd1: m?.sd1 ?? null, sd2: m?.sd2 ?? null, pnn: m?.pnn50 ?? null, n: rr.length });
 }
 
 // ---------- the live trace ----------
@@ -123,7 +152,7 @@ function liveMetrics() {
 // where the rise and fall with each breath is visible. The scale eases to new limits instead of snapping.
 function wavePts(now) {
   if (HR.mode === 'workout' || HR.mode === 'hrr') return { pts: HR.wave.filter(w => now - w[0] <= WAVE_S * 1000).map(([t, b]) => [1 - (now - t) / (WAVE_S * 1000), b]), span: WAVE_S };
-  const bs = HR.beats.filter(b => now - b[0] <= BEAT_S * 1000 + 2000 && b[1] > 270 && b[1] < 2200);
+  const bs = beatsSince(now - BEAT_S * 1000 - 2000).filter(b => b[1] > 270 && b[1] < 2200);
   return { pts: bs.map(([t, r]) => [1 - (now - t) / (BEAT_S * 1000), 60000 / r]), span: BEAT_S };
 }
 function waveFrame() {
@@ -322,11 +351,12 @@ function hrvRecord(m) {
 }
 
 function hrAct(a, el) {
-  if (a === 'hrconnect') { buzz('tick'); return strapConnect(); }
-  if (a === 'hrdisconnect') { buzz('tick'); return strapDisconnect(); }
+  if (a === 'hrconnect') { buzz('tick'); HR.noAuto = false; return strapConnect(); }
+  if (a === 'hrdisconnect') { buzz('tick'); HR.noAuto = true; return strapDisconnect(); }
   if (a === 'hrforget') { strapForget(); buzz('heavy'); return render(); }
   if (a === 'hrworkout') return hrStart('workout');
   if (a === 'hrmorning') return hrStart('morning');
+  if (a === 'strapauto' || a === 'amauto') { S.settings[a === 'amauto' ? 'amAuto' : 'strapAuto'] = el.dataset.v; save(); buzz('ok'); return render(); }
   if (a === 'hrkind') { HR.kind = el.dataset.k; buzz('tick'); return render(); }
   if (a === 'hrdur') { S.settings.hrvDur = +el.dataset.v; save(); buzz('tick'); return render(); }
   if (a === 'hrpos') { S.settings.hrvPos = el.dataset.v; save(); buzz('tick'); return render(); }
@@ -352,6 +382,12 @@ function strapIdle(purpose) {
     <button class="solid" data-act="hrconnect">${S.meta.h9 && NATIVE ? `Connect ${esc(S.meta.h9.name)}` : 'Connect Polar H9'}</button></div>`;
   if (HR.bpm == null) return '<div class="strap st-connecting"><div class="seek" aria-hidden="true"><i></i><i></i><i></i></div><p class="sub center">Connected. Waiting for the first beat…</p></div>';
   return null;
+}
+function autoOpts() {
+  if (!NATIVE || typeof NATIVE.bleAuto !== 'function') return '';
+  const s = S.settings;
+  return `<div class="opts"><span class="sub">Connect by itself</span>${seg('strapauto', [['on', 'On'], ['off', 'Off']], s.strapAuto, 'tight')}
+    <span class="sub">Start before 11</span>${seg('amauto', [['on', 'By itself'], ['off', 'By hand']], s.amAuto, 'tight')}</div>`;
 }
 function strapBlock(purpose) {
   const H = hrProfile(), res = HR.result;
@@ -379,6 +415,7 @@ function strapBlock(purpose) {
       <div class="opts"><span class="sub">Record</span>${seg('hrdur', [[60, '1 min'], [120, '2 min'], [180, '3 min'], [300, '5 min']], s.hrvDur, 'tight')}
       <span class="sub">Position</span>${seg('hrpos', [['lying', 'Lying'], ['sitting', 'Sitting']], s.hrvPos, 'tight')}</div>
       <button class="solid wide" data-act="hrmorning">Start morning check · ${dur((SETTLE + s.hrvDur) / 60)}</button>
+      ${autoOpts()}
       <p class="sub center small">${s.hrvDur >= 120 ? 'Two minutes or more adds the low-frequency band and a steadier breathing rate.' : 'One minute agrees closely with longer recordings for RMSSD.'} Keep the same length and position every morning. ${why('hrv', 'Why')}</p></div>`;
   }
   return `<div class="strap st-live">${liveHead()}<p class="sub">Zones today: moderate ${H.zones[0]}–${H.zones[1] - 1}, vigorous ${H.zones[1]}–${H.zones[2] - 1} bpm. For an aerobic-threshold estimate, start easy and build gradually over 15–20 minutes.</p>
@@ -486,7 +523,7 @@ function vHrvInfo(p) {
     ${stats([[Math.round(x.hr), 'bpm'], [x.q != null ? `${x.q}%` : DASH, 'clean beats'], [V.lo ? `${Math.round(V.lo)}–${Math.round(V.hi)}` : DASH, 'your range, ms']])}
     ${beatsViz(x.rr)}${metricsTable(m || { sdnn: x.sd, pnn50: x.pnn, sd1: x.sd1, sd2: x.sd2, hf: x.hf, lf: x.lf, br: x.br })}
     ${x.pos ? para(`Recorded ${x.pos}${x.dur ? `, ${dur(x.dur / 60)}` : ''}.`) : ''}
-    <div class="rowb"><button class="danger" data-hold="hrvdel" data-k="${p.k}">Hold to delete</button></div></aside>`;
+    <div class="rowb">${x.rr ? `<button class="ghost" data-act="rrexp" data-k="${p.k}">Save the beats as a file</button>` : ''}<button class="danger" data-hold="hrvdel" data-k="${p.k}">Hold to delete</button></div></aside>`;
 }
 ACT_HOLD.hrvdel = el => { const k = el.dataset.k, was = S.hrv[k]; if (!was) return; delete S.hrv[k]; save(); closePop(); undoable(`Morning check of ${dateLabel(k)} deleted`, () => { S.hrv[k] = was; }); };
 // Loaded: this file ran to the end.

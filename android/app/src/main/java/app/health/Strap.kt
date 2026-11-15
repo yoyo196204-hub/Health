@@ -66,6 +66,25 @@ class Strap(private val a: MainActivity) {
         scan(remembered)
     }
 
+    /** Looks for the remembered strap without asking for anything: no permission prompt, no list, no error. */
+    fun auto(remembered: String) {
+        if (gatt != null || device != null || scanning != null) return
+        if (needed().any { a.checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }) return
+        val scanner = adapter()?.takeIf { it.isEnabled }?.bluetoothLeScanner ?: return
+        userClosed = false; retries = 0
+        found.clear(); labels.clear()
+        val cb = object : ScanCallback() {
+            override fun onScanResult(type: Int, r: ScanResult) { if (r.device.address == remembered) pick(r.device) }
+            override fun onScanFailed(code: Int) { if (scanning === this) scanning = null }
+        }
+        scanning = cb
+        try {
+            scanner.startScan(listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(hrService)).build()),
+                ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_BALANCED).build(), cb)
+        } catch (e: Exception) { scanning = null; return }
+        a.main.postDelayed({ if (scanning === cb) stopScan() }, 15000)
+    }
+
     private fun scan(remembered: String?) {
         val scanner = adapter()?.bluetoothLeScanner ?: return fail("Bluetooth is not ready. Try again.")
         found.clear(); labels.clear()

@@ -254,7 +254,7 @@ document.addEventListener('visibilitychange', () => {
 applyTheme();
 dailyBackup();
 navigator.storage?.persist?.().catch(() => {});
-if (NATIVE) { document.documentElement.classList.add('native'); hcCheck(); backupInfo(); autoBackup(); ogInfo(); ogAuto(); remindStatus(); remindPlan(); }
+if (NATIVE) { document.documentElement.classList.add('native'); hcCheck(); backupInfo(); autoBackup(); ogInfo(); ogAuto(); remindStatus(); remindPlan(); strapAuto(); }
 if (recovered === 'mirror') save();
 route();
 fresh('fwd');

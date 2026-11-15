@@ -91,7 +91,8 @@ you log in openGym arrives with its name and the muscles it trains, from `opengy
 | Recovery | One verdict for the day; the H9 morning check (1–5 minutes, lying or sitting) with live beats, skin contact and signal quality, and a result with its tachogram, Poincaré plot and every measure; the strap Lab; night by night, each opening a day in detail; HRV against your normal range, read with morning heart rate; resting and sleeping heart rate; sleep; the watch's overnight HRV and breathing rate against their own baselines; watch-vs-strap agreement |
 | Training | The next openGym session with today's recovery guidance; the shoulder check; sessions with their sets and watch heart rate; strength per lift; the muscle map; cardio with the H9 (live trace, zones, α1) and the aerobic threshold it gives |
 | Review | The week as a matrix, the actions it triggers, the energy ledger, body trend and projections, links in your own data |
-| Lab (from Recovery or Today) | Breathe (resonance, cyclic sighing, box; with or without the strap, haptic cues per breath), the resonance finder, the orthostatic test, spot checks; every session kept |
+| Automation (Android app) | The remembered strap connects by itself when the app opens with it on your chest, and before 11 with no check yet that day the morning check starts by itself; both can be turned off under the morning check. On a day without a morning check the watch's night stands in for it in the verdict, and the verdict says what it rests on |
+| Lab (from Recovery or Today) | Breathe (resonance, cyclic sighing, box; with or without the strap, haptic cues per breath), the resonance finder, the orthostatic test, spot checks, and Live: an open-ended session with RMSSD, SDNN, pNN50, SD1/SD2, breathing rate and α1 moving as you watch, marks for what you are doing, each marked stretch read on its own and against your earlier ones, and the beats saved as a CSV file for other HRV software; every session kept |
 | A day in detail (tap a night, or Your day) | The watch's heart rate across 24 hours with sleep and workouts marked, the night stage by stage, and every number against your previous four weeks |
 | Me | Your numbers, and a page each for goal, training, profile, data sources, all your data (see, change or delete any record), backup and data, feel, and the evidence |
 
@@ -158,13 +159,13 @@ Plain JavaScript, no build step. Scripts load in this order:
 | `feel.js` | Haptics, screen transitions, sheets, undo toasts, press and hold, pull to refresh |
 | `ui.js` | Shared building blocks, the chart and the muscle map |
 | `h9.js` | The strap: connection, the beat timeline, live trace, morning HRV check, cardio with α1, heart-rate recovery, crash-safe drafts |
-| `lab.js` | The Lab: breathing pacer, resonance finder, orthostatic test, spot check |
+| `lab.js` | The Lab: breathing pacer, resonance finder, orthostatic test, spot check, Live sessions and the beat export |
 | `watch.js` | Zepp CSV import |
 | `opengym.js` | openGym: its backup and CSV coming in, the folder link, Health's plan as an openGym plan file with backups and the block |
 | `view-*.js` | One file per screen; `view-records.js` is all your data and a day in detail |
 | `app.js` | State, routing, events |
 
-Exercise animations live in openGym. Tests: `node test/run.js`.
+Exercise animations live in openGym. Tests: `node test/run.js` (the engine) and `node test/browser.js` (the screens in a real browser: that a finger scrolls every tab, fixed bars stay put, a Live session runs end to end; needs Playwright). Both run on GitHub before every build.
 
 After changing any web file, run `node test/stamp.js`. It stamps every file in `index.html` and `sw.js` with a
 version (`?v=…`), so a phone can never mix a new page with old files it still holds from before; the tests fail

@@ -23,12 +23,13 @@ class Bridge(private val a: MainActivity) {
 
     // The heart-rate strap
     @JavascriptInterface fun bleConnect(id: String) = a.main.post { a.strap.connect(id.ifBlank { null }) }
+    @JavascriptInterface fun bleAuto(id: String) = a.main.post { if (id.isNotBlank()) a.strap.auto(id) }
     @JavascriptInterface fun bleDisconnect() = a.main.post { a.strap.disconnect() }
     @JavascriptInterface fun bleForget() = a.main.post { a.strap.disconnect() }
     @JavascriptInterface fun keepAwake(on: Boolean) { a.keepAwake(on) }
 
     // Files, sharing and the daily backup
-    @JavascriptInterface fun saveFile(name: String, mime: String, text: String) = a.main.post { a.files.save(name, text) }
+    @JavascriptInterface fun saveFile(name: String, mime: String, text: String) = a.main.post { a.files.save(name, text, mime) }
     @JavascriptInterface fun backupStatus(): String = JSONObject().put("folder", a.files.folderName() ?: JSONObject.NULL).toString()
     @JavascriptInterface fun backupPick() = a.main.post { a.files.pickFolder() }
     @JavascriptInterface fun backupWrite(json: String, manual: Boolean) { a.files.backup(json, manual) }

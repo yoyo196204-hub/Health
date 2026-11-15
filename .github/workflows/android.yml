@@ -40,6 +40,12 @@ jobs:
       - name: Engine tests
         run: node test/run.js
 
+      # The screens in a real browser: a page that cannot be scrolled or a bar in the wrong place fails the build.
+      - name: Screen tests
+        run: |
+          npm install --silent --no-audit --no-fund --prefix "$RUNNER_TEMP/pw" playwright-core
+          CHROME="$(command -v google-chrome || command -v chromium-browser || command -v chromium)" NODE_PATH="$RUNNER_TEMP/pw/node_modules" node test/browser.js
+
       - name: Build
         env:
           KS_RAW: ${{ secrets.HEALTH_KEYSTORE_PASSWORD }}

@@ -8,6 +8,9 @@
 //    your own previous tests.
 //  - Spot check: a reading at any time of day, in any position, with every measure; kept apart from the morning
 //    check, which needs the same conditions every day to mean anything.
+//  - Live: open-ended. Every measure moves as you watch, for as long as you like; you mark what you are doing and
+//    each marked stretch is read on its own and against your earlier stretches with the same mark. The beats can be
+//    saved as a file for other software.
 // Each session runs on the strap's timeline (h9.js) and is analysed by hrv.js. Nothing here changes the day's verdict.
 
 const LABS = {
@@ -15,6 +18,7 @@ const LABS = {
   rf: { n: 'Resonance finder', d: 'Five breathing rates, two minutes each: find the one that moves your heart most', ev: 'rf', strap: true },
   ortho: { n: 'Orthostatic test', d: 'Lie still, then stand: heart rate and HRV in both, against your own', ev: 'ortho', strap: true },
   spot: { n: 'Spot check', d: 'Every HRV measure at any time of day, in any position', ev: 'metrics', strap: true },
+  live: { n: 'Live', d: 'Open-ended: every measure as it happens, for as long as you like. Mark what you are doing, then compare the stretches', ev: 'live', strap: true },
 };
 // Breathing patterns: phases of [what, seconds]. Resonance follows the rate you choose (breath in 40%, out 60%).
 const BREATHS = {
@@ -24,7 +28,8 @@ const BREATHS = {
 };
 const RF_RATES = [6.5, 6, 5.5, 5, 4.5], RF_SEG = 120;
 const ORTHO_LIE = 150, ORTHO_STAND = 150, SPOT_SETTLE = 30;
-const LAB = { kind: null, phases: null, cycle: 10, segT0: 0, ph: -1, raf: 0, cue: '' };
+const LIVE_MAX = 4 * 3600, LIVE_MIN = 60, LIVE_WIN = 300;   // longest session, shortest worth saving, the window a stretch is read from
+const LAB = { kind: null, phases: null, cycle: 10, segT0: 0, ph: -1, raf: 0, cue: '', tag0: 'rest', tag: 'rest', marks: [], ser: [], serAt: 0, step: 5, a1: null, a1At: 0, exp: null };
 
 function breathPhases(pat, rate) {
   if (pat === 'sigh') return [['in', 2.6], ['top', 1.2], ['out', 6.2]];
@@ -61,12 +66,16 @@ function labStart(kind) {
   else if (kind === 'rf') { LAB.phases = breathPhases('rf', RF_RATES[0]); LAB.total = RF_RATES.length * RF_SEG; LAB.seg = 0; }
   else if (kind === 'ortho') { LAB.phases = null; LAB.total = ORTHO_LIE + ORTHO_STAND; LAB.stood = false; }
   else if (kind === 'spot') { LAB.phases = null; LAB.total = SPOT_SETTLE + s.spDur; }
+  else if (kind === 'live') Object.assign(LAB, { phases: null, total: LIVE_MAX, tag: LAB.tag0, marks: [[0, LAB.tag0]], ser: [], serAt: 0, step: 5, a1: null, a1At: 0, exp: null });
   LAB.cycle = LAB.phases ? LAB.phases.reduce((a, p) => a + p[1], 0) : 0;
   hrStart(kind);
   LAB.segT0 = HR.t0;
 }
 function labTick(now, el, silent, off) {
   const K = LAB.kind, needStrap = LABS[K]?.strap;
+  // A Live session that loses the strap keeps what it has.
+  if (K === 'live' && (silent || off) && el >= LIVE_MIN + 15) return labDone();
+  if (K === 'live') liveStep(now, el);
   if (needStrap && (silent || off)) { hrEnd(); HR.result = { type: K, ok: false, why: off ? 'The strap lost skin contact. Wet the electrodes and try again.' : 'Lost contact with the strap.' }; buzz('warn'); return render(); }
   if (K === 'rf') {
     const seg = Math.min(RF_RATES.length - 1, Math.floor(el / RF_SEG));
@@ -105,6 +114,7 @@ function labPaint() {
     c.textContent = el < ORTHO_LIE ? `Lying still · stand up in ${clock(ORTHO_LIE - el)}` : `Standing still · ${clock(LAB.total - el)}`;
     const st = document.getElementById('labstage'); if (st) st.textContent = el < ORTHO_LIE ? 'Lie still and breathe normally.' : 'Stand up now, then stay still, arms relaxed.';
   } else if (K === 'spot') c.textContent = el < SPOT_SETTLE ? `Settling · ${clock(SPOT_SETTLE - el)}` : `Recording · ${clock(LAB.total - el)}`;
+  else if (K === 'live') { c.textContent = `${clock(el)} · ${LIVETAGS[LAB.tag]}`; livePaint(); }
   else if (K === 'rf') c.textContent = `${RF_RATES[LAB.seg]} a minute · ${clock(RF_SEG - (el % RF_SEG))} · rate ${LAB.seg + 1} of ${RF_RATES.length}`;
   else c.textContent = `${clock(LAB.total - el)} left`;
   const ring = document.getElementById('labring'); if (ring) ring.setAttribute('stroke-dasharray', `${clamp(el / LAB.total * 100, 0, 100).toFixed(1)} 100`);
@@ -162,6 +172,10 @@ function labDone() {
     if (m && m.q >= 80) rec = Object.assign({ kind: 'spot', t: t0, pos: s.spPos }, hrvRecord(m), { rr: rr.filter(x => x > 270 && x < 2200).slice(0, 600) });
     else why = m ? `Only ${m.q}% of beats were clean. Sit still and try again.` : 'The signal was too noisy.';
   }
+  else if (K === 'live') {
+    const r = liveRecord(t0, end);
+    if (r.rec) rec = r.rec; else why = r.why;
+  }
   if (rec) {
     const c = cleanLab(rec);
     if (c) { (S.lab[k] ||= []).push(c); S.lab[k] = S.lab[k].slice(-30); save(); buzz('done'); HR.result = { type: K, ok: true, k, i: S.lab[k].length - 1 }; }
@@ -171,11 +185,115 @@ function labDone() {
 }
 function labCancel() { hrEnd(); HR.result = null; buzz('tick'); render(); }
 
+// ---------- Live: an open-ended session ----------
+// Every 5 seconds a point for the chart (heart rate over those seconds, RMSSD of the last minute); every 10 seconds,
+// once there are two minutes of beats, α1. Past 720 points the chart keeps every other one and the step doubles.
+function liveStep(now, el) {
+  if (el - LAB.serAt >= LAB.step) {
+    LAB.serAt = el;
+    const b = beatsSince(now - LAB.step * 1000).map(x => 60000 / x[1]).filter(x => x > 27 && x < 222), L = liveMetrics();
+    const hr = b.length ? mean(b) : HR.bpm;
+    if (hr) LAB.ser.push([Math.round(el), Math.round(hr), L?.rmssd != null && L.q >= 80 ? r1(L.rmssd) : null]);
+    if (LAB.ser.length > 720) { LAB.ser = LAB.ser.filter((_, i) => i % 2 === 0); LAB.step *= 2; }
+  }
+  if (el >= 120 && now - LAB.a1At >= 10000) {
+    LAB.a1At = now;
+    const raw = rrSince(now - 120000), C = rrClean(raw), a = raw.length >= 100 && C.bad <= 0.05 ? dfaA1(C.rr) : null;
+    LAB.a1 = a != null && a > 0.1 && a < 2.5 ? a : null;
+  }
+}
+function liveTag(tag) {
+  if (!LIVETAGS[tag]) return;
+  if (HR.mode !== 'live') { LAB.tag0 = tag; buzz('tick'); return render(); }
+  if (tag === LAB.tag) return;
+  LAB.tag = tag; LAB.marks.push([Math.round((Date.now() - HR.t0) / 1000), tag]);
+  if (LAB.marks.length > 16) LAB.marks.splice(1, 1);
+  buzz('ok'); render();
+}
+function liveGrid() {
+  const cell = (id, l) => `<div><b class="num" id="lv_${id}">${DASH}</b><span class="sub">${l}</span></div>`;
+  return `<div class="stats four lv">${cell('rm', 'RMSSD, ms')}${cell('sd', 'SDNN, ms')}${cell('pn', 'pNN50, %')}${cell('br', 'breaths/min')}</div>
+    <div class="stats four lv">${cell('ln', 'ln RMSSD')}${cell('s1', 'SD1/SD2')}${cell('a1', 'α1, 2 min')}${cell('n', 'beats')}</div>`;
+}
+function livePaint() {
+  const L = HR.live, set = (id, v) => { const e = document.getElementById('lv_' + id); if (e) e.textContent = v == null ? DASH : v; };
+  set('rm', L?.rmssd != null ? Math.round(L.rmssd) : null); set('sd', L?.sd != null ? Math.round(L.sd) : null);
+  set('pn', L?.pnn != null ? Math.round(L.pnn) : null); set('br', L?.br != null ? r1(L.br) : null);
+  set('ln', L?.rmssd ? Math.log(L.rmssd).toFixed(2) : null); set('s1', L?.sd1 != null && L.sd2 ? (L.sd1 / L.sd2).toFixed(2) : null);
+  set('a1', LAB.a1 != null ? LAB.a1.toFixed(2) : null); set('n', beatsSince(HR.t0).length);
+  const ch = document.getElementById('livech'); if (ch) ch.innerHTML = liveSeries(LAB.ser, LAB.marks, (Date.now() - HR.t0) / 1000);
+}
+// Heart rate and RMSSD through a session, each on its own scale, with a line at every mark.
+function liveSeries(ser, marks, total) {
+  if (!ser || ser.length < 2) return '';
+  const W = 300, H = 90, T = Math.max(total || 0, ser[ser.length - 1][0], 1), X = t => t / T * W;
+  const path = (i, cls) => {
+    const v = ser.filter(p => p[i] != null);
+    if (v.length < 2) return '';
+    const lo = Math.min(...v.map(p => p[i])), hi = Math.max(...v.map(p => p[i])), pad = (hi - lo) * 0.1 || 2;
+    return `<path class="${cls}" d="${v.map((p, j) => `${j ? 'L' : 'M'}${X(p[0]).toFixed(1)},${(H - 4 - (p[i] - lo + pad) / (hi - lo + 2 * pad) * (H - 8)).toFixed(1)}`).join('')}"/>`;
+  };
+  return (marks || []).filter(m => m[0] > 0).map(m => `<line class="mk" x1="${X(m[0]).toFixed(1)}" x2="${X(m[0]).toFixed(1)}" y1="0" y2="${H}"/>`).join('') + path(2, 'rm') + path(1, 'hr');
+}
+// The session as a record: the whole of it in the time-domain measures, and each marked stretch from its last five
+// minutes (or all of it, when shorter), the first 10 seconds after the mark left out as the change-over.
+function liveRecord(t0, end) {
+  const el = (end - t0) / 1000, beats = beatsSince(t0), all = beats.map(b => b[1]), m = hrvMetrics(all, false);
+  if (el < LIVE_MIN || !m) return { why: el < LIVE_MIN ? 'Under a minute, so it was not saved.' : 'Too few clean beats arrived to say anything. Wet the electrodes and tighten the strap.' };
+  const seg = LAB.marks.map(([s, tag], i) => {
+    const e = i + 1 < LAB.marks.length ? LAB.marks[i + 1][0] : el, len = e - s;
+    if (len < 20) return null;
+    const from = Math.max(s + (len > 40 ? 10 : 0), e - LIVE_WIN), rr = rrSince(t0 + from * 1000, t0 + e * 1000), x = rr.length >= 30 ? hrvMetrics(rr) : null;
+    const C = rr.length >= 100 ? rrClean(rr) : null, a = C && C.bad <= 0.05 ? dfaA1(C.rr) : null;
+    return [tag, Math.round(s), Math.round(len), x ? r1(x.hr) : null, x ? r1(x.rmssd) : null, x?.br != null ? r1(x.br) : null, x ? x.q : null, a != null && a > 0.1 && a < 2.5 ? Math.round(a * 100) / 100 : null];
+  }).filter(Boolean);
+  // Kept for the file while the result is on screen: every beat with its time, however long the session was.
+  LAB.exp = { t: t0, beats, marks: LAB.marks.slice() };
+  return { rec: Object.assign({ kind: 'live', t: t0 }, hrvRecord(m), { dur: Math.round(el), ser: LAB.ser, seg, rr: all.filter(x => x > 270 && x < 2200).slice(0, RR_KEEP_LIVE) }) };
+}
+function liveBody(rec, prev) {
+  const seg = rec.seg || [], ok = seg.filter(x => x[4] != null);
+  const same = tag => (prev || []).flatMap(p => (p.seg || []).filter(x => x[0] === tag && x[4] != null).map(x => Math.log(x[4])));
+  const rows = seg.map(x => {
+    const V = x[4] != null ? versus(Math.log(x[4]), same(x[0])) : { word: null };
+    return `<tr><td>${LIVETAGS[x[0]]}<i>${dur(x[2] / 60)}${x[6] != null ? ` · ${x[6]}% clean` : ''}</i></td><td>${x[3] != null ? Math.round(x[3]) : DASH}</td><td>${x[4] != null ? Math.round(x[4]) : DASH}${V.word && V.word !== 'usual' ? ` <span class="vw ${V.z < 0 ? 'bad' : 'good'}">${V.word}</span>` : ''}</td><td>${x[5] != null ? r1(x[5]) : DASH}</td><td>${x[7] != null ? x[7].toFixed(2) : DASH}</td></tr>`;
+  }).join('');
+  // The plainest finding: how the body changed from the first readable stretch to each later one.
+  const a = ok[0], moves = ok.slice(1).map(b => `${LIVETAGS[a[0]]} → ${LIVETAGS[b[0]].toLowerCase()}: RMSSD ${Math.round(a[4])} → ${Math.round(b[4])} ms (${sign((b[4] / a[4] - 1) * 100)}%), heart rate ${Math.round(a[3])} → ${Math.round(b[3])} bpm`);
+  const n7 = ok.filter(x => same(x[0]).length >= 7).length;
+  return `${stats([[r1(rec.rmssd), 'RMSSD, ms'], [Math.round(rec.hr), 'bpm'], [rec.q != null ? `${rec.q}%` : DASH, 'clean beats']])}
+    ${rec.ser?.length > 1 ? `<svg class="livech" viewBox="0 0 300 90" preserveAspectRatio="none" role="img" aria-label="Heart rate and RMSSD through the session">${liveSeries(rec.ser, seg.map(x => [x[1], x[0]]), rec.dur)}</svg>
+      <p class="key"><i class="k tl"></i>heart rate<i class="k rm"></i>RMSSD, last minute${seg.length > 1 ? '<i class="k mk"></i>your marks' : ''}</p>` : ''}
+    ${rows ? `<table class="segt"><tr><th>Stretch</th><th>bpm</th><th>RMSSD</th><th>Breaths</th><th>α1</th></tr>${rows}</table>` : ''}
+    ${moves.length ? `<ul class="reasons">${moves.map(t => `<li>${t}</li>`).join('')}</ul>` : ''}
+    ${rec.q != null && rec.q < 90 ? para(`${100 - rec.q}% of beats needed correcting: movement, a dry strap or a loose fit. Read the numbers of this session loosely.`, 'flag') : ''}
+    ${metricsTable({ ln: Math.log(rec.rmssd), sdnn: rec.sd, pnn50: rec.pnn, sd1: rec.sd1, sd2: rec.sd2 })}
+    ${para(`Each stretch is read from its last five minutes. ${n7 ? 'A word beside RMSSD compares it with your earlier stretches under the same mark.' : 'From the seventh stretch under the same mark, each is compared with your own.'} Not used for the day's verdict: posture, breathing, food and caffeine all move HRV within minutes. ${why('live', 'How to read it')}`)}`;
+}
+// The beats of a saved reading as a file other HRV software opens: one beat a line, seconds from the start and the
+// interval in ms. Right after a Live session the file has every beat with its true time; later, the beats kept with
+// the record (the first hour or so).
+function rrExport(k, t) {
+  const fresh = LAB.exp && String(LAB.exp.t) === String(t) ? LAB.exp : null;
+  const x = t ? (S.lab[k] || []).find(y => String(y.t) === String(t)) : S.hrv[k];
+  const rr = fresh ? fresh.beats.map(b => b[1]) : x?.rr;
+  if (!rr || rr.length < 20) { buzz('warn'); return toast('No beats were kept with this reading'); }
+  const at = new Date(x?.t || fresh?.t || Date.parse(k + 'T00:00')), pad = n => String(n).padStart(2, '0');
+  const head = [`# Health · ${t ? LABS[x?.kind]?.n || 'Live' : 'Morning check'} · ${k} ${pad(at.getHours())}:${pad(at.getMinutes())}`, '# Polar H9, RR intervals as sent by the strap (1/1024 s resolution), uncorrected',
+    ...(fresh?.marks || (x?.seg || []).map(s => [s[1], s[0]])).map(m => `# mark at ${m[0]} s: ${LIVETAGS[m[1]]}`), 'time_s,rr_ms'];
+  let acc = 0;
+  const t0 = fresh ? fresh.beats[0][0] - fresh.beats[0][1] : 0;
+  const lines = rr.map((r, i) => { acc += r; return `${((fresh ? fresh.beats[i][0] - t0 : acc) / 1000).toFixed(3)},${fresh ? r.toFixed(1) : Math.round(r)}`; });
+  saveText(`health-beats-${k}-${pad(at.getHours())}${pad(at.getMinutes())}.csv`, head.concat(lines).join('\n') + '\n', 'text/csv');
+  buzz('ok');
+}
+
 // ---------- what a session says ----------
 function labHist(kind, before) { const out = []; for (const k of Object.keys(S.lab).sort().reverse()) S.lab[k].slice().reverse().forEach(x => { if (x.kind === kind && (!before || x.t < before)) out.push(Object.assign({ k }, x)); }); return out; }
 function labSummary(x) {
   if (x.kind === 'breathe') return `${dur(x.dur / 60)} · ${BREATHS[x.pat]?.n || 'Breathing'}${x.pat === 'rf' ? ` ${x.rate}/min` : ''}${x.rsa != null ? ` · swing ${r1(x.rsa)} bpm` : ''}${x.hr1 != null && x.hr2 != null ? ` · ${Math.round(x.hr1)}→${Math.round(x.hr2)} bpm` : ''}`;
   if (x.kind === 'rf') return `Best ${x.best} breaths a minute`;
+  if (x.kind === 'live') return `${dur(x.dur / 60)} · ${Math.round(x.rmssd)} ms · ${Math.round(x.hr)} bpm${x.seg?.length > 1 ? ` · ${x.seg.length} stretches` : x.seg?.[0] ? ` · ${LIVETAGS[x.seg[0][0]].toLowerCase()}` : ''}`;
   if (x.kind === 'ortho') return `${Math.round(x.hrSup)}→${Math.round(x.hrStd)} bpm (${sign(x.hrStd - x.hrSup)}) · RMSSD ${Math.round(x.rmSup)}→${Math.round(x.rmStd)} ms`;
   return `${Math.round(x.rmssd)} ms · ${Math.round(x.hr)} bpm · ${x.pos || ''}${x.br ? ` · breathing ${r1(x.br)}/min` : ''}`;
 }
@@ -202,6 +320,8 @@ function labResult(K, rec) {
       ${stats([[`${Math.round(rec.hrSup)}→${Math.round(rec.hrStd)}`, 'bpm lying → standing'], [rec.hrPeak ? Math.round(rec.hrPeak) : DASH, 'bpm peak on standing'], [`${Math.round(rec.rmSup)}→${Math.round(rec.rmStd)}`, 'RMSSD, ms']])}
       ${para(`Heart rate rose ${Math.round(d)} bpm on standing${V.word ? `, <b>${V.word}</b> for you (usually ${Math.round(V.m)})` : ''}. ${Vs.word ? `Lying RMSSD was <b>${Vs.word}</b> against your previous tests.` : 'From the seventh test on, each one is read against your own.'} A bigger rise than your usual, or lower HRV in both positions, goes with accumulated fatigue; read it with the morning check, not alone. ${why('ortho', 'Evidence')}`)}${done}</div>`;
   }
+  if (K === 'live') return `<div class="result ok">${stampSvg}<b>${dur(rec.dur / 60)} live saved</b>${liveBody(rec, prev)}
+    <div class="rowb"><button class="ghost" data-act="rrexp" data-k="${dk(new Date(rec.t))}" data-t="${rec.t}">Save the beats as a file</button><span class="grow"></span><button class="solid" data-act="hrresdone">Done</button></div></div>`;
   const V = versus(Math.log(rec.rmssd), prev.filter(x => x.pos === rec.pos).map(x => Math.log(x.rmssd)));
   return `<div class="result ok">${stampSvg}<b>Spot check saved</b>
     ${stats([[r1(rec.rmssd), 'RMSSD, ms'], [Math.round(rec.hr), 'bpm'], [`${rec.q}%`, 'clean beats']])}
@@ -233,6 +353,16 @@ function vLab(kind) {
     body = running ? `<div class="strap st-live">${liveHead()}<p class="eyebrow center" id="labclock"></p><p class="sub center big" id="labstage"></p><button class="ghost wide" data-act="labstop">Cancel</button></div>`
       : `${para('Lie down with the strap on, phone beside you. After 2½ minutes the phone vibrates: stand up straight away and stay still, arms relaxed, for 2½ minutes more. Best done in the morning, the same way each time.')}
         ${HR.conn === 'on' && HR.bpm != null ? `<div class="strap st-live">${liveHead()}</div>` : ''}<button class="solid wide" data-act="labgo" data-k="ortho" ${HR.conn === 'on' ? '' : 'disabled'}>Start · 5 min</button>`;
+  } else if (kind === 'live') {
+    const tags = cur => `<div class="chips wrap tight">${Object.entries(LIVETAGS).map(([k, n]) => `<button class="${cur === k ? 'on' : ''}" data-act="livetag" data-v="${k}">${n}</button>`).join('')}</div>`;
+    body = running ? `<div class="strap st-live">${liveHead()}<p class="eyebrow center" id="labclock"></p>${liveGrid()}
+        <svg class="livech" id="livech" viewBox="0 0 300 90" preserveAspectRatio="none" role="img" aria-label="Heart rate and RMSSD through the session"></svg>
+        <p class="key"><i class="k tl"></i>heart rate<i class="k rm"></i>RMSSD, last minute<i class="k mk"></i>your marks</p>
+        <h3>Now I am</h3>${tags(LAB.tag)}<p class="sub small">Tap when what you are doing changes: each stretch is read on its own.</p>
+        <button class="solid wide" data-act="labstop">Stop and save</button></div>`
+      : `${HR.conn === 'on' && HR.bpm != null ? `<div class="strap st-live">${liveHead()}</div>` : ''}<h3>Starting with</h3>${tags(LAB.tag0)}
+        <button class="solid wide" data-act="labgo" data-k="live" ${HR.conn === 'on' ? '' : 'disabled'}>Start</button>
+        ${para('No protocol and no time limit under four hours: sit with it during work, a breathing practice, a cold shower, a difficult call, or falling asleep. Under a minute is not saved. Phone screen stays on while it runs.')}`;
   } else {
     body = running ? `<div class="strap st-live">${liveHead()}<p class="eyebrow center" id="labclock"></p><button class="ghost wide" data-act="labstop">Cancel</button></div>`
       : `<h3>Record</h3>${seg('spdur', [[60, '1 min'], [120, '2 min'], [180, '3 min'], [300, '5 min']], s.spDur, 'tight')}
@@ -249,7 +379,7 @@ function vLab(kind) {
 function labTiles() {
   return `<div class="tiles">${Object.entries(LABS).map(([k, L]) => {
     const h = labHist(k)[0];
-    return `<a class="tile t-${k}" href="#lab-${k}"><span class="tic">${LABICON[k]}</span><b>${L.n}</b><span class="sub">${h ? `${dateLabel(h.k)}: ${k === 'rf' ? `${h.best}/min` : k === 'breathe' ? dur(h.dur / 60) : k === 'ortho' ? `${sign(h.hrStd - h.hrSup)} bpm` : `${Math.round(h.rmssd)} ms`}` : L.strap ? 'Needs the strap' : 'Strap optional'}</span></a>`;
+    return `<a class="tile t-${k}" href="#lab-${k}"><span class="tic">${LABICON[k]}</span><b>${L.n}</b><span class="sub">${HR.mode === k ? 'Running now' : h ? `${dateLabel(h.k)}: ${k === 'rf' ? `${h.best}/min` : k === 'breathe' ? dur(h.dur / 60) : k === 'live' ? `${dur(h.dur / 60)}, ${Math.round(h.rmssd)} ms` : k === 'ortho' ? `${sign(h.hrStd - h.hrSup)} bpm` : `${Math.round(h.rmssd)} ms`}` : L.strap ? 'Needs the strap' : 'Strap optional'}</span></a>`;
   }).join('')}</div>`;
 }
 const LABICON = {
@@ -257,6 +387,7 @@ const LABICON = {
   rf: '<svg viewBox="0 0 24 24"><path d="M2 12c2-6 4-6 6 0s4 6 6 0 4-6 6 0"/><path d="M4 20v-3M9 20v-5M14 20v-7M19 20v-4"/></svg>',
   ortho: '<svg viewBox="0 0 24 24"><path d="M3 18h7"/><path d="M15 21V9"/><circle cx="15" cy="5" r="2"/><path d="M12 13l3-3 3 3"/></svg>',
   spot: '<svg viewBox="0 0 24 24"><path d="M3 12h4l2-5 3 10 2.5-7 1.5 2H21"/></svg>',
+  live: '<svg viewBox="0 0 24 24"><path d="M2 12h3l2-6 3 12 3-9 2 3h7"/><circle cx="20" cy="5" r="2" fill="currentColor" stroke="none"/></svg>',
 };
 function vLabInfo(p) {
   const list = S.lab[p.k] || [], x = list.find(y => String(y.t) === String(p.t));
@@ -264,11 +395,12 @@ function vLabInfo(p) {
   const L = LABS[x.kind] || { n: 'Session' };
   let body = '';
   if (x.kind === 'spot') body = stats([[r1(x.rmssd), 'RMSSD, ms'], [Math.round(x.hr), 'bpm'], [`${x.q}%`, 'clean beats']]) + beatsViz(x.rr) + metricsTable(x.rr?.length >= 30 ? hrvMetrics(x.rr) : null);
+  else if (x.kind === 'live') body = liveBody(x, labHist('live', x.t));
   else if (x.kind === 'rf') body = `<div class="rfbars">${x.seg.map(([r, a]) => `<div class="${r === x.best ? 'best' : ''}"><i style="height:${a ? (a / Math.max(...x.seg.map(s => s[1] || 0)) * 100).toFixed(0) : 2}%"></i><b>${a != null ? r1(a) : DASH}</b><span>${r}</span></div>`).join('')}</div>`;
   else if (x.kind === 'ortho') body = table([trow('Lying heart rate', `${r1(x.hrSup)} bpm`), trow('Peak on standing', x.hrPeak ? `${r1(x.hrPeak)} bpm` : DASH), trow('Standing heart rate', `${r1(x.hrStd)} bpm`), trow('Rise', `${sign(x.hrStd - x.hrSup, 1)} bpm`), trow('RMSSD lying', `${r1(x.rmSup)} ms`), trow('RMSSD standing', `${r1(x.rmStd)} ms`)]);
   else body = table([trow('Pattern', BREATHS[x.pat]?.n || DASH), trow('Rate', `${x.rate} a minute`), trow('Breaths', x.cyc), x.rsa != null ? trow('Heart-rate swing', `${r1(x.rsa)} bpm`) : '', x.hr1 != null ? trow('First → last minute', `${Math.round(x.hr1)} → ${Math.round(x.hr2)} bpm`) : '', x.share != null ? trow('Power at your breath', `${Math.round(x.share)}%`) : '']);
   return `${sheetTop(`${dateLabel(p.k, { weekday: 'long', day: 'numeric', month: 'long' })} · ${hm(new Date(x.t).getHours() * 60 + new Date(x.t).getMinutes())}`, L.n, `lab-${x.t}`)}${body}
-    <div class="rowb"><button class="danger" data-hold="labdelh" data-k="${p.k}" data-t="${x.t}">Hold to delete</button></div></aside>`;
+    <div class="rowb">${x.rr ? `<button class="ghost" data-act="rrexp" data-k="${p.k}" data-t="${x.t}">Save the beats as a file</button>` : ''}<button class="danger" data-hold="labdelh" data-k="${p.k}" data-t="${x.t}">Hold to delete</button></div></aside>`;
 }
 function labRemove(k, t) {
   const list = S.lab[k] || [], i = list.findIndex(y => String(y.t) === String(t));
@@ -284,7 +416,9 @@ function labAct(a, el) {
   const s = S.settings, v = el.dataset.v, set = (k, val) => { s[k] = val; save(); buzz('tick'); if (LAB.kind === 'breathe' || !HR.mode) { LAB.phases = null; LAB.raf && cancelAnimationFrame(LAB.raf); LAB.raf = 0; } render(); return true; };
   switch (a) {
     case 'labgo': labStart(el.dataset.k); return true;
-    case 'labstop': if (HR.mode === 'breathe' && (Date.now() - HR.t0) / 1000 >= 60) labDone(); else labCancel(); return true;
+    case 'labstop': if ((HR.mode === 'breathe' || HR.mode === 'live') && (Date.now() - HR.t0) / 1000 >= LIVE_MIN) labDone(); else labCancel(); return true;
+    case 'livetag': liveTag(v); return true;
+    case 'rrexp': rrExport(el.dataset.k, el.dataset.t); return true;
     case 'labinfo': openPop({ kind: 'labinfo', k: el.dataset.k, t: el.dataset.t }); return true;
     case 'brpat': return set('brPat', v);
     case 'brrate': return set('brRate', +v);
