@@ -762,3 +762,69 @@ canvas.bx.sq { aspect-ratio: 1; height: auto; background: var(--raise); border: 
 .lk b { display: block; font: 600 14px var(--sans); }
 .lk .sub { display: block; font: 400 12px var(--sans); white-space: nowrap; }
 .lk.muted b { font-weight: 500; }
+
+/* ---------- Food: finding, holding, editing ---------- */
+/* The search and the chips stay at the top while the list scrolls under them. */
+.addhead { position: sticky; top: 0; z-index: 2; background: var(--bg); margin: 0 calc(-1 * var(--gut)); padding: 6px var(--gut) 0;
+  box-shadow: 0 10px 14px -14px rgba(40, 30, 15, .35); }
+.searchbar { position: relative; }
+.searchbar #q { padding-right: 46px; -webkit-appearance: none; appearance: none; }
+.searchbar #q::-webkit-search-cancel-button { display: none; }
+.searchbar .clr { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); width: 38px; height: 38px; border: 0; border-radius: 50%; background: var(--sunk); color: var(--soft); font-size: 20px; line-height: 1; }
+.searchbar .clr:active { transform: translateY(-50%) scale(.9); }
+.addhead .chips { padding-bottom: 8px; }
+.hint { font-size: 12px; color: var(--soft); margin: 8px 0 0; letter-spacing: .01em; }
+.foods li { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; transition: background .25s var(--ease), transform .25s var(--spring); }
+.foods li.pressing { background: var(--sunk); transform: scale(.985); transition-duration: .45s, .45s; }
+.foods li.empty, .foods li.empty .grow { cursor: default; }
+.foods li.empty .rowb { margin-top: 10px; gap: 8px; }
+.foods li .nm { display: block; }
+.foods li.plate .nm .tag, .tag { font: 600 10px var(--sans); letter-spacing: .07em; text-transform: uppercase; color: var(--leaf); border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; vertical-align: 2px; font-style: normal; }
+.foods .x { font-size: 17px; color: var(--soft); }
+
+/* The amount: a big number you can type straight into, steppers either side. */
+.qbox { display: flex; align-items: baseline; justify-content: center; gap: 6px; min-width: 0; color: var(--soft); font-size: 14px; }
+.qin { width: 4.2ch; min-width: 0; border: 0; border-bottom: 2px solid var(--line); background: none; text-align: center; font: 600 34px var(--serif); color: var(--ink); padding: 0; outline: none; transition: border-color .2s; -moz-appearance: textfield; }
+.qin:focus { border-color: var(--haldi); }
+.qin::-webkit-inner-spin-button, .qin::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.qbox > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 11rem; }
+details.more { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 4px; }
+details.more > summary { padding: 10px 0; font-weight: 600; color: var(--ink); cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::after { content: '›'; font-size: 20px; color: var(--soft); transition: transform .25s var(--ease); }
+details.more[open] > summary::after { transform: rotate(90deg); }
+details.more .fgrid label { display: block; }
+.dayrow { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
+.dayrow input { flex: 1; min-width: 0; padding: 10px 12px; border-radius: var(--r1); border: 1px solid var(--line); background: var(--raise); color: var(--ink); font: inherit; min-height: 44px; }
+.rowb.tight { margin-top: 6px; gap: 16px; }
+
+/* Today: meals, each with its protein against the main-meal target */
+.meals { margin-top: 6px; }
+.meal .mt { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.pmeter { display: block; width: 72px; height: 4px; border-radius: 4px; background: var(--track); overflow: hidden; }
+.pmeter i { display: block; height: 100%; background: var(--haldi); border-radius: 4px; transition: width .6s var(--ease); }
+.pmeter i.ok { background: var(--leaf); }
+.meal.empty { padding: 12px 0; }
+.meal.empty h2 { color: var(--soft); }
+.meal .ghost.small { margin-top: 8px; padding: 8px 14px; font-size: 13.5px; }
+.saveplate { margin-top: 6px; color: var(--soft); }
+.meal li[data-swipe] { border-radius: 10px; }
+
+/* Body today: weight, steps, sleep (and waist in a waist week) in one place */
+.bodyday { padding: 18px 0 6px; border-bottom: 1px solid var(--line); }
+.bodyday .vitals { margin-top: 10px; }
+.vitals.n4 { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, .8fr) minmax(0, .9fr); gap: 10px; }
+.vitals label { position: relative; }
+.vitals .duedot { position: absolute; top: 2px; right: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--haldi); box-shadow: 0 0 0 4px color-mix(in srgb, var(--haldi) 20%, transparent); animation: duepulse 2.4s var(--ease) infinite; }
+.vitals label.due .f { border-color: var(--haldi); }
+@keyframes duepulse { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--haldi) 0%, transparent); } }
+.bodyday .check { border-bottom: 0; }
+.glance { padding-top: 18px; }
+.glance .cards { margin-top: 2px; }
+html.still .vitals .duedot { animation: none; }
+
+/* The section bar on the long tabs */
+.jumpbar { position: sticky; top: 0; z-index: 2; background: color-mix(in srgb, var(--bg) 88%, transparent); -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
+  padding: 8px var(--gut); margin-bottom: 4px; gap: 6px; border-bottom: 1px solid transparent; }
+.jumpbar button { min-height: 34px; padding: 6px 13px; font-size: 13.5px; transition: background .25s var(--ease), color .25s var(--ease), border-color .25s var(--ease); }
+#view > section.block { scroll-margin-top: 58px; }

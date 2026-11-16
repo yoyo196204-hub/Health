@@ -51,6 +51,11 @@ function cleanFood(e, logged) {
   if (q == null) return null;
   return Object.assign(f, { q, m: MEALS.some(m => m[0] === e.m) ? e.m : 'lunch' });
 }
+function cleanPlate(x) {
+  if (!obj(x)) return null;
+  const n = str(x.n, 40).trim(), items = Array.isArray(x.items) ? x.items.slice(0, 30).map(e => cleanFood(e, true)).filter(Boolean) : [];
+  return n && items.length ? { n, items } : null;
+}
 // An exercise is a library id, 'og:' and the number of an exercise from openGym's library, or 'x:' and a name for
 // anything else the library does not know.
 function liftId(name) {
@@ -276,6 +281,8 @@ function sanitize(raw) {
     cardio: dated(raw.cardio, a => { const x = list(a, 10, cleanCardio); return x.length ? x : null; }),
     pairs,
     custom: list(raw.custom, 300, e => cleanFood(e, false)), freq,
+    // Your own plates: a meal saved under a name, logged again in one tap. Each item keeps its own numbers.
+    plates: list(raw.plates, 40, cleanPlate),
     meta: {
       exported: DATE.test(meta.exported) ? meta.exported : null, watch: DATE.test(meta.watch) ? meta.watch : null,
       sync: num(meta.sync, 1e12, 1e13), fresh: cleanFresh(meta.fresh), backup: DATE.test(meta.backup) ? meta.backup : null,

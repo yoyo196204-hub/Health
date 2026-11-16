@@ -87,7 +87,7 @@ you log in openGym arrives with its name and the muscles it trains, from `opengy
 
 | Tab | What it is for |
 | --- | --- |
-| Today | The day brief: the verdict as a ring with HRV, resting heart rate and sleep each against your own normal; a dock of quick actions; what is due; sideways cards for last night (with its stages), movement, body trend and the next openGym session; calories, protein and fibre left; one concrete suggestion; the meals (swipe one left to remove it) |
+| Today | In the order of the day: the verdict as a ring with HRV, resting heart rate and sleep each against your own normal; a dock of quick actions; what is due elsewhere; calories, protein and fibre left with one concrete suggestion; the meals, each with its protein against the main-meal target (swipe one left to remove it, save any meal as a plate); Body today (weight, steps, sleep, and the waist in a waist week, each marked while due); then at a glance: last night, movement, body trend and the next openGym session |
 | Recovery | One verdict for the day; the H9 morning check (1–5 minutes, lying or sitting) with live beats, skin contact and signal quality, and a result with its tachogram, Poincaré plot and every measure; the strap Lab; night by night, each opening a day in detail; HRV against your normal range, read with morning heart rate; resting and sleeping heart rate; sleep; the watch's overnight HRV and breathing rate against their own baselines; watch-vs-strap agreement |
 | Training | The next openGym session with today's recovery guidance; the shoulder check; sessions with their sets and watch heart rate; strength per lift; the muscle map; cardio with the H9 (live trace, zones, α1) and the aerobic threshold it gives |
 | Review | The week as a matrix, the actions it triggers, the energy ledger, body trend and projections, links in your own data |
@@ -96,9 +96,11 @@ you log in openGym arrives with its name and the muscles it trains, from `opengy
 | A day in detail (tap a night, or Your day) | The watch's heart rate across 24 hours with sleep and workouts marked, the night stage by stage, and every number against your previous four weeks |
 | Beat by beat (from any morning check or Lab session) | The recording beat by beat: one finger reads each beat (time to the millisecond, RR, bpm, change from the last, and what correction it needed), a pinch zooms, the strip below moves the window; RMSSD, SDNN, pNN50, SD1/SD2, the Poincaré plot and the spectrum are worked out again for the stretch on screen |
 | Data checks (Me, and a line in Review when something needs a look) | About twenty fixed-rule checks across every dataset: food energy against its own macros, sleep stages against the night's total, watch resting and workout heart rate against the strap (Bland–Altman), saved RMSSD against its own beats, steps against distance, active against total energy, duplicate workouts, load typos, and how fresh the watch data is. Each gives its numbers and lists the records that failed |
+| Adding food | Search that understands Marathi, Hindi and English names (roti, chawal, anda, chaas, aloo, kombdi…) and forgives a typo; chips for Usual, Recent (exactly as you last logged it), Plates (yours first), Quick add, Mine, and every group from home food to Pune street food, pizza and Chinese, bakery and Irani café, and upvas. Tap adds one; hold any food for any amount, by portion or by weight, into any meal |
+| A logged food (tap it) | Type any amount or step it in quarters and halves, weigh it, change the meal, change its own numbers (it then becomes your own entry and the library food stays as it was), move or copy it to another day, or save it as your own food |
 | Me | Your numbers, and a page each for goal, training, profile, data sources, all your data (see, change or delete any record), backup and data, feel, and the evidence |
 
-Gestures: swipe sideways to change tab, swipe right on a page to go back, swipe a row left to delete it (with undo), swipe a result card or a toast away, drag a sheet down or tap outside it to close.
+Gestures: swipe sideways to change tab, swipe right on a page to go back, swipe a row left to delete it (with undo), hold a food for its portion sheet, hold a stepper to repeat, swipe a result card or a toast away, drag a sheet down or tap outside it to close. Recovery, Training and Review carry a section bar that stays at the top and follows your reading.
 
 ## How the numbers are made
 
@@ -111,7 +113,7 @@ Gestures: swipe sideways to change tab, swipe right on a page to go back, swipe 
 - **Food**: every food carries protein, available carbohydrate, fat and fibre, and the grams in its household unit, so a
   portion can be weighed. Home dishes are recipe estimates; packaged foods come from their label panels (Open Food Facts,
   barcode given), or only what the maker states when that is all there is (carbs and fat then stay unknown, never
-  guessed); raw ingredients from IFCT 2017 or USDA. Every panel is checked against its own macros (4/4/9, fibre 2) in the
+  guessed); raw ingredients from IFCT 2017 or USDA. Pune and eating-out food (misal, tarri pohe, bun maska, mastani, pizza by the slice, burgers, hakka noodles, Kolhapuri and Malvani non-veg, upvas dishes) are estimates for a typical portion, never a brand's figures. Every panel is checked against its own macros (4/4/9, fibre 2) in the
   tests, and your own foods and entries are checked the same way as you type them.
 
 - **Weight trend**: each weigh-in moves a smoothed line a tenth of the way; the weekly rate is the Theil–Sen
