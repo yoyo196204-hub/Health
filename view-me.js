@@ -31,6 +31,7 @@ function vMe() {
       ${navrow('#set-profile', 'Profile', `${p.sex === 'm' ? 'Male' : 'Female'} · ${p.h} cm · started at ${p.w0} kg`, ICON.person)}
       ${navrow('#set-sources', 'Data sources', (NATIVE ? (SYNC.status?.granted?.length ? `Health Connect · synced ${S.meta.sync ? ago(S.meta.sync) : 'not yet'}` : 'Health Connect not connected') : 'Zepp files, H9') + (OGF.folder || S.meta.og ? ' · openGym' : ''), ICON.link)}
       ${navrow('#set-records', 'All your data', 'See, change or delete any record', ICON.list)}
+      ${navrow('#set-checks', 'Data checks', checkLine(), ICON.check)}
       ${navrow('#set-data', 'Backup and data', bk, ICON.box)}
       ${navrow('#set-remind', 'Reminders', !NATIVE ? 'In the Android app' : remindOn() ? [S.settings.remAm !== 'off' && `morning ${S.settings.remAm}`, S.settings.remWk !== 'off' && `waist ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][+S.settings.remWk]}`, S.settings.remPm !== 'off' && `food ${S.settings.remPm}`].filter(Boolean).join(' · ') : 'Off', ICON.bell)}
       ${navrow('#set-feel', 'Feel', `Haptics ${S.settings.haptics} · motion ${S.settings.motion} · ${S.settings.theme} theme`, ICON.hand)}

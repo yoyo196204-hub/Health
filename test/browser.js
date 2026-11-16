@@ -38,7 +38,10 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
   });
   await test('a sideways swipe changes tab, and the page is left where it belongs', async () => {
     await go('today'); await page.evaluate(() => scrollTo(0, 0));
-    await drag(320, 400, 60, 408);
+    // Start on the heading: a swipe that begins on a field is left to the field, by design, and a fixed point on
+    // the screen lands on whatever Today happens to show there.
+    const y = await page.evaluate(() => { const r = document.querySelector('#view header h1').getBoundingClientRect(); return Math.round(r.top + r.height / 2); });
+    await drag(320, y, 60, y + 8);
     const s = await page.evaluate(() => ({ tab, tr: document.getElementById('view').style.transform }));
     assert.deepStrictEqual(s, { tab: 'recovery', tr: '' });
   });
@@ -78,6 +81,88 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     const csv = fs.readFileSync(await dl.path(), 'utf8').split('\n');
     assert.ok(/^health-beats-.*\.csv$/.test(dl.suggestedFilename()));
     assert.ok(csv.includes('time_s,rr_ms') && csv.some(l => l.startsWith('# mark at 240 s: Moving')) && csv.filter(l => /^\d/.test(l)).length > 400);
+  });
+  const shot = async name => { if (process.env.SHOTS) await page.screenshot({ path: path.join(process.env.SHOTS, `${name}.png`), fullPage: true }); };
+  await test('the beat explorer: a finger reads beats, a pinch zooms, and the numbers follow the window', async () => {
+    // A morning check with a missed beat in it, saved the way a recording is.
+    const k = await page.evaluate(() => {
+      const rr = [];
+      for (let i = 0; i < 260; i++) rr.push(Math.round(950 + 70 * Math.sin(i / 2.2) + (i % 5) * 3));
+      rr[120] *= 2;
+      const k = todayKey(), m = hrvMetrics(rr);
+      S.hrv[k] = { rmssd: r1(m.rmssd), hr: r1(m.hr), q: m.q, rr, t: Date.now(), pos: 'lying', dur: 240 }; save();
+      return k.replace(/-/g, '');
+    });
+    await go(`beats-h${k}`); await page.waitForTimeout(400);
+    await shot('beats');
+    const box = await page.evaluate(() => { const r = document.getElementById('bxt').getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
+    assert.ok(box.w > 250 && box.h > 150, 'the chart has room');
+    const inked = await page.evaluate(() => { const c = document.getElementById('bxt'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; });
+    assert.ok(inked > 2000, 'the beats are drawn');
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.x + box.w * 0.5, y: box.y + box.h / 2 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await page.waitForTimeout(350);   // not a double tap
+    await drag(box.x + box.w * 0.3, box.y + box.h / 2, box.x + box.w * 0.6, box.y + box.h / 2);
+    const read = await page.evaluate(() => document.getElementById('bxread').textContent);
+    assert.ok(/Beat \d+/.test(read) && /ms/.test(read) && /bpm/.test(read), read);
+    assert.strictEqual(await page.evaluate(() => overlay?.type), 'beats', 'reading beats never swipes the page away');
+    const before = await page.evaluate(() => [BX.v1 - BX.v0, document.getElementById('bxstats').textContent]);
+    const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: cx - 30, y: cy, id: 1 }, { x: cx + 30, y: cy, id: 2 }] });
+    for (let i = 1; i <= 8; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: cx - 30 - i * 14, y: cy, id: 1 }, { x: cx + 30 + i * 14, y: cy, id: 2 }] }); await page.waitForTimeout(16); }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await page.waitForTimeout(300);
+    const after = await page.evaluate(() => [BX.v1 - BX.v0, document.getElementById('bxstats').textContent]);
+    assert.ok(after[0] < before[0] * 0.6, `pinch zoomed in: ${before[0]} → ${after[0]} s`);
+    assert.notStrictEqual(after[1], before[1], 'the window’s numbers changed with it');
+    await page.tap('[data-act="bxgo"]');
+    assert.ok(/missed beat, split/.test(await page.evaluate(() => document.getElementById('bxread').textContent)), 'a correction can be gone to and read');
+    await shot('beats-zoomed');
+  });
+  await test('data checks: every check has a result, and a planted impossible food is caught', async () => {
+    await page.evaluate(() => { (S.food[todayKey()] ||= []).push({ id: 'qt', n: 'Typo shake', u: '1', k: 60, p: 40, fb: 0, m: 'snack', q: 1 }); save(); });
+    await go('set-checks');
+    await shot('checks');
+    const r = await page.evaluate(() => [...document.querySelectorAll('.ck')].map(li => [li.className, li.querySelector('summary .sub').textContent]));
+    assert.ok(r.length >= 15, `${r.length} checks`);
+    assert.ok(r.every(([, t]) => t.trim().length > 10), 'each says what it found');
+    assert.ok(r.some(([c, t]) => /bad/.test(c) && /more energy in protein/.test(t)));
+    await go('review');
+    assert.ok(await page.evaluate(() => !!document.querySelector('.ckbanner.bad')), 'Review says something does not add up');
+    await page.evaluate(() => { S.food[todayKey()] = S.food[todayKey()].filter(e => e.id !== 'qt'); save(); });
+  });
+  await test('recovery, training, review: the inputs behind the verdict, nights that end, short session list, honest links', async () => {
+    await page.evaluate(() => { const k = shift(todayKey(), -1); S.sleepx[k] = { d: 60, l: 200, r: 60, w: 10, on: -60 }; S.sleep[k] = 5.5; save(); });
+    await go('recovery');
+    assert.strictEqual(await page.evaluate(() => document.querySelectorAll('.verdict .sgn').length), 4);
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll('.nights .sub')].some(e => /23:00–04:30/.test(e.textContent))), 'a night with no time in bed ends when its stages do');
+    await page.tap('.sgn[data-to="rc-sleep"]'); await page.waitForTimeout(700);
+    assert.ok(await page.evaluate(() => Math.abs(document.getElementById('rc-sleep').getBoundingClientRect().top) < 200), 'tapping an input scrolls to its section');
+    await shot('recovery');
+    await go('training');
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll('#view .block')].findIndex(b => /This week/.test(b.textContent)) < [...document.querySelectorAll('#view .block')].findIndex(b => /Last three weeks/.test(b.textContent))));
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll('#view .block')].find(b => /Last three weeks/.test(b.querySelector('h2').textContent)).querySelectorAll(':scope > ul.list > li').length <= 4 + 7));
+    await go('review');
+    const lk = await page.evaluate(() => [...document.querySelectorAll('.lk')].map(e => e.textContent));
+    assert.ok(lk.length >= 5 && lk.every(t => /link|variation|of 14 days/.test(t)), lk.join(' | '));
+    assert.ok(lk.filter(t => /link/.test(t)).every(t => /95%/.test(t)), 'every named link carries its interval');
+  });
+  await test('food: an Amul pack from its label, weighed by the gram, with carbs and fat on Today', async () => {
+    await go('add-snack');
+    await page.tap('.chips button[data-c="amul"]');
+    await shot('add-amul');
+    await page.tap('li[data-flash="snackamul_pbm"] .add');
+    await go('today');
+    const line = await page.evaluate(() => document.querySelector('.macros')?.textContent || '');
+    assert.ok(/Carbs \d+ g/.test(line) && /Fat \d+ g/.test(line), line);
+    const i = await page.evaluate(() => S.food[todayKey()].findIndex(e => e.id === 'amul_pbm'));
+    await page.evaluate(i => openPop({ kind: 'fedit', i }), i); await page.waitForTimeout(400);
+    await page.fill('#fg', '300'); await page.waitForTimeout(150);
+    const e = await page.evaluate(i => S.food[todayKey()][i], i);
+    assert.strictEqual(e.q, 1.5); assert.strictEqual(e.c, 8); assert.strictEqual(e.src, 'label');
+    assert.ok(/Per 100 ml: 54 kcal/.test(await page.evaluate(() => document.getElementById('fsum').textContent)));
+    await shot('food-edit');
+    await page.evaluate(() => closePop());
   });
   await test('no errors were thrown on any screen', async () => assert.deepStrictEqual(errors, []));
 

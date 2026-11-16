@@ -21,7 +21,10 @@ function mirrorRead() {
 function mirrorWrite(text) { if (NATIVE && typeof NATIVE.mirrorWrite === 'function') nat('mirrorWrite', text); }
 
 // ---------- Health Connect ----------
-const SYNC = { busy: false, err: '', status: null, got: null };
+const SYNC = { busy: false, err: '', status: null, got: null, at: 0, zepp: 0, timer: null };
+// How long Health Connect may take before the read counts as failed: a read that never answers must not leave the
+// app saying "Syncing…" forever and refusing every later sync.
+const SYNC_WAIT = 45000;
 function hcCheck() { if (NATIVE) nat('hcStatus'); }
 function hcAsk() { if (NATIVE) nat('hcRequest'); }
 // Reads only what is new since the last sync (plus two days, since the watch fills in late), up to 30 days.
@@ -32,22 +35,70 @@ function syncNow(days) {
   days = days || (last ? clamp(Math.ceil((Date.now() - last) / DAY) + 2, 3, 30) : 30);
   const windows = [];
   for (const k of range(Math.min(days, 60))) for (const c of S.cardio[k] || []) if (c.t) windows.push([c.t, Math.round(c.t + c.dur * 1000)]);
-  Object.assign(SYNC, { busy: true, err: '' });
+  Object.assign(SYNC, { busy: true, err: '', at: Date.now() });
+  clearTimeout(SYNC.timer);
+  SYNC.timer = setTimeout(() => { if (SYNC.busy) { SYNC.busy = false; SYNC.err = 'Health Connect did not answer. Pull down to try again.'; renderSoft(); } }, SYNC_WAIT);
   nat('hcRead', JSON.stringify({ days, windows }));
   paintSync();
 }
-function autoSync() {
-  if (NATIVE && SYNC.status?.granted?.length && (!S.meta.sync || Date.now() - S.meta.sync > 15 * 6e4)) syncNow();
+// Reading the last few days costs well under a second, so the app reads again whenever it comes back to the front
+// after two minutes, and every five minutes while it stays open on screen. Zepp itself only passes data to Health
+// Connect when its own app syncs with the watch, so after "Open Zepp" the next return reads at once, and again a
+// little later, because Zepp writes to Health Connect a few seconds after its own sync finishes.
+function autoSync(force) {
+  if (!NATIVE || !SYNC.status?.granted?.length) return;
+  if (force || !S.meta.sync || Date.now() - S.meta.sync > 2 * 6e4) syncNow();
 }
+function openZepp() { SYNC.zepp = Date.now(); nat('openZepp'); }
+function zeppBack() {
+  if (!SYNC.zepp || Date.now() - SYNC.zepp > 30 * 6e4) return false;
+  SYNC.zepp = 0;
+  autoSync(true);
+  setTimeout(() => { if (!document.hidden) autoSync(true); }, 25000);
+  return true;
+}
+if (NATIVE) setInterval(() => { if (!document.hidden && !SYNC.busy && S.meta.sync && Date.now() - S.meta.sync > 5 * 6e4) syncNow(3); }, 30000);
 NEV['hc-status'] = st => { SYNC.status = st; autoSync(); renderSoft(); };
 NEV['hc-data'] = P => {
-  SYNC.busy = false;
+  SYNC.busy = false; clearTimeout(SYNC.timer);
   if (!P || P.error) SYNC.err = P?.error || 'Health Connect did not answer.';
-  else { SYNC.got = mergeSync(P); S.meta.sync = Date.now(); save(); }
+  else {
+    SYNC.got = mergeSync(P); S.meta.sync = Date.now();
+    // Kept with the data, so the app can always say how old the newest watch data is, not just when it last asked.
+    const f = cleanFresh(Object.assign({}, obj(P.fresh) || {}, { read: num(P.read, 1e12, 1e13) || Date.now(), err: Array.isArray(P.errors) ? P.errors : [] }));
+    if (f) S.meta.fresh = f;
+    save();
+  }
   renderSoft();
 };
-NEV.resume = () => { rollDay(); strapAuto(); autoSync(); autoBackup(); ogAuto(); renderSoft(); };
+NEV.resume = () => { rollDay(); strapAuto(); if (!zeppBack()) autoSync(); autoBackup(); ogAuto(); renderSoft(); };
 NEV.pause = () => { remindPlan(); flushMirror(); };
+// ---------- how fresh the watch data really is ----------
+// The newest moment any record from the watch app was written into Health Connect. That, not when this app last
+// read, says whether the watch's data has come through yet.
+function watchWrote() {
+  const F = S.meta.fresh;
+  if (!F) return null;
+  let best = null;
+  for (const [k, x] of Object.entries(F.k)) if (x.w && (!F.watch || x.src === F.watch) && (!best || x.w > best.w)) best = { k, ...x };
+  return best;
+}
+// Plain words for the freshness of each stream: "steps up to 14:05", "last night", "heart rate up to 13:58".
+function freshParts() {
+  const F = S.meta.fresh;
+  if (!F) return [];
+  const t = ms => { const d = new Date(ms), k = dk(d), h = hm(d.getHours() * 60 + d.getMinutes()); return k === todayKey() ? h : `${dateLabel(k)} ${h}`; };
+  const out = [];
+  if (F.k.steps?.e) out.push(`steps to ${t(F.k.steps.e)}`);
+  if (F.k.heart?.e) out.push(`heart rate to ${t(F.k.heart.e)}`);
+  if (F.k.sleep?.e) { const k = dk(new Date(F.k.sleep.e)); out.push(k === todayKey() ? 'last night in' : `sleep to ${dateLabel(k)}`); }
+  return out;
+}
+// The watch app has passed nothing new for a while, during waking hours: worth saying, with the way to fix it.
+function watchLagging() {
+  const W = watchWrote(), h = new Date().getHours();
+  return !!W && h >= 8 && h < 23 && Date.now() - W.w > 3 * 36e5;
+}
 // Update the sync line in place, so a sync never steals focus from a field being typed in.
 function paintSync() { const el = $('#syncline'); if (el) el.outerHTML = syncLine(); }
 

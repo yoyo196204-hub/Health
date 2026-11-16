@@ -30,6 +30,7 @@ const ICON = {
   hand: '<svg viewBox="0 0 24 24"><path d="M12 3v9M9 5v8M15 5v8M6 9v6a6 6 0 0 0 12 0V9"/></svg>',
   bell: '<svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>',
   list: '<svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><path d="M4 12.5l4.5 4.5L20 5.5"/><path d="M4 20h16" opacity=".45"/></svg>',
   book: '<svg viewBox="0 0 24 24"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10"/></svg>',
 };
 

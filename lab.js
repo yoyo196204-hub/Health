@@ -321,7 +321,7 @@ function labResult(K, rec) {
       ${para(`Heart rate rose ${Math.round(d)} bpm on standing${V.word ? `, <b>${V.word}</b> for you (usually ${Math.round(V.m)})` : ''}. ${Vs.word ? `Lying RMSSD was <b>${Vs.word}</b> against your previous tests.` : 'From the seventh test on, each one is read against your own.'} A bigger rise than your usual, or lower HRV in both positions, goes with accumulated fatigue; read it with the morning check, not alone. ${why('ortho', 'Evidence')}`)}${done}</div>`;
   }
   if (K === 'live') return `<div class="result ok">${stampSvg}<b>${dur(rec.dur / 60)} live saved</b>${liveBody(rec, prev)}
-    <div class="rowb"><button class="ghost" data-act="rrexp" data-k="${dk(new Date(rec.t))}" data-t="${rec.t}">Save the beats as a file</button><span class="grow"></span><button class="solid" data-act="hrresdone">Done</button></div></div>`;
+    <div class="rowb">${rec.rr?.length >= 20 ? `<a class="ghost link" href="#beats-l${rec.t}">Explore beat by beat</a>` : ''}<button class="ghost" data-act="rrexp" data-k="${dk(new Date(rec.t))}" data-t="${rec.t}">Save as a file</button><span class="grow"></span><button class="solid" data-act="hrresdone">Done</button></div></div>`;
   const V = versus(Math.log(rec.rmssd), prev.filter(x => x.pos === rec.pos).map(x => Math.log(x.rmssd)));
   return `<div class="result ok">${stampSvg}<b>Spot check saved</b>
     ${stats([[r1(rec.rmssd), 'RMSSD, ms'], [Math.round(rec.hr), 'bpm'], [`${rec.q}%`, 'clean beats']])}
@@ -400,7 +400,7 @@ function vLabInfo(p) {
   else if (x.kind === 'ortho') body = table([trow('Lying heart rate', `${r1(x.hrSup)} bpm`), trow('Peak on standing', x.hrPeak ? `${r1(x.hrPeak)} bpm` : DASH), trow('Standing heart rate', `${r1(x.hrStd)} bpm`), trow('Rise', `${sign(x.hrStd - x.hrSup, 1)} bpm`), trow('RMSSD lying', `${r1(x.rmSup)} ms`), trow('RMSSD standing', `${r1(x.rmStd)} ms`)]);
   else body = table([trow('Pattern', BREATHS[x.pat]?.n || DASH), trow('Rate', `${x.rate} a minute`), trow('Breaths', x.cyc), x.rsa != null ? trow('Heart-rate swing', `${r1(x.rsa)} bpm`) : '', x.hr1 != null ? trow('First → last minute', `${Math.round(x.hr1)} → ${Math.round(x.hr2)} bpm`) : '', x.share != null ? trow('Power at your breath', `${Math.round(x.share)}%`) : '']);
   return `${sheetTop(`${dateLabel(p.k, { weekday: 'long', day: 'numeric', month: 'long' })} · ${hm(new Date(x.t).getHours() * 60 + new Date(x.t).getMinutes())}`, L.n, `lab-${x.t}`)}${body}
-    <div class="rowb">${x.rr ? `<button class="ghost" data-act="rrexp" data-k="${p.k}" data-t="${x.t}">Save the beats as a file</button>` : ''}<button class="danger" data-hold="labdelh" data-k="${p.k}" data-t="${x.t}">Hold to delete</button></div></aside>`;
+    <div class="rowb">${x.rr ? `<a class="solid link" href="#beats-l${x.t}">Explore beat by beat</a><button class="ghost" data-act="rrexp" data-k="${p.k}" data-t="${x.t}">Save as a file</button>` : ''}<span class="grow"></span><button class="danger" data-hold="labdelh" data-k="${p.k}" data-t="${x.t}">Hold to delete</button></div></aside>`;
 }
 function labRemove(k, t) {
   const list = S.lab[k] || [], i = list.findIndex(y => String(y.t) === String(t));

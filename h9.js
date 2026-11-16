@@ -441,7 +441,7 @@ function resultCard(res) {
     return `<div class="result ok">${stampSvg}
       <b>Morning check saved${res.replaced ? ', replacing this morning’s earlier one' : ''}</b>
       ${stats([[r1(x.rmssd), 'RMSSD, ms'], [Math.round(x.hr), 'bpm'], [`${x.q}%`, 'clean beats']])}${band}
-      ${beatsViz(x.rr)}
+      ${beatsViz(x.rr, `#beats-h${res.k.replace(/-/g, '')}`)}
       <p class="sub">Verdict today: <b>${VERDICT[R.level][0].toLowerCase()}</b>.${V.roll ? ` 7-day average now ${r1(V.roll)} ms.` : ''}</p>
       ${metricsTable(m)}
       <div class="rowb">${next}<span class="grow"></span><button class="solid" data-act="hrresdone">Done</button></div></div>`;
@@ -480,7 +480,7 @@ function metricsTable(m) {
 }
 // The recording itself: heart rate beat by beat (the breathing is the wave in it), and the Poincaré plot of each
 // interval against the next (its width is beat-to-beat variability, its length the slower swings).
-function beatsViz(raw) {
+function beatsViz(raw, href) {
   if (!raw || raw.length < 20) return '';
   const rr = rrClean(raw).rr, W = 300, H = 70, hr = rr.map(x => 60000 / x), lo = Math.min(...hr) - 1, hi = Math.max(...hr) + 1;
   let t = 0;
@@ -490,7 +490,7 @@ function beatsViz(raw) {
   const dots = rr.slice(1).map((x, i) => `<circle cx="${S2(rr[i]).toFixed(1)}" cy="${(P - S2(x)).toFixed(1)}" r="1.6"/>`).join('');
   return `<div class="beatsviz"><div><svg class="tacho" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Heart rate beat by beat"><path d="${d}"/></svg>
       <p class="key">Beat by beat, ${Math.round(lo + 1)}–${Math.round(hi - 1)} bpm over ${Math.round(T / 1000)} s</p></div>
-    <div><svg class="poincare" viewBox="0 0 ${P} ${P}" role="img" aria-label="Poincaré plot"><line x1="0" y1="${P}" x2="${P}" y2="0"/>${dots}</svg><p class="key">Each beat against the next</p></div></div>`;
+    <div><svg class="poincare" viewBox="0 0 ${P} ${P}" role="img" aria-label="Poincaré plot"><line x1="0" y1="${P}" x2="${P}" y2="0"/>${dots}</svg><p class="key">Each beat against the next</p></div>${href ? `<a class="bxopen" href="${href}">Explore beat by beat ›</a>` : ''}</div>`;
 }
 // A saved session's heart rate over time, with its α1 windows marked where they fell.
 function traceChart(c) {
@@ -521,9 +521,9 @@ function vHrvInfo(p) {
   const m = x.rr?.length >= 30 ? hrvMetrics(x.rr) : null, V = hrvState(p.k);
   return `${sheetTop(`Morning check · ${dateLabel(p.k, { weekday: 'long', day: 'numeric', month: 'long' })}${x.t ? ` · ${hm(new Date(x.t).getHours() * 60 + new Date(x.t).getMinutes())}` : ''}`, `${r1(x.rmssd)} ms`, `hrv-${p.k}`)}
     ${stats([[Math.round(x.hr), 'bpm'], [x.q != null ? `${x.q}%` : DASH, 'clean beats'], [V.lo ? `${Math.round(V.lo)}–${Math.round(V.hi)}` : DASH, 'your range, ms']])}
-    ${beatsViz(x.rr)}${metricsTable(m || { sdnn: x.sd, pnn50: x.pnn, sd1: x.sd1, sd2: x.sd2, hf: x.hf, lf: x.lf, br: x.br })}
+    ${beatsViz(x.rr, `#beats-h${p.k.replace(/-/g, '')}`)}${metricsTable(m || { sdnn: x.sd, pnn50: x.pnn, sd1: x.sd1, sd2: x.sd2, hf: x.hf, lf: x.lf, br: x.br })}
     ${x.pos ? para(`Recorded ${x.pos}${x.dur ? `, ${dur(x.dur / 60)}` : ''}.`) : ''}
-    <div class="rowb">${x.rr ? `<button class="ghost" data-act="rrexp" data-k="${p.k}">Save the beats as a file</button>` : ''}<button class="danger" data-hold="hrvdel" data-k="${p.k}">Hold to delete</button></div></aside>`;
+    <div class="rowb">${x.rr ? `<a class="solid link" href="#beats-h${p.k.replace(/-/g, '')}">Explore beat by beat</a><button class="ghost" data-act="rrexp" data-k="${p.k}">Save as a file</button>` : ''}<span class="grow"></span><button class="danger" data-hold="hrvdel" data-k="${p.k}">Hold to delete</button></div></aside>`;
 }
 ACT_HOLD.hrvdel = el => { const k = el.dataset.k, was = S.hrv[k]; if (!was) return; delete S.hrv[k]; save(); closePop(); undoable(`Morning check of ${dateLabel(k)} deleted`, () => { S.hrv[k] = was; }); };
 // Loaded: this file ran to the end.

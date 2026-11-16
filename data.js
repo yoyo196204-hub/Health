@@ -8,9 +8,10 @@ const PACE = { maintain: ['Maintain', 0, 'Hold your weight; train for strength a
 
 const MEALS = [['breakfast', 'Breakfast'], ['lunch', 'Lunch'], ['snack', 'Snacks'], ['dinner', 'Dinner']];
 const CATS = [['usual', 'Usual'], ['quick', 'Quick'], ['thali', 'Thali'], ['roti', 'Poli & bhaat'], ['dal', 'Dal & usal'], ['bhaji', 'Bhaji'], ['protein', 'Protein'],
-  ['nashta', 'Nashta'], ['snack', 'Snacks'], ['sweet', 'God'], ['festival', 'Faral & sana'], ['drink', 'Drinks'], ['fruit', 'Fruit'], ['kerala', 'South Indian'], ['nonveg', 'Egg & non-veg'], ['mine', 'Mine']];
+  ['nashta', 'Nashta'], ['snack', 'Snacks'], ['sweet', 'God'], ['festival', 'Faral & sana'], ['drink', 'Drinks'], ['fruit', 'Fruit'], ['kerala', 'South Indian'], ['nonveg', 'Egg & non-veg'],
+  ['amul', 'Amul'], ['powder', 'Protein products'], ['raw', 'By weight'], ['mine', 'Mine']];
 
-// [id, name, household unit, kcal, protein, carbs, fat, fibre, category]
+// [id, name, household unit, kcal, protein, available carbs (fibre not included), fat, fibre, category]
 // Raw ingredients follow IFCT 2017 (ICMR-NIN). Cooked dishes are estimates from
 // typical home recipes; oil and portion size move them by about 20%.
 const FOODS = [
@@ -170,20 +171,20 @@ const FOODS = [
   ['colddrink', 'Cold drink / packaged juice', '250 ml', 105, 0, 27, 0, 0, 'drink'],
   ['coconut_water', 'Shahalyache pani', '1 glass', 45, 0.5, 10, 0, 0, 'drink'],
 
-  ['banana', 'Keli (banana)', '1 medium', 105, 1.5, 27, 0.5, 3, 'fruit'],
-  ['apple', 'Apple', '1 medium', 95, 0.5, 25, 0.5, 4, 'fruit'],
-  ['guava', 'Peru (guava)', '1 medium', 70, 2.5, 14, 1, 5, 'fruit'],
-  ['orange', 'Santra / mosambi', '1', 60, 1, 15, 0, 3, 'fruit'],
-  ['papaya', 'Papai', '1 katori', 60, 1, 15, 0, 2.5, 'fruit'],
-  ['mango', 'Amba', '1 medium', 150, 1.5, 37, 0.5, 4, 'fruit'],
-  ['dates', 'Khajur', '2', 55, 0.5, 15, 0, 1.5, 'fruit'],
+  ['banana', 'Keli (banana)', '1 medium', 105, 1.5, 24, 0.5, 3, 'fruit'],
+  ['apple', 'Apple', '1 medium', 95, 0.5, 21, 0.5, 4, 'fruit'],
+  ['guava', 'Peru (guava)', '1 medium', 70, 2.5, 9, 1, 5, 'fruit'],
+  ['orange', 'Santra / mosambi', '1', 60, 1, 12, 0, 3, 'fruit'],
+  ['papaya', 'Papai', '1 katori', 60, 1, 12.5, 0, 2.5, 'fruit'],
+  ['mango', 'Amba', '1 medium', 150, 1.5, 33, 0.5, 4, 'fruit'],
+  ['dates', 'Khajur', '2', 55, 0.5, 13.5, 0, 1.5, 'fruit'],
 
-  ['chikoo', 'Chikoo', '1 medium', 85, 0.5, 20, 1, 5, 'fruit'],
-  ['pomegranate', 'Dalimb (pomegranate)', '1 katori', 85, 1.5, 19, 1, 4, 'fruit'],
-  ['sitaphal', 'Sitaphal', '1 medium', 95, 2, 23, 0.3, 4, 'fruit'],
-  ['watermelon', 'Kalingad (watermelon)', '1 katori', 45, 1, 11, 0, 0.6, 'fruit'],
-  ['grapes', 'Draksha (grapes)', '1 katori', 70, 0.7, 17, 0.2, 1, 'fruit'],
-  ['pineapple', 'Ananas', '1 katori', 75, 0.8, 19, 0.2, 2, 'fruit'],
+  ['chikoo', 'Chikoo', '1 medium', 85, 0.5, 15, 1, 5, 'fruit'],
+  ['pomegranate', 'Dalimb (pomegranate)', '1 katori', 85, 1.5, 15, 1, 4, 'fruit'],
+  ['sitaphal', 'Sitaphal', '1 medium', 95, 2, 19, 0.3, 4, 'fruit'],
+  ['watermelon', 'Kalingad (watermelon)', '1 katori', 45, 1, 10.4, 0, 0.6, 'fruit'],
+  ['grapes', 'Draksha (grapes)', '1 katori', 70, 0.7, 16, 0.2, 1, 'fruit'],
+  ['pineapple', 'Ananas', '1 katori', 75, 0.8, 17, 0.2, 2, 'fruit'],
   ['matta_rice', 'Matta rice', '1 katori', 190, 4, 41, 0.5, 1.5, 'kerala'],
   ['sambar', 'Sambar', '1 katori', 100, 5, 14, 3, 3, 'kerala'],
   ['kadala', 'Kadala curry', '1 katori', 200, 9, 22, 8, 7, 'kerala'],
@@ -210,6 +211,112 @@ const FOODS = [
   ['tandoori', 'Tandoori chicken', '2 pieces (200 g)', 290, 38, 5, 13, 1, 'nonveg'],
   ['biryani', 'Chicken biryani', '1 plate', 550, 25, 65, 20, 3, 'nonveg'],
 ];
+
+// ---------- what each household unit weighs ----------
+// Grams (or ml) in one unit of each food above, so a portion can be weighed instead of guessed and every food can be
+// read per 100 g. Household measures follow the ICMR-NIN convention (katori about 150 ml, glass 250 ml, cup 150 ml,
+// tbsp 15 g, tsp 5 g); pieces are typical home sizes. These are approximate ("about"); a weighed portion always wins.
+const GRAMS = {
+  chapati: 40, chapati_ghee: 45, bhakri_jowar: 60, bhakri_bajra: 60, bhakri_rice: 60, thepla: 40, paneer_paratha: 110, thalipeeth: 70,
+  paratha: 60, aloo_paratha: 110, puran_poli: 90, pav: 40, rice: 150, masale_bhaat: 250, khichdi: 250, phulka: 25, bhakri_nachni: 60,
+  puri: 25, naan: 90, jeera_rice: 150, brown_rice: 150, ghee: 5,
+  varan: 150, amti: 150, dal_tadka: 150, usal: 150, moong: 150, chavli: 150, chole: 150, sprouts: 120, masoor: 150, dal_makhani: 150,
+  pithla: 150, zunka: 120, kadhi: 150,
+  bhaji: 120, palebhaji: 120, rassa: 150, batata: 120, vangi: 150, paneer_bhaji: 150, soya_bhaji: 150, bharit: 150, koshimbir: 100,
+  salad: 100, thecha: 5, shengdana: 15,
+  whey: 30, soya: 50, paneer: 100, paneer_bhurji: 120, tofu: 100, curd: 150, greek: 100, taak: 250, milk: 250, chilla: 160,
+  paneer_tikka: 150, moong_chilla: 160, sattu: 20, soy_milk: 250, almonds: 12, pb: 16, makhana: 25, chana: 30, peanuts: 30,
+  poha: 200, dadpe: 180, upma: 200, oats: 40, sabudana: 250, sabudana_vada: 120, ghavan: 120, idli: 100, uttapam: 120, medu_vada: 50,
+  dhokla: 80, dosa: 80, pesarattu: 100, rava_dosa: 90, shevai: 200, bread: 50,
+  batata_vada: 70, samosa: 80, bhel: 150, chivda: 45, farsan: 30, kothimbir: 75, chikki: 25, biscuit: 24, maggi: 70, momos: 180,
+  khakhra: 20, bakarwadi: 30, mathri: 30,
+  sheera: 120, shrikhand: 100, ladoo: 40, gulab_jamun: 40, ice_cream: 70, sugar: 5,
+  chakli: 15, karanji: 35, shankarpali: 30, anarse: 30, rava_ladoo: 40, motichoor: 40, til_ladoo: 20, kaju_katli: 12, barfi: 30, peda: 25,
+  mysore_pak: 30, soan_papdi: 25, nankhatai: 15, kheer: 150, gajar_halwa: 120, basundi: 150, sakharbhat: 150, sheer_khurma: 150, thandai: 250,
+  chai: 150, coffee: 150, black_coffee: 150, solkadhi: 200, lassi: 250, usacha_ras: 250, nimbu: 250, panha: 250, kokum: 250,
+  masala_doodh: 250, colddrink: 250, coconut_water: 250,
+  banana: 118, apple: 182, guava: 100, orange: 130, papaya: 140, mango: 250, dates: 20, chikoo: 100, pomegranate: 100, sitaphal: 100,
+  watermelon: 150, grapes: 100, pineapple: 150,
+  matta_rice: 150, sambar: 150, kadala: 150, avial: 150, thoran: 100, rasam: 150, curd_rice: 150, coconut_chutney: 30, moru: 150,
+  appam: 60, puttu: 120, parotta: 90,
+  egg: 50, omelette: 110, egg_bhurji: 120, chicken: 150, chicken_breast: 100, fish: 150, mutton: 150, prawns: 150, fish_fry: 100,
+  tandoori: 200, biryani: 300, vadapav: 150, kachori: 60, modak: 40, modak_fried: 40, jalebi: 60, rasgulla: 60, malpua: 60,
+  pizza: 200, dabeli: 120, kanda_bhaji: 80, pani_puri: 120, egg_curry: 250,
+};
+
+// ---------- packaged foods, protein powders and raw ingredients ----------
+// Each is entered as its per-100 g (or per-100 ml) panel and the serving is worked out from it, so every serving can
+// be traced back to the panel it came from. src says where the panel comes from:
+//   label:   the pack's own nutrition panel, as transcribed in Open Food Facts (barcode given);
+//   brand:   only what the maker states for a serving (energy and protein); carbs and fat are left unknown, not guessed;
+//   derived: the maker states energy, protein and fat; carbs are the energy left over (4 kcal/g), nothing else assumed;
+//   ifct:    Indian Food Composition Tables 2017 (ICMR-NIN), raw; energy worked out from its macros (FAO factors);
+//   usda:    USDA FoodData Central, SR Legacy, raw.
+// Panels whose energy disagreed with their own macros by more than a fifth were left out (test/run.js re-checks).
+// [id, name, unit, grams per unit, category, src, ref, per 100: [kcal or null, protein, carbs, fat, fibre]]
+const PANELS = [
+  ['amul_taaza', 'Amul Taaza toned milk', '1 glass (200 ml)', 200, 'amul', 'label', '8901262150064', [58.2, 3, 4.8, 3, 0]],
+  ['amul_gold', 'Amul Gold full cream milk', '1 glass (200 ml)', 200, 'amul', 'label', '8901262260114', [87, 3.2, 5, 6, 0]],
+  ['amul_slim', 'Amul Slim ’n’ Trim double toned', '1 glass (200 ml)', 200, 'amul', 'label', '8901262260152', [46, 3.2, 5, 1.5, 0]],
+  ['amul_cow', 'Amul Cow Milk', '1 glass (200 ml)', 200, 'amul', 'label', '8901262260374', [67, 3, 4.7, 4, 0]],
+  ['amul_hp_milk', 'Amul High Protein Milk', '1 pack (250 ml)', 250, 'amul', 'label', '8901262153423', [90, 14, 8, 0.2, 0]],
+  ['amul_pbm', 'Amul High Protein Buttermilk', '1 pack (200 ml)', 200, 'amul', 'label', '8901262152952', [54, 7.5, 4, 0.5, 0]],
+  ['amul_plassi', 'Amul High Protein Lassi (rose)', '1 pack (200 ml)', 200, 'amul', 'label', '8901262153348', [53.5, 7.5, 6, 0.85, 0]],
+  ['amul_pshake', 'Amul High Protein Shake (blueberry)', '1 pack (200 ml)', 200, 'amul', 'label', '8901262153331', [69, 10, 9.5, 0.75, 0]],
+  ['amul_hp_paneer', 'Amul High Protein Paneer', '50 g', 50, 'amul', 'derived', 'shop.amul.com: 85 kcal, 12.5 g protein, 3 g fat per 50 g', [170, 25, 4, 6, 0]],
+  ['amul_paneer', 'Amul Malai Paneer', '100 g', 100, 'amul', 'label', '8901262180146', [312, 20, 4, 24, 0]],
+  ['amul_dahi', 'Amul Masti Dahi', '1 katori (150 g)', 150, 'amul', 'label', '8901262201124', [61.5, 4, 4.4, 3.1, 0]],
+  ['amul_chaas', 'Amul Masti spiced buttermilk', '1 pouch (200 ml)', 200, 'amul', 'label', '8901262200196', [28.5, 1.5, 1.8, 1.5, 0]],
+  ['amul_lassi', 'Amul Lassi (sweet)', '1 pack (200 ml)', 200, 'amul', 'label', '8901262200189', [88.5, 2.1, 14.5, 2.1, 0]],
+  ['amul_kool', 'Amul Kool flavoured milk (elaichi)', '1 bottle (180 ml)', 180, 'amul', 'label', '8901262152228', [90.6, 3.11, 12.5, 3.11, 0]],
+  ['amul_cheese', 'Amul cheese slice', '1 slice (20 g)', 20, 'amul', 'label', '8901262020015', [311, 20, 1.5, 25, 0]],
+  ['amul_butter', 'Amul butter', '10 g (2 tsp)', 10, 'amul', 'label', '8901262010023', [724, 1, 0, 80, 0]],
+  ['amul_ghee', 'Amul cow ghee', '1 tsp (5 g)', 5, 'amul', 'label', '8901262030663', [897, 0, 0, 99.7, 0]],
+  ['amul_cream', 'Amul fresh cream', '1 tbsp (15 g)', 15, 'amul', 'label', '8901262151863', [247, 2, 3.5, 25, 0]],
+  ['amul_shrikhand', 'Amul Shrikhand', '100 g', 100, 'amul', 'label', '8901262040051', [237, 5.3, 42, 5, 0]],
+  ['amul_pnut', 'Amul peanut spread', '1 tbsp (16 g)', 16, 'amul', 'label', '8901262010511', [624, 26, 20, 50, 0]],
+  ['amul_whey_choc', 'Amul Whey Protein, chocolate', '1 sachet (34 g)', 34, 'powder', 'label', '8901262110266', [383, 74, 10.6, 5, 0]],
+  ['amul_icecream', 'Amul vanilla ice cream', '1 scoop (50 g)', 50, 'amul', 'label', '8901262173490', [215, 3.7, 20.8, 13, 0]],
+  ['mb_raw', 'MuscleBlaze Raw Whey 80%', '1 scoop (30 g)', 30, 'powder', 'label', '8906067022738', [397, 80, 7.5, 5, 0]],
+  ['mb_biozyme', 'MuscleBlaze Biozyme whey', '1 scoop (33 g)', 33, 'powder', 'label', '8906116950005', [378, 75.8, 10.5, 3.61, 0]],
+  ['on_gsw', 'Optimum Nutrition Gold Standard whey', '1 scoop (30.4 g)', 30.4, 'powder', 'label', '0748927065817', [383, 79, 10, 3, 0]],
+  ['asitis_whey', 'AS-IT-IS whey, flavoured', '30 g', 30, 'powder', 'label', '8904221697679', [375, 75, 12.8, 2.78, 0]],
+  ['protinex', 'Protinex (creamy vanilla)', '30 g (about 3 tbsp)', 30, 'powder', 'label', '8906048501450', [370, 34, 55, 1.3, 0]],
+  ['horlicks_p', 'Horlicks Protein+ (chocolate)', '30 g (about 3 tbsp)', 30, 'powder', 'label', '8901571009343', [379, 34, 54, 2, 0]],
+  ['bprotin', 'B-Protin (chocolate)', '30 g (about 3 tbsp)', 30, 'powder', 'label', '8906011145018', [386, 40, 52, 2, 3]],
+  ['mb_pb', 'MuscleBlaze high protein peanut butter', '1 tbsp (16 g)', 16, 'powder', 'label', '8906067026996', [578.9, 37, 19.6, 40.1, 4.2]],
+  ['yb_oats', 'Yoga Bar protein oats', '50 g', 50, 'powder', 'label', '8904335601937', [423, 21.8, 57.9, 11.5, 10.5]],
+  ['twt_bar', 'The Whole Truth protein bar (cranberry)', '1 bar (52 g)', 52, 'powder', 'label', '8908013479139', [452, 23.1, 40.4, 23.1, 4.23]],
+  ['epigamia', 'Epigamia Greek yogurt (mango)', '1 cup (90 g)', 90, 'powder', 'label', '8906059635014', [91.8, 6, 12.9, 1.76, 0]],
+  ['atta', 'Atta (whole wheat flour), raw', '100 g', 100, 'raw', 'ifct', 'IFCT 2017', [null, 10.57, 64.17, 1.53, 11.36]],
+  ['rice_raw', 'Rice, raw (milled)', '100 g', 100, 'raw', 'ifct', 'IFCT 2017', [null, 7.94, 78.24, 0.52, 2.81]],
+  ['jowar_raw', 'Jowar flour, raw', '100 g', 100, 'raw', 'ifct', 'IFCT 2017', [null, 9.97, 67.68, 1.73, 10.22]],
+  ['bajra_raw', 'Bajra flour, raw', '100 g', 100, 'raw', 'ifct', 'IFCT 2017', [null, 10.96, 61.78, 5.43, 11.49]],
+  ['ragi_raw', 'Nachni (ragi) flour, raw', '100 g', 100, 'raw', 'ifct', 'IFCT 2017', [null, 7.16, 66.82, 1.92, 11.18]],
+  ['toor_raw', 'Toor dal, raw', '100 g', 100, 'raw', 'ifct', 'IFCT 2017', [null, 21.7, 55.23, 1.56, 9.06]],
+  ['masoor_raw', 'Masoor (lentils), raw', '100 g', 100, 'raw', 'usda', 'USDA SR Legacy', [352, 24.6, 52.7, 1.06, 10.7]],
+  ['moong_raw', 'Moong, whole, raw', '100 g', 100, 'raw', 'usda', 'USDA SR Legacy', [347, 23.9, 46.3, 1.15, 16.3]],
+  ['kabuli_raw', 'Kabuli chana, raw', '100 g', 100, 'raw', 'usda', 'USDA SR Legacy', [378, 20.5, 50.7, 6.04, 12.2]],
+  ['rajma_raw', 'Rajma, raw', '100 g', 100, 'raw', 'usda', 'USDA SR Legacy', [337, 22.5, 46.1, 1.06, 15.2]],
+  ['besan_raw', 'Besan (gram flour)', '100 g', 100, 'raw', 'usda', 'USDA SR Legacy', [387, 22.4, 47, 6.69, 10.8]],
+  ['oats_raw', 'Oats, rolled, raw', '100 g', 100, 'raw', 'usda', 'USDA SR Legacy', [389, 16.9, 55.7, 6.9, 10.6]],
+  ['peanut_raw', 'Peanuts, raw', '100 g', 100, 'raw', 'usda', 'USDA SR Legacy', [567, 25.8, 7.6, 49.2, 8.5]],
+  ['egg_raw', 'Egg, whole', '1 large (50 g)', 50, 'raw', 'usda', 'USDA SR Legacy', [143, 12.6, 0.72, 9.51, 0]],
+  ['egg_white', 'Egg white', '1 large white (33 g)', 33, 'raw', 'usda', 'USDA SR Legacy', [52, 10.9, 0.73, 0.17, 0]],
+  ['chicken_raw', 'Chicken breast, raw, skinless', '100 g', 100, 'raw', 'usda', 'USDA SR Legacy', [120, 22.5, 0, 2.62, 0]],
+];
+// Only what the maker states for one serving: [id, name, unit, grams, category, ref, kcal, protein].
+const STATED = [
+  ['amul_kool_protein', 'Amul Kool Protein Milkshake', '1 bottle (180 ml)', 180, 'amul', 'shop.amul.com: 10 g protein, 133 kcal', 133, 10],
+  ['amul_hp_cubes', 'Amul High Protein cubes', '1 pack (38 g)', 38, 'amul', 'shop.amul.com: 25 g protein, 150 kcal', 150, 25],
+  ['amul_hp_spread', 'Amul High Protein dark chocolate peanut spread', '25 g', 25, 'amul', 'shop.amul.com: 10 g protein, 145 kcal', 145, 10],
+];
+// Energy from macros with the FAO/IFCT factors: protein and carbohydrate 17 kJ/g, fat 37, fibre 8.
+function panelKcal(p, c, f, fb) { return (17 * p + 17 * c + 37 * f + 8 * fb) / 4.184; }
+const PANEL_FOODS = PANELS.map(([id, n, u, g, cat, src, ref, [k, p, c, f, fb]]) => {
+  const x = g / 100, kc = k == null ? panelKcal(p, c, f, fb) : k;
+  return { id, n, u, k: Math.round(kc * x), p: r1(p * x), c: r1(c * x), ft: r1(f * x), fb: r1(fb * x), cat, g, src, ref, per: [r1(kc), p, c, f, fb] };
+}).concat(STATED.map(([id, n, u, g, cat, ref, k, p]) => ({ id, n, u, k, p, c: null, ft: null, fb: 0, cat, g, src: 'brand', ref, per: null })));
 
 // One tap logs the whole plate; adjust the pieces afterwards.
 const THALI = [
