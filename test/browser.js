@@ -164,6 +164,63 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await shot('food-edit');
     await page.evaluate(() => closePop());
   });
+  await test('search speaks Marathi, Hindi and English, forgives a typo, and finds Pune food', async () => {
+    await go('add-lunch');
+    const top = async q => { await page.fill('#q', q); await page.waitForTimeout(120); return page.evaluate(() => [...document.querySelectorAll('#rows .nm')].slice(0, 4).map(e => e.textContent)); };
+    assert.ok((await top('chawal')).some(n => /Bhaat/.test(n)), 'chawal finds bhaat');
+    assert.ok((await top('anda')).some(n => /Egg|Anda/.test(n)), 'anda finds eggs');
+    assert.match((await top('chapti'))[0], /Chapati/, 'a missing letter is forgiven');
+    assert.ok((await top('pizza')).length >= 4, 'pizza has its own choices');
+    assert.ok((await top('kolhapuri misal')).some(n => /Kolhapuri misal/.test(n)));
+    assert.ok((await top('mastani')).some(n => /mastani/.test(n)));
+    await page.tap('[data-act="qclear"]');
+    assert.strictEqual(await page.inputValue('#q'), '');
+  });
+  await test('hold a food for any amount; tap still adds one', async () => {
+    await go('add-lunch');
+    await page.evaluate(() => { delete S.food[todayKey()]; save(); refreshAdd(); });
+    const r = await page.evaluate(() => { const b = document.querySelector('li[data-id="chapati"] .nm').getBoundingClientRect(); return { x: b.left + 20, y: b.top + b.height / 2 }; });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: r.x, y: r.y }] });
+    await page.waitForTimeout(650);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await page.waitForTimeout(400);
+    assert.ok(await page.isVisible('#pqin'), 'the portion sheet opened');
+    assert.ok(!(await page.evaluate(() => S.food[todayKey()])), 'the hold itself added nothing');
+    await page.fill('#pqin', '2.5'); await page.waitForTimeout(100);
+    await page.tap('.seg button[data-act="pmeal"][data-v="dinner"]');
+    await shot('portion');
+    await page.tap('[data-act="padd"]'); await page.waitForTimeout(400);
+    const e = await page.evaluate(() => S.food[todayKey()].find(x => x.id === 'chapati'));
+    assert.strictEqual(e.q, 2.5); assert.strictEqual(e.m, 'dinner');
+    await page.tap('li[data-id="varan"] .nm'); await page.waitForTimeout(200);
+    assert.strictEqual(await page.evaluate(() => S.food[todayKey()].find(x => x.id === 'varan')?.q), 1, 'a tap adds one');
+  });
+  await test('a logged food: typed amount, its own numbers, another day, a plate, and back', async () => {
+    await go('today');
+    const i = await page.evaluate(() => S.food[todayKey()].findIndex(e => e.id === 'chapati'));
+    await page.evaluate(i => openPop({ kind: 'fedit', i }), i); await page.waitForTimeout(400);
+    await page.fill('#fqin', '1.75'); await page.waitForTimeout(100);
+    assert.strictEqual(await page.evaluate(i => S.food[todayKey()][i].q, i), 1.75, 'any amount can be typed');
+    await page.tap('details.more summary'); await page.fill('#e_k', '130'); await page.fill('#e_n', 'Chapati, big');
+    await page.tap('[data-act="fnum"]'); await page.waitForTimeout(300);
+    const e = await page.evaluate(i => S.food[todayKey()][i], i);
+    assert.strictEqual(e.k, 130); assert.strictEqual(e.n, 'Chapati, big'); assert.notStrictEqual(e.id, 'chapati', 'it became its own entry');
+    assert.strictEqual(await page.evaluate(() => food('chapati').k), 100, 'the library food is unchanged');
+    await page.evaluate(i => openPop({ kind: 'fedit', i }), i); await page.waitForTimeout(400);
+    await page.evaluate(() => { document.querySelectorAll('details.more')[1].open = true; });
+    await page.tap('[data-act="fcopyd"][data-d="-1"]'); await page.waitForTimeout(300);
+    assert.ok(await page.evaluate(() => (S.food[shift(todayKey(), -1)] || []).some(x => x.n === 'Chapati, big')), 'copied to the day before');
+    // Two foods in lunch, then saved as a plate.
+    await page.evaluate(() => { S.food[todayKey()].forEach(x => { x.m = 'lunch'; }); save(); render(); });
+    await page.tap('[data-act="psaveopen"][data-m="lunch"]'); await page.waitForTimeout(400);
+    await page.fill('#pl_n', 'My usual lunch'); await page.tap('[data-act="psave"]'); await page.waitForTimeout(300);
+    assert.strictEqual(await page.evaluate(() => S.plates[0]?.n), 'My usual lunch');
+    assert.strictEqual(await page.evaluate(() => sanitize(JSON.parse(JSON.stringify(S))).plates[0].items.length), 2, 'a plate survives saving and loading');
+    await go('add-dinner'); await page.tap('.chips button[data-c="thali"]');
+    await page.tap('li.plate[data-i="0"] .nm'); await page.waitForTimeout(200);
+    assert.strictEqual(await page.evaluate(() => S.food[todayKey()].filter(x => x.m === 'dinner').length), 2, 'the plate went in with one tap');
+    await page.evaluate(() => { const y = shift(todayKey(), -1); delete S.food[todayKey()]; if (S.food[y]) S.food[y] = S.food[y].filter(x => x.n !== 'Chapati, big'); S.plates = []; save(); });
+  });
   await test('no errors were thrown on any screen', async () => assert.deepStrictEqual(errors, []));
 
   console.log(`\n${passed} passed, ${failed} failed`);

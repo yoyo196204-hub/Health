@@ -42,7 +42,7 @@ function backfillMacros() {
   return n;
 }
 // One portion in words: "1½ × 1 katori · about 225 g", or "65 g" for something weighed by the gram.
-function qtxt(q) { return q === 0.5 ? '½' : q === 1.5 ? '1½' : q === 2.5 ? '2½' : String(+q.toFixed(2)); }
+function qtxt(q) { const w = Math.floor(q), f = { 25: '¼', 50: '½', 75: '¾' }[Math.round((q - w) * 100)]; return f && w < 10 && Math.abs((q - w) * 100 - Math.round((q - w) * 100)) < 1e-6 ? (w || '') + f : String(+q.toFixed(2)); }
 function portion(e) {
   const g = e.g ? e.q * e.g : null;
   if (g != null && /^100 (g|ml)$/.test(e.u)) return `${Math.round(g)} ${e.u.slice(4)}`;

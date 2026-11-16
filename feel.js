@@ -263,6 +263,30 @@ function ptrSpin(on) {
   });
 })();
 
+// ---------- long press ----------
+// Holding anything marked data-press for 0.45 s opens its fuller choice (a food: any amount, any meal; a logged
+// entry: everything about it). A plain tap still does the quick thing. The finger must stay put: a scroll or a
+// swipe that starts on the row cancels it, and the click that ends a long press is swallowed.
+const PRESS = {};      // what a long press on [data-press] does, filled in by each screen
+let pressed = false;
+(() => {
+  let t = null, x0 = 0, y0 = 0, el = null;
+  const stop = () => { clearTimeout(t); t = null; el?.classList.remove('pressing'); el = null; };
+  document.addEventListener('pointerdown', e => {
+    const b = e.target.closest('[data-press]');
+    if (!b || e.target.closest('button.step, .x, input, select, textarea') || e.button > 0) return;
+    stop(); el = b; x0 = e.clientX; y0 = e.clientY; pressed = false;
+    b.classList.add('pressing');
+    t = setTimeout(() => { const f = PRESS[b.dataset.press]; stop(); if (!f) return; pressed = true; buzz('ok'); f(b); }, 450);
+  }, { passive: true });
+  document.addEventListener('pointermove', e => { if (el && Math.hypot(e.clientX - x0, e.clientY - y0) > 9) stop(); }, { passive: true });
+  ['pointerup', 'pointercancel', 'scroll'].forEach(x => document.addEventListener(x, stop, { capture: true, passive: true }));
+  // If no click follows the long press (the finger slid off), the next real tap must not be swallowed.
+  document.addEventListener('pointerup', () => { if (pressed) setTimeout(() => { pressed = false; }, 350); }, true);
+  document.addEventListener('contextmenu', e => { if (e.target.closest('[data-press]')) e.preventDefault(); });
+  document.addEventListener('click', e => { if (pressed) { pressed = false; e.stopPropagation(); e.preventDefault(); } }, true);
+})();
+
 // ---------- hold to repeat ----------
 // Steppers repeat while held: a short pause, then faster. The button is found again on every step, because
 // the screen may have been redrawn underneath it. The click that ends the hold is swallowed.
@@ -281,6 +305,43 @@ let repeated = '';
   });
   ['pointerup', 'pointercancel'].forEach(x => document.addEventListener(x, stop, true));
 })();
+
+// ---------- the section bar ----------
+// The long tabs (Recovery, Training, Review) get a row of their sections that stays at the top while you scroll:
+// tap one to go straight to it, and the one you are reading lights up as you pass it. Built from the sections
+// themselves, so a section a screen adds or drops is never out of step with the bar.
+let jumpObs = null;
+function jumpbar() {
+  jumpObs?.disconnect(); jumpObs = null;
+  const v = $('#view');
+  if (!v || overlay || !['recovery', 'training', 'review'].includes(tab)) return;
+  const secs = [...v.querySelectorAll(':scope > section.block')].filter(x => x.querySelector(':scope > .mh > h2'));
+  if (secs.length < 3) return;
+  const byTitle = new Map(), owner = new Map();
+  secs.forEach((x, i) => {
+    const t = x.querySelector(':scope > .mh > h2').textContent.split(/,| with | from | in your /)[0].trim();
+    x.id ||= `j-${tab}-${i}`;
+    if (!byTitle.has(t)) byTitle.set(t, x.id);
+    owner.set(x, byTitle.get(t));
+  });
+  const bar = document.createElement('nav');
+  bar.className = 'jumpbar chips'; bar.setAttribute('aria-label', 'Sections on this page');
+  bar.innerHTML = [...byTitle].map(([t, id]) => `<button data-act="jump" data-to="${id}">${esc(t)}</button>`).join('');
+  const head = v.querySelector(':scope > header');
+  head ? head.after(bar) : v.prepend(bar);
+  const vis = new Set();
+  const mark = () => {
+    const cur = secs.find(x => vis.has(x));
+    const id = cur ? owner.get(cur) : null;
+    for (const b of bar.children) {
+      const on = b.dataset.to === id;
+      if (on && !b.classList.contains('on')) b.scrollIntoView?.({ inline: 'center', block: 'nearest', behavior: motionOK() ? 'smooth' : 'auto' });
+      b.classList.toggle('on', on);
+    }
+  };
+  jumpObs = new IntersectionObserver(es => { for (const e of es) e.isIntersecting ? vis.add(e.target) : vis.delete(e.target); mark(); }, { rootMargin: '-90px 0px -55% 0px' });
+  secs.forEach(x => jumpObs.observe(x));
+}
 
 // ---------- numbers that move ----------
 // Elements with data-to count from data-from; arcs with data-dash ease from their old length to the new one.

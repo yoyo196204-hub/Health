@@ -29,7 +29,7 @@ let cat = 'usual', query = '', installEvt = null, softQueued = false;
 const VIEWS = { today: vToday, recovery: vRecovery, training: vTraining, review: vReview, me: vMe };
 const TABS = Object.keys(VIEWS);
 const ALIAS = { heart: 'recovery', trend: 'review', train: 'training' };
-const POPS = { fedit: p => vFoodEdit(p.i), exinfo: p => vExInfo(p.id), cardioadd: () => vCardioAdd(), cardioinfo: p => vCardioInfo(p), sess: p => vSession(p),
+const POPS = { fedit: p => vFoodEdit(p.i), portion: p => vPortion(p), cedit: p => vCustomEdit(p), plate: p => vPlateSave(p), exinfo: p => vExInfo(p.id), cardioadd: () => vCardioAdd(), cardioinfo: p => vCardioInfo(p), sess: p => vSession(p),
   hrvinfo: p => vHrvInfo(p), labinfo: p => vLabInfo(p), recedit: p => vRecEdit(p), dayx: p => vDayDetail(p) };
 const PAGES = ['add', 'why', 'set', 'lab', 'beats'];
 const scrollMem = {};
@@ -58,7 +58,7 @@ function render() {
   $$('#tabs a').forEach(a => a.classList.toggle('on', a.hash === '#' + tab));
   $('#tabs').style.setProperty('--i', TABS.indexOf(tab));
   document.documentElement.classList.toggle('still', !motionOK());
-  sheetEntered(); settle(); liveKick(); labKick(); bxKick();
+  jumpbar(); sheetEntered(); settle(); liveKick(); labKick(); bxKick();
 }
 // Renders caused by the watch or the strap wait until you have finished typing in a field.
 function renderSoft() {
@@ -107,11 +107,14 @@ const ACT = {
   popclose: () => closePop(),
   dismissnote: () => { loadNote = ''; render(); },
   q: el => {
-    bump(el.dataset.m, food(el.dataset.id) || (S.food[day] || []).find(x => x.id === el.dataset.id), +el.dataset.d);
+    bump(el.dataset.m, pickFood(el.dataset.id), +el.dataset.d);
     return overlay?.type === 'add' ? refreshAdd() : render();
   },
   thali: el => { const [name, parts] = THALI[+el.dataset.i]; for (const [id, n] of parts) bump(el.dataset.m, food(id), n); buzz('ok'); toast(`${name} added`); refreshAdd(); },
-  cat: el => { cat = el.dataset.c; query = ''; buzz('tick'); render(); },
+  cat: el => {
+    cat = el.dataset.c; if (cat !== 'quick') query = ''; buzz('tick'); render();
+    $('#chips button.on')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: motionOK() ? 'smooth' : 'auto' });
+  },
   custom: el => {
     const v = customValues();
     if (CUSTOM.basis === '100' && v.g == null) { buzz('warn'); return toast('Enter the serving size in grams, so the panel per 100 g can be turned into a serving'); }
@@ -122,9 +125,11 @@ const ACT = {
   },
   cbasis: el => { CUSTOM.basis = el.dataset.v; buzz('tick'); $$('.seg button[data-act="cbasis"]').forEach(b => b.classList.toggle('on', b.dataset.v === CUSTOM.basis)); customCheck(); },
   quick: el => {
-    const k = num($('#k_k').value, 1, 5000), p = num($('#k_p').value, 0, 500) ?? 0;
+    const k = num($('#k_k').value, 1, 5000), p = num($('#k_p').value, 0, 500) ?? 0, c = num($('#k_c')?.value, 0, 1000), ft = num($('#k_ft')?.value, 0, 500);
     if (k == null) { buzz('warn'); return toast('Enter the calories'); }
     const f = { id: 'q' + Date.now(), n: $('#k_n').value.trim().slice(0, 60) || 'Quick add', u: 'entry', k, p, fb: 0, cat: 'quick' };
+    if (c != null && ft != null) Object.assign(f, { c, ft });
+    query = '';
     bump(el.dataset.m, f, 1); buzz('ok'); toast(`${fmt(k)} kcal added`); render();
   },
   delcustom: el => {
@@ -133,7 +138,8 @@ const ACT = {
     const i = S.custom.indexOf(f), fr = Object.fromEntries(Object.keys(S.freq).map(m => [m, S.freq[m][f.id]]));
     S.custom.splice(i, 1);
     for (const m in S.freq) delete S.freq[m][f.id];
-    save(); refreshAdd();
+    save();
+    if (pop?.kind === 'cedit') closePop(); else refreshAdd();
     undoable(`${f.n} removed from your foods`, () => { S.custom.splice(i, 0, f); for (const m in fr) if (fr[m]) S.freq[m][f.id] = fr[m]; });
   },
   copy: el => { for (const x of S.food[shift(day, -1)].filter(x => x.m === el.dataset.m)) (S.food[day] ||= []).push({ ...x }); save(); buzz('ok'); render(); },
@@ -211,11 +217,13 @@ function customCheck() {
 }
 document.addEventListener('input', e => {
   if (e.target.id === 'fg') { foodAct('fg', e.target); return; }
+  if (['fqin', 'pqin', 'pg'].includes(e.target.id)) { foodAct(e.target.id, e.target); return; }
   if (/^c_/.test(e.target.id)) { customCheck(); return; }
   if (e.target.id !== 'q') return;
   query = e.target.value;
   $('#rows').innerHTML = addRows(overlay.key);
-  $$('.chips button').forEach(b => b.classList.toggle('on', !query && b.dataset.c === cat));
+  const clr = $('.searchbar .clr'); if (clr) clr.hidden = !query;
+  $$('#chips button').forEach(b => b.classList.toggle('on', !query && b.dataset.c === cat));
 });
 // Saved without re-rendering, so the keyboard and focus stay put between fields.
 document.addEventListener('change', e => {
@@ -233,7 +241,7 @@ document.addEventListener('change', e => {
       toast(`${sign(off, 1)} kg from your trend. A typo?`, 7000, { label: 'Undo', fn: () => { if (prev == null) setManual(stream, day, null); else { S[stream][day] = prev; if (!prevMan) delete S.manual[stream][day]; } save(); render(); } });
     } else if (v != null) buzz('ok');
     // A check-in on Today is done once it has a value: redraw when you leave the field, so it drops off the list.
-    if (el.closest('.ci') && v != null) softQueued = true;
+    if (el.closest('.ci, label.due') && v != null) softQueued = true;
   }
   else if (el.dataset.lift) logLift(el);
   else if (el.dataset.act === 'prehab') { if (el.checked) S.prehab[day] = true; else delete S.prehab[day]; save(); buzz(el.checked ? 'ok' : 'tick'); render(); }

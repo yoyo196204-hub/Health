@@ -149,47 +149,63 @@ function dueList() {
   if (NATIVE && BACKUP.folder && S.meta.backup && gapDays(S.meta.backup, k) >= 3) out.push({ id: 'bk', t: 'Backup has stopped', s: `Last written ${dateLabel(S.meta.backup)}. Choose the folder again.`, href: '#set-data' });
   return out;
 }
+// What is due and done elsewhere (the morning check, the shoulder, the plan, the backup): one line each, one tap
+// away. Weight and waist are not here: they are typed straight into "Body today", where they always live.
 function checkins() {
   if (day !== todayKey()) return '';
-  const D = dueList();
+  const D = dueList().filter(x => !x.field);
   if (!D.length) return '';
-  return `<section class="checkins"><div class="eyebrow">Due today · ${D.length}</div><ul>${D.map(x => x.field
-    ? `<li class="ci"><span class="grow"><b>${x.t}</b><span class="sub">${x.s}</span></span><label class="ciin"><input type="number" inputmode="decimal" step="${x.field === 'waist' ? 0.5 : 0.1}" data-log="${x.field}" placeholder="${x.field === 'waist' ? kg(projection().waistNow) : r1(targets().wt)}" aria-label="${x.t}"><i>${x.field === 'waist' ? 'cm' : 'kg'}</i></label></li>`
-    : `<li class="ci"><a href="${x.href}"><span class="grow"><b>${x.t}</b><span class="sub">${x.s}</span></span><span class="chev">›</span></a></li>`).join('')}</ul></section>`;
+  return `<section class="checkins"><div class="eyebrow">Due today · ${D.length}</div><ul>${D.map(x =>
+    `<li class="ci"><a href="${x.href}"><span class="grow"><b>${x.t}</b><span class="sub">${x.s}</span></span><span class="chev">›</span></a></li>`).join('')}</ul></section>`;
 }
-function vitalInput(stream, label, whyKey, unit, attrs, placeholder) {
+function vitalInput(stream, label, whyKey, unit, attrs, placeholder, due) {
   const v = S[stream][day], fromWatch = v != null && !S.manual[stream]?.[day] && stream !== 'waist';
-  return `<label>${why(whyKey, label)}<span class="f"><input type="number" ${attrs} data-log="${stream}" value="${v ?? ''}" placeholder="${placeholder}"><i>${unit}</i></span>${fromWatch ? src('watch') : ''}</label>`;
+  return `<label class="${due ? 'due' : ''}">${why(whyKey, label)}${due ? '<i class="duedot" aria-label="due today"></i>' : ''}<span class="f"><input type="number" ${attrs} data-log="${stream}" value="${v ?? ''}" placeholder="${placeholder}"><i>${unit}</i></span>${fromWatch ? src('watch') : ''}</label>`;
+}
+// Weight, steps, sleep and (in a waist week) the waist: typed or from the watch, each with a dot while it is due.
+function bodyToday() {
+  const T = targets(), isToday = day === todayKey(), due = isToday ? new Set(dueList().map(x => x.id)) : new Set();
+  const waist = due.has('waist') || S.waist[day] != null;
+  const hint = isToday && due.has('weight') ? '<p class="sub small">Weigh after the toilet, before food or water: the same conditions each day make the trend honest.</p>'
+    : isToday && due.has('waist') ? '<p class="sub small">Waist this week: tape level midway between the lowest rib and the hip bone, after breathing out.</p>' : '';
+  return `<section class="bodyday"><div class="mh"><h2>Body today</h2></div>
+    <div class="vitals ${waist ? 'n4' : ''}">
+      ${vitalInput('weights', 'Weight', 'rate', 'kg', 'inputmode="decimal" step="0.1"', r1(T.wt), due.has('weight'))}
+      ${vitalInput('steps', 'Steps', 'steps', `/&nbsp;${fmt(T.stepGoal)}`, 'inputmode="numeric"', '0')}
+      ${vitalInput('sleep', 'Sleep', 'sleep', 'h', 'inputmode="decimal" step="0.1"', '7–9')}
+      ${waist ? vitalInput('waist', 'Waist', 'waist', 'cm', 'inputmode="decimal" step="0.5"', kg(projection().waistNow), due.has('waist')) : ''}
+    </div>${hint}
+    ${S.profile.shoulder ? `<label class="check"><input type="checkbox" data-act="prehab" ${S.prehab[day] ? 'checked' : ''}><span>Shoulder routine: stretch and band work</span></label>` : ''}</section>`;
+}
+function mealBlock(T, m, label, y) {
+  const mt = totals(day, m), main = m !== 'snack';
+  const items = (S.food[day] || []).map((e, i) => [e, i]).filter(([e]) => e.m === m).map(([e, i]) => `<li data-flash="${esc(m + e.id)}" data-swipe="fdelrow" data-i="${i}"><button class="grow rowbtn" data-act="fedit" data-i="${i}"><span class="nm">${esc(e.n)}</span><span class="sub">${esc(portion(e))} · ${fmt(e.k * e.q)} kcal · ${r1(e.p * e.q)} g protein</span></button>
+      <button class="step" data-act="q" data-m="${m}" data-id="${esc(e.id)}" data-d="-0.5" aria-label="Less ${esc(e.n)}">−</button><button class="step" data-act="q" data-m="${m}" data-id="${esc(e.id)}" data-d="0.5" aria-label="More ${esc(e.n)}">+</button></li>`);
+  const canCopy = !mt.n && totals(y, m).n;
+  const pOk = main && mt.p >= T.perMeal * 0.8;
+  const pbar = main && mt.n ? `<span class="pmeter" title="Protein against ${T.perMeal} g for a main meal"><i style="width:${clamp(mt.p / T.perMeal * 100, 0, 100).toFixed(0)}%" class="${pOk ? 'ok' : ''}"></i></span>` : '';
+  return `<section class="meal ${mt.n ? '' : 'empty'}" id="meal-${m}"><div class="mh"><h2>${label}</h2><span class="num sub mt">${mt.n ? `${fmt(mt.k)} kcal · <span class="${pOk ? 'ok' : ''}">${Math.round(mt.p)} g protein</span>` : ''}${pbar}</span><a class="plus" href="#add-${m}" aria-label="Add to ${label}"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></a></div>
+    ${items.length ? `<ul>${items.join('')}</ul>${items.length >= 2 ? `<button class="link small saveplate" data-act="psaveopen" data-m="${m}">Save as a plate</button>` : ''}`
+      : canCopy ? `<button class="ghost small" data-act="copy" data-m="${m}">Same as yesterday · ${fmt(totals(y, m).k)} kcal</button>` : ''}</section>`;
 }
 function vToday() {
   const T = targets(), t = totals(day), isToday = day === todayKey(), y = shift(day, -1);
-  const meals = MEALS.map(([m, label]) => {
-    const mt = totals(day, m), main = m !== 'snack';
-    const items = (S.food[day] || []).map((e, i) => [e, i]).filter(([e]) => e.m === m).map(([e, i]) => `<li data-flash="${esc(m + e.id)}" data-swipe="fdelrow" data-i="${i}"><button class="grow rowbtn" data-act="fedit" data-i="${i}"><span class="nm">${esc(e.n)}</span><span class="sub">${esc(portion(e))} · ${fmt(e.k * e.q)} kcal · ${r1(e.p * e.q)} g protein</span></button>
-        <button class="step" data-act="q" data-m="${m}" data-id="${esc(e.id)}" data-d="-0.5" aria-label="Less ${esc(e.n)}">−</button><button class="step" data-act="q" data-m="${m}" data-id="${esc(e.id)}" data-d="0.5" aria-label="More ${esc(e.n)}">+</button></li>`).join('');
-    const canCopy = !mt.n && totals(y, m).n;
-    const pOk = main && mt.p >= T.perMeal * 0.8;
-    return `<section class="meal"><div class="mh"><h2>${label}</h2><span class="num sub">${mt.n ? `${fmt(mt.k)} kcal · <span class="${pOk ? 'ok' : ''}">${Math.round(mt.p)} g protein</span>` : ''}</span><a class="plus" href="#add-${m}" aria-label="Add to ${label}"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></a></div>
-      ${items ? `<ul>${items}</ul>` : canCopy ? `<button class="ghost" data-act="copy" data-m="${m}">Same as yesterday</button>` : ''}</section>`;
-  }).join('');
+  const meals = MEALS.map(([m, label]) => mealBlock(T, m, label, y)).join('');
   const done = S.food[day] ? isComplete(day) : null;
   const full = done == null ? '' : `<p class="fullline">${done ? 'Counts toward your burn estimate.' : 'Looks incomplete, so it is left out of your burn estimate.'} <button class="link" data-act="full">${done ? 'Mark incomplete' : 'Mark complete'}</button> ${why('logging', 'Why')}</p>`;
   const nav = d => `<button class="nav" data-act="day" data-d="${d}" ${d > 0 && isToday ? 'disabled' : ''} aria-label="${d < 0 ? 'Previous' : 'Next'} day">${d < 0 ? '‹' : '›'}</button>`;
   const title = isToday ? 'Today' : day === shift(todayKey(), -1) ? 'Yesterday' : dateLabel(day);
+  // The order is the order of the day: how ready you are, what to do now, what you ate, the body, then the rest.
   return `${masthead(title, dateLabel(day, { weekday: 'long', day: 'numeric', month: 'long' }), { center: true, before: nav(-1), after: nav(1), h1: isToday ? '' : 'data-act="today" class="tap"' })}
-    ${isToday ? welcome() + syncLine() + part(briefCard) + part(quickDock) + part(checkins) + part(cardRow) : ''}
-    <section class="hero">${gauge(T, t)}
+    ${isToday ? welcome() + syncLine() + part(briefCard) + part(quickDock) + part(checkins) : ''}
+    <section class="hero" id="fuel">${gauge(T, t)}
       <div class="legend"><div>${why('kcal', 'Calories')}<b class="num">${fmt(t.k)}<i> / ${fmt(T.kcal)}</i></b></div>
         <div>${why('protein', 'Protein')}<b class="num pr">${Math.round(t.p)}<i> / ${T.protein} g</i></b></div>
         <div>${why('fibre', 'Fibre')}<b class="num">${Math.round(t.fb)}<i> / ${T.fibre} g</i></b></div></div>
       ${macroLine(t)}<p class="coach">${coach(T, t)}</p></section>
-    <section class="vitals">
-      ${vitalInput('weights', 'Weight', 'rate', 'kg', 'inputmode="decimal" step="0.1"', r1(T.wt))}
-      ${vitalInput('steps', 'Steps', 'steps', `/&nbsp;${fmt(T.stepGoal)}`, 'inputmode="numeric"', '0')}
-      ${vitalInput('sleep', 'Sleep', 'sleep', 'h', 'inputmode="decimal" step="0.1"', '7–9')}
-    </section>
-    ${S.profile.shoulder ? `<label class="check"><input type="checkbox" data-act="prehab" ${S.prehab[day] ? 'checked' : ''}><span>Shoulder routine: stretch and band work</span></label>` : ''}
-    ${meals}${full}`;
+    <div class="meals">${meals}</div>${full}
+    ${part(bodyToday)}
+    ${isToday ? `<section class="glance"><div class="mh"><h2>At a glance</h2></div>${part(cardRow)}</section>` : ''}`;
 }
 
 // ---------- add food ----------
@@ -206,25 +222,86 @@ function macroLine(t) {
   return `<div class="macros"><div class="mbar" role="img" aria-label="Energy from protein, carbs and fat"><i class="mp" style="flex:${4 * t.p}"></i><i class="mc" style="flex:${4 * t.c}"></i><i class="mf" style="flex:${9 * t.ft}"></i></div>
     <p class="sub num"><i class="k mp"></i>Protein ${pc(4 * t.p)}% <i class="k mc"></i>Carbs ${Math.round(t.c)} g · ${pc(4 * t.c)}% <i class="k mf"></i>Fat ${Math.round(t.ft)} g · ${pc(9 * t.ft)}%${share < 0.97 ? ` <span class="small">· split known for ${Math.round(share * 100)}% of the day's kcal</span>` : ''}</p></div>`;
 }
-function addRows(meal) {
-  const q = query.trim().toLowerCase(), list = S.food[day] || [];
-  const row = (f, del) => {
-    const e = list.find(x => x.m === meal && x.id === f.id);
-    return `<li class="${e ? 'on' : ''}" data-flash="${esc(meal + f.id)}"><div class="grow" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="1"><span class="nm">${esc(f.n)}</span><span class="sub">${esc(unitText(f))} · ${fmt(f.k)} kcal · ${f.p} g protein${srcTag(f)}</span></div>
-      ${e ? `<button class="step" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="-0.5" aria-label="Less">−</button><b class="qty num">${e.q}</b><button class="step" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="0.5" aria-label="More">+</button>`
-        : `${del ? `<button class="x" data-act="delcustom" data-id="${esc(f.id)}" aria-label="Delete ${esc(f.n)}">×</button>` : ''}<span class="add" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="1">+</span>`}</li>`;
-  };
-  if (q) {
-    const words = q.split(/\s+/);
-    return allFoods().filter(f => words.every(w => f.n.toLowerCase().includes(w))).map(f => row(f)).join('') || '<li class="sub">Nothing by that name. Add it under Mine.</li>';
+// ---------- finding a food ----------
+// Every word you type must be found, in the name or under one of its other names (roti finds chapati and bhakri,
+// anda finds eggs, chawal finds bhaat). Closer matches come first: the start of the name, then the start of a word,
+// then anywhere, then a word one or two letters off (chapti, panner). What you log often rises a little.
+function lev(a, b) {
+  if (Math.abs(a.length - b.length) > 2) return 9;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
   }
-  if (cat === 'thali') return THALI.map(([name, parts], i) => {
-    const s = parts.reduce((a, [id, n]) => { const f = food(id); a.k += f.k * n; a.p += f.p * n; return a; }, { k: 0, p: 0 });
-    return `<li data-act="thali" data-m="${meal}" data-i="${i}"><div class="grow"><span class="nm">${name}</span><span class="sub">${parts.map(([id, n]) => `${n} ${food(id).n.toLowerCase()}`).join(', ')}</span><span class="sub">${fmt(s.k)} kcal · ${Math.round(s.p)} g protein</span></div><span class="add">+</span></li>`;
-  }).join('');
-  if (cat === 'quick') return `<li class="form"><div class="grow"><span class="nm">Quick add</span><span class="sub">For a meal out or a label you can read: just the numbers.</span>
-      <div class="fgrid"><input id="k_n" placeholder="What, optional" class="span2"><input id="k_k" type="number" inputmode="numeric" placeholder="kcal"><input id="k_p" type="number" inputmode="decimal" placeholder="Protein g"></div>
-      <button class="solid" data-act="quick" data-m="${meal}">Add</button></div></li>` + (S.food[day] || []).filter(e => e.m === meal && e.cat === 'quick').map(e => row(e)).join('');
+  return prev[b.length];
+}
+const fnorm = x => String(x).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+function searchFoods(q) {
+  const words = fnorm(q).split(' ').filter(Boolean);
+  if (!words.length) return [];
+  const catName = Object.fromEntries(CATS), seen = new Set(), out = [];
+  const often = id => MEALS.reduce((a, [m]) => a + (S.freq[m]?.[id] || 0), 0);
+  for (const f of allFoods().concat(recentFoods())) {
+    if (seen.has(f.id)) continue;
+    seen.add(f.id);
+    const name = fnorm(f.n), toks = name.split(' '), hay = `${name} ${fnorm(catName[f.cat] || '')} ${fnorm(f.u || '')}`;
+    let score = 0;
+    for (const w of words) {
+      let best = 0;
+      [w, ...(FOOD_ALIAS[w] || '').split(' ').filter(Boolean)].forEach((v, i) => {
+        const s = name.startsWith(v) ? 4 : toks.some(t => t.startsWith(v)) ? 3 : hay.includes(v) ? 1.6
+          : v.length >= 4 && toks.some(t => Math.min(...[-1, 0, 1].map(d => lev(t.slice(0, v.length + d), v))) <= (v.length >= 7 ? 2 : 1)) ? 1 : 0;
+        best = Math.max(best, s * (i ? 0.7 : 1));
+      });
+      if (!best) { score = 0; break; }
+      score += best;
+    }
+    if (score) out.push([score + Math.min(1.5, Math.log1p(often(f.id)) / 3) - name.length / 300, f]);
+  }
+  return out.sort((a, b) => b[0] - a[0]).slice(0, 60).map(x => x[1]);
+}
+// Every different food logged in the last three weeks, newest first, with its numbers as you last logged it, so an
+// edited entry or a quick add comes back exactly as it was.
+function recentFoods() {
+  return cached('recentFoods', () => {
+    const seen = new Map();
+    for (const k of Object.keys(S.food).sort().reverse().slice(0, 21)) for (const e of [...S.food[k]].reverse()) if (!seen.has(e.id)) seen.set(e.id, e);
+    return [...seen.values()].slice(0, 40);
+  });
+}
+// The food behind a row: the library, your own foods, then what you logged recently.
+function pickFood(id) { return food(id) || (S.food[day] || []).find(x => x.id === id) || recentFoods().find(x => x.id === id); }
+// Steps that suit the amount: quarters below one portion, halves above it. A typed amount is kept as typed.
+function qStep(q, d) { return d > 0 ? r2(q < 1 ? q + 0.25 : q + 0.5) : r2(q <= 1 ? Math.max(0.25, q - 0.25) : q - 0.5); }
+function r2(x) { return Math.round(x * 100) / 100; }
+const mlOf = f => / ml\b|glass|cup/.test(f.u || '') ? 'ml' : 'g';
+
+function addRows(meal) {
+  const q = query.trim(), list = S.food[day] || [];
+  const row = (f, mine) => {
+    const e = list.find(x => x.m === meal && x.id === f.id);
+    return `<li class="${e ? 'on' : ''}" data-flash="${esc(meal + f.id)}" data-press="food" data-id="${esc(f.id)}" data-m="${meal}"><div class="grow" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="1"><span class="nm">${esc(f.n)}</span><span class="sub">${esc(unitText(f))} · ${fmt(f.k)} kcal · ${r1(f.p)} g protein${srcTag(f)}</span></div>
+      ${e ? `<button class="step" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="-0.5" aria-label="Less">−</button><b class="qty num">${qtxt(e.q)}</b><button class="step" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="0.5" aria-label="More">+</button>`
+        : `${mine ? `<button class="x" data-act="cedit" data-id="${esc(f.id)}" aria-label="Change ${esc(f.n)}">✎</button>` : ''}<span class="add" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="1">+</span>`}</li>`;
+  };
+  if (q) return searchFoods(q).map(f => row(f, S.custom.includes(f))).join('')
+    || `<li class="empty"><div class="grow"><span class="nm">Nothing called “${esc(q)}”</span><span class="sub">Add it with its numbers, once, and it is yours from then on.</span><div class="rowb"><button class="ghost" data-act="cat" data-c="quick">Quick add</button><button class="ghost" data-act="cat" data-c="mine">Make it a food</button></div></div></li>`;
+  if (cat === 'recent') return recentFoods().map(f => row(f)).join('') || '<li class="empty sub">Foods you log show up here, with the amounts you chose.</li>';
+  if (cat === 'thali') {
+    const own = S.plates.map((pl, i) => {
+      const s = pl.items.reduce((a, e) => { a.k += e.k * e.q; a.p += e.p * e.q; return a; }, { k: 0, p: 0 });
+      return `<li class="plate" data-act="plate" data-m="${meal}" data-i="${i}"><div class="grow"><span class="nm">${esc(pl.n)} <i class="tag">yours</i></span><span class="sub">${pl.items.map(e => `${qtxt(e.q)} ${esc(e.n.toLowerCase())}`).join(', ')}</span><span class="sub num">${fmt(s.k)} kcal · ${Math.round(s.p)} g protein</span></div><button class="x" data-act="delplate" data-i="${i}" aria-label="Delete ${esc(pl.n)}">×</button><span class="add">+</span></li>`;
+    }).join('');
+    return (own || '<li class="empty sub">Save any meal on Today as a plate (the link under it) and it lands here, ready for one tap.</li>') + THALI.map(([name, parts], i) => {
+      const s = parts.reduce((a, [id, n]) => { const f = food(id); a.k += f.k * n; a.p += f.p * n; return a; }, { k: 0, p: 0 });
+      return `<li data-act="thali" data-m="${meal}" data-i="${i}"><div class="grow"><span class="nm">${name}</span><span class="sub">${parts.map(([id, n]) => `${qtxt(n)} ${food(id).n.toLowerCase()}`).join(', ')}</span><span class="sub num">${fmt(s.k)} kcal · ${Math.round(s.p)} g protein</span></div><span class="add">+</span></li>`;
+    }).join('');
+  }
+  if (cat === 'quick') return `<li class="form"><div class="grow"><span class="nm">Quick add</span><span class="sub">A meal out, a label you can read, anything not in the list: the numbers alone. Carbs and fat are optional; give both and they count in the day's split.</span>
+      <div class="fgrid"><input id="k_n" placeholder="What, optional" class="span2" value="${esc(query)}"><input id="k_k" type="number" inputmode="numeric" placeholder="kcal"><input id="k_p" type="number" inputmode="decimal" placeholder="Protein g">
+      <input id="k_c" type="number" inputmode="decimal" placeholder="Carbs g"><input id="k_ft" type="number" inputmode="decimal" placeholder="Fat g"></div>
+      <button class="solid" data-act="quick" data-m="${meal}">Add</button></div></li>` + list.filter(e => e.m === meal && e.cat === 'quick').map(e => row(e)).join('');
   if (cat === 'mine') return S.custom.map(f => row(f, true)).join('') + `<li class="form"><div class="grow"><span class="nm">Add your own</span>
       <span class="sub">Copy the pack's panel exactly as printed. Most Indian labels give values per 100 g: choose that and enter the serving size in grams, and the serving is worked out for you.</span>
       ${seg('cbasis', [['serving', 'Per serving'], ['100', 'Per 100 g / ml']], CUSTOM.basis, 'tight')}
@@ -236,18 +313,20 @@ function addRows(meal) {
       <button class="solid" data-act="custom" data-m="${meal}">Save and add</button></div></li>`;
   if (cat === 'usual') {
     const fr = S.freq[meal] || {}, ids = Object.keys(fr).sort((a, b) => fr[b] - fr[a]);
-    return [...new Set([...ids, ...USUAL[meal]])].slice(0, 14).map(food).filter(Boolean).map(f => row(f)).join('');
+    return [...new Set([...ids, ...USUAL[meal]])].slice(0, 16).map(food).filter(Boolean).map(f => row(f, S.custom.includes(f))).join('');
   }
-  return allFoods().filter(f => f.cat === cat).map(f => row(f)).join('');
+  return allFoods().filter(f => f.cat === cat).map(f => row(f, f.cat === 'mine')).join('');
 }
 function addFoot(meal) {
-  const t = totals(day, meal), T = targets(), all = totals(day);
-  return `<div><b class="num">${fmt(t.k)} kcal · ${Math.round(t.p)} g protein</b><span class="sub num">Day: ${fmt(all.k)} / ${fmt(T.kcal)} · ${Math.round(all.p)} / ${T.protein} g</span></div><button class="solid" data-act="close">Done</button>`;
+  const t = totals(day, meal), T = targets(), all = totals(day), left = T.kcal - all.k;
+  return `<div><b class="num">${t.n ? `${fmt(t.k)} kcal · ${Math.round(t.p)} g protein` : 'Nothing yet'}</b><span class="sub num">Day ${fmt(all.k)} / ${fmt(T.kcal)} kcal · ${fmt(Math.abs(left))} ${left < 0 ? 'over' : 'left'} · ${Math.round(all.p)} / ${T.protein} g</span></div><button class="solid" data-act="close">Done</button>`;
 }
 function vAdd(meal) {
+  const counts = { recent: recentFoods().length, thali: S.plates.length + THALI.length, mine: S.custom.length };
   return `${masthead(MEALS.find(m => m[0] === meal)[1], `Add to · ${dateLabel(day, { weekday: 'short', day: 'numeric', month: 'short' })}`, { before: '<button class="nav" data-act="close" aria-label="Back">‹</button>' })}
-    <input id="q" type="search" placeholder="Search: poli, usal, pohe, whey" value="${esc(query)}" autocomplete="off">
-    <div class="chips">${CATS.map(([c, l]) => `<button class="${c === cat && !query ? 'on' : ''}" data-act="cat" data-c="${c}">${l}</button>`).join('')}</div>
+    <div class="addhead"><div class="searchbar"><input id="q" type="search" placeholder="Search: misal, pizza, roti, anda, chaas" value="${esc(query)}" autocomplete="off" enterkeyhint="search"><button class="clr" data-act="qclear" aria-label="Clear the search" ${query ? '' : 'hidden'}>×</button></div>
+    <div class="chips" id="chips">${CATS.map(([c, l]) => `<button class="${c === cat && !query ? 'on' : ''}" data-act="cat" data-c="${c}">${l}${counts[c] ? `<i class="cnt">${counts[c]}</i>` : ''}</button>`).join('')}</div>
+    </div><p class="hint">Tap to add one · hold for any amount or weight</p>
     <ul class="foods" id="rows">${addRows(meal)}</ul>
     <footer class="addfoot" id="foot">${addFoot(meal)}</footer>`;
 }
@@ -257,13 +336,13 @@ function bump(meal, f, d) {
   let e = list.find(x => x.m === meal && x.id === f.id);
   if (!e) {
     if (d <= 0) return;
-    e = { id: f.id, n: f.n, u: f.u, k: f.k, p: f.p, fb: f.fb, cat: f.cat, m: meal, q: 0 };
+    e = { id: f.id, n: f.n, u: f.u, k: f.k, p: f.p, fb: f.fb || 0, cat: f.cat, m: meal, q: 0 };
     if (f.c != null && f.ft != null) Object.assign(e, { c: f.c, ft: f.ft });
     if (f.g) e.g = f.g;
     if (f.src) e.src = f.src;
     list.push(e);
   }
-  e.q = r1(e.q + d);
+  e.q = r2(e.q + d);
   if (e.q <= 0) list.splice(list.indexOf(e), 1);
   if (!list.length) delete S.food[day];
   if (d >= 1 && f.cat !== 'quick') { const fr = S.freq[meal] ||= {}; fr[f.id] = (fr[f.id] || 0) + 1; }
@@ -272,29 +351,88 @@ function bump(meal, f, d) {
   save();
 }
 
+// ---------- any amount: the portion sheet ----------
+// Held on a food in the list: choose the amount by portion (any number, quarters, halves) or by weight, and the meal,
+// and see what it comes to before adding it.
+const PORT = { q: 1, m: 'lunch' };
+PRESS.food = el => { PORT.q = 1; PORT.m = el.dataset.m; openPop({ kind: 'portion', id: el.dataset.id }); };
+function vPortion(p) {
+  const f = pickFood(p.id);
+  if (!f) return '';
+  const u = mlOf(f);
+  return `${sheetTop(`${esc(unitText(f))} · ${fmt(f.k)} kcal · ${r1(f.p)} g protein each`, esc(f.n), `portion-${p.id}`)}
+    <div class="wstep big"><button class="step" data-act="pq" data-d="-1" data-repeat="pq-" aria-label="Less">−</button><label class="grow qbox"><input id="pqin" class="qin num" type="number" inputmode="decimal" step="any" min="0.05" max="50" value="${PORT.q}" aria-label="How many"><span>× ${esc(f.u)}</span></label><button class="step" data-act="pq" data-d="1" data-repeat="pq+" aria-label="More">+</button></div>
+    ${seg('pqset', [0.25, 0.5, 1, 1.5, 2, 3].map(q => [q, qtxt(q)]), PORT.q, 'tight')}
+    ${f.g ? `<label class="weigh"><span>Or by weight</span><span class="f"><input type="number" id="pg" inputmode="decimal" step="1" min="1" value="${Math.round(PORT.q * f.g)}"><i>${u}</i></span><span class="sub small">${/^\d/.test(f.u) ? '' : 'one '}${esc(f.u)} is ${/\(\d/.test(f.u) ? '' : 'about '}${Math.round(f.g)} ${u}</span></label>` : ''}
+    <div id="psum">${foodSum({ ...f, q: PORT.q })}</div>
+    <h3>Meal</h3>${seg('pmeal', MEALS, PORT.m)}
+    <div class="rowb"><button class="ghost" data-act="popclose">Cancel</button><span class="grow"></span><button class="solid" data-act="padd">Add</button></div></aside>`;
+}
+
 // ---------- editing an entry ----------
+// Everything about a logged food is yours to change: the amount (typed, stepped or weighed), the meal, the day, and
+// its own numbers. Changing the numbers makes the entry your own, so the library food it came from stays as it was.
 function vFoodEdit(i) {
   const e = (S.food[day] || [])[i];
   if (!e) return '';
-  const src = { label: 'From the pack’s nutrition panel', brand: 'Energy and protein as the maker states them; carbs and fat are not published', derived: 'The maker’s energy, protein and fat; carbs are the energy left over', ifct: 'Indian Food Composition Tables 2017 (ICMR-NIN)', usda: 'USDA FoodData Central', recipe: 'Estimate from typical home recipes: oil and portion move it by about a fifth', mine: 'Your own entry' }[e.src];
-  const ref = FOODIDX.get(e.id)?.ref, unit = / ml\b|glass|cup/.test(e.u) ? 'ml' : 'g';
-  return `${sheetTop(`${esc(e.u)} · ${fmt(e.k)} kcal · ${e.p} g protein each`, esc(e.n), `fedit-${i}`)}
-    <div class="wstep big"><button class="step" data-act="fq" data-d="-0.5" data-repeat="fq-">−</button><span class="grow"><b class="num" id="fq">${qtxt(e.q)}</b> × ${esc(e.u)}</span><button class="step" data-act="fq" data-d="0.5" data-repeat="fq+">+</button></div>
+  const src = { label: 'From the pack’s nutrition panel', brand: 'Energy and protein as the maker states them; carbs and fat are not published', derived: 'The maker’s energy, protein and fat; carbs are the energy left over', ifct: 'Indian Food Composition Tables 2017 (ICMR-NIN)', usda: 'USDA FoodData Central', recipe: 'Estimate from typical home recipes: oil and portion move it by about a fifth', mine: 'Your own numbers' }[e.src];
+  const ref = FOODIDX.get(e.id)?.ref, unit = mlOf(e), mine = S.custom.some(x => x.id === e.id);
+  const fld = (id, label, v, attrs = 'type="number" inputmode="decimal" step="any"') => `<label>${label}<input id="${id}" ${attrs} value="${v == null ? '' : esc(String(v))}"></label>`;
+  return `${sheetTop(`${esc(e.u)} · ${fmt(e.k)} kcal · ${r1(e.p)} g protein each`, esc(e.n), `fedit-${i}`)}
+    <div class="wstep big"><button class="step" data-act="fq" data-d="-1" data-repeat="fq-" aria-label="Less">−</button><label class="grow qbox"><input id="fqin" class="qin num" type="number" inputmode="decimal" step="any" min="0.05" max="50" value="${e.q}" aria-label="How many"><span>× ${esc(e.u)}</span></label><button class="step" data-act="fq" data-d="1" data-repeat="fq+" aria-label="More">+</button></div>
     ${seg('fqset', [0.25, 0.5, 1, 1.5, 2, 3].map(q => [q, qtxt(q)]), e.q, 'tight')}
-    ${e.g ? `<label class="weigh"><span>Weighed it?</span><span class="f"><input type="number" id="fg" data-act="fg" inputmode="decimal" step="1" min="1" value="${Math.round(e.q * e.g)}"><i>${unit}</i></span><span class="sub small">one ${esc(e.u)} is ${/\(\d/.test(e.u) ? '' : 'about '}${Math.round(e.g)} ${unit}</span></label>` : ''}
+    ${e.g ? `<label class="weigh"><span>Weighed it?</span><span class="f"><input type="number" id="fg" data-act="fg" inputmode="decimal" step="1" min="1" value="${Math.round(e.q * e.g)}"><i>${unit}</i></span><span class="sub small">${/^\d/.test(e.u) ? '' : 'one '}${esc(e.u)} is ${/\(\d/.test(e.u) ? '' : 'about '}${Math.round(e.g)} ${unit}</span></label>` : ''}
     <div id="fsum">${foodSum(e)}</div>
     ${src ? `<p class="sub small">${src}${ref ? ` · ${esc(ref)}` : ''}.</p>` : ''}
     <h3>Meal</h3>${seg('fmeal', MEALS, e.m)}
-    <div class="rowb"><button class="danger" data-act="fdel">Remove</button><span class="grow"></span><button class="solid" data-act="popclose">Done</button></div></aside>`;
+    <details class="more"><summary>Its numbers, for one ${esc(e.u)}</summary>
+      <div class="fgrid">${fld('e_n', 'Name', e.n, 'class="span2" maxlength="80"').replace('<label>', '<label class="span2">')}${fld('e_u', 'Portion', e.u, 'maxlength="40"')}${fld('e_g', `Weighs (${unit})`, e.g)}
+        ${fld('e_k', 'kcal', e.k)}${fld('e_p', 'Protein g', e.p)}${fld('e_c', 'Carbs g', e.c)}${fld('e_ft', 'Fat g', e.ft)}${fld('e_fb', 'Fibre g', e.fb)}</div>
+      <button class="solid" data-act="fnum">Use these numbers</button></details>
+    <details class="more"><summary>Another day</summary>
+      <div class="dayrow"><input type="date" id="fday" value="${day}" max="${todayKey()}"><button class="ghost" data-act="fmove">Move</button><button class="ghost" data-act="fcopy">Copy</button></div>
+      <div class="rowb tight"><button class="link" data-act="fcopyd" data-d="-1">Copy to the day before</button><button class="link" data-act="fcopyd" data-d="1" ${day >= todayKey() ? 'hidden' : ''}>Copy to the day after</button></div></details>
+    <div class="rowb"><button class="danger" data-act="fdel">Remove</button>${mine || e.cat === 'mine' ? '' : '<button class="ghost" data-act="fsave">Save as my food</button>'}<span class="grow"></span><button class="solid" data-act="popclose">Done</button></div></aside>`;
 }
 // What this portion holds, and the food per 100 g when its weight is known.
 function foodSum(e) {
-  const q = e.q, has = e.c != null, unit = / ml\b|glass|cup/.test(e.u) ? 'ml' : 'g';
+  const q = e.q, has = e.c != null, unit = mlOf(e);
   const row = [[fmt(e.k * q), 'kcal'], [r1(e.p * q), 'g protein'], [has ? r1(e.c * q) : DASH, 'g carbs'], [has ? r1(e.ft * q) : DASH, 'g fat']];
-  const per = e.g ? `Per 100 ${unit}: ${Math.round(e.k / e.g * 100)} kcal · ${r1(e.p / e.g * 100)} g protein${has ? ` · ${r1(e.c / e.g * 100)} g carbs · ${r1(e.ft / e.g * 100)} g fat` : ''} · ${r1(e.fb / e.g * 100)} g fibre` : `${r1(e.fb * q)} g fibre`;
+  const per = e.g ? `Per 100 ${unit}: ${Math.round(e.k / e.g * 100)} kcal · ${r1(e.p / e.g * 100)} g protein${has ? ` · ${r1(e.c / e.g * 100)} g carbs · ${r1(e.ft / e.g * 100)} g fat` : ''} · ${r1((e.fb || 0) / e.g * 100)} g fibre` : `${r1((e.fb || 0) * q)} g fibre`;
   const off = atwaterOff(e);
   const chk = off != null && e.k >= 20 && Math.abs(off) > 0.2 ? `<p class="flag small">The energy and the macros of this food disagree by ${Math.round(Math.abs(off) * 100)}%: one of the numbers is probably mistyped.</p>` : '';
   return `${stats(row, 'tight')}<p class="sub small num center">${per}</p>${chk}`;
+}
+// One food's own numbers from a form: name, portion, weight, kcal and macros. Carbs and fat only as a pair.
+function formFood(px, base) {
+  const v = id => $(`#${px}_${id}`)?.value ?? '';
+  const k = num(v('k'), 0, 5000), c = num(v('c'), 0, 1000), ft = num(v('ft'), 0, 500);
+  const f = { ...base, n: v('n').trim().slice(0, 80) || base.n, u: v('u').trim().slice(0, 40) || base.u, k, p: num(v('p'), 0, 500) ?? 0, fb: num(v('fb'), 0, 200) ?? 0 };
+  delete f.c; delete f.ft; delete f.g;
+  if (c != null && ft != null) Object.assign(f, { c, ft });
+  const g = num(v('g'), 1, 5000); if (g != null) f.g = g;
+  return k == null ? null : f;
+}
+// Your own food, changed: future entries use the new numbers; what you already logged keeps the numbers it had.
+function vCustomEdit(p) {
+  const f = S.custom.find(x => x.id === p.id);
+  if (!f) return '';
+  const fld = (id, label, v, attrs = 'type="number" inputmode="decimal" step="any"') => `<label>${label}<input id="${id}" ${attrs} value="${v == null ? '' : esc(String(v))}"></label>`;
+  return `${sheetTop('Your food · one serving', esc(f.n), `cedit-${f.id}`)}
+    <div class="fgrid">${fld('m_n', 'Name', f.n, 'maxlength="80"').replace('<label>', '<label class="span2">')}${fld('m_u', 'Serving', f.u, 'maxlength="40"')}${fld('m_g', 'Weighs (g / ml)', f.g)}
+      ${fld('m_k', 'kcal', f.k)}${fld('m_p', 'Protein g', f.p)}${fld('m_c', 'Carbs g', f.c)}${fld('m_ft', 'Fat g', f.ft)}${fld('m_fb', 'Fibre g', f.fb)}</div>
+    <p class="sub small">What you have already logged keeps the numbers it was logged with.</p>
+    <div class="rowb"><button class="danger" data-act="delcustom" data-id="${esc(f.id)}">Delete</button><span class="grow"></span><button class="solid" data-act="csave" data-id="${esc(f.id)}">Save</button></div></aside>`;
+}
+// A meal saved as a plate.
+function vPlateSave(p) {
+  const items = (S.food[day] || []).filter(e => e.m === p.m), t = totals(day, p.m);
+  const name = `${MEALS.find(m => m[0] === p.m)[1]}, ${items.slice(0, 2).map(e => e.n.split(/[ ,/(]/)[0].toLowerCase()).join(' and ')}`;
+  return `${sheetTop(`${plural(items.length, 'food')} · ${fmt(t.k)} kcal · ${Math.round(t.p)} g protein`, 'Save as a plate', `plate-${p.m}`)}
+    <p class="sub">${items.map(e => `${qtxt(e.q)} × ${esc(e.n)}`).join(' · ')}</p>
+    <label class="line"><span class="sub">Name it</span><span class="f"><input id="pl_n" maxlength="40" value="${esc(name)}"></span></label>
+    <p class="sub small">It appears first under Plates when you add food, for any meal, and goes in with one tap.</p>
+    <div class="rowb"><button class="ghost" data-act="popclose">Cancel</button><span class="grow"></span><button class="solid" data-act="psave" data-m="${p.m}">Save plate</button></div></aside>`;
 }
 SWIPE.fdelrow = el => {
   const k = day, list = S.food[k] || [], i = +el.dataset.i, e = list[i];
@@ -306,19 +444,99 @@ SWIPE.fdelrow = el => {
 function foodAct(a, el) {
   if (a === 'qweigh') { const i = document.querySelector('input[data-log="weights"]'); if (i) { i.scrollIntoView({ block: 'center', behavior: motionOK() ? 'smooth' : 'auto' }); setTimeout(() => i.focus(), motionOK() ? 350 : 0); } return true; }
   if (a === 'fedit') { openPop({ kind: 'fedit', i: +el.dataset.i }); return true; }
-  if (!['fq', 'fqset', 'fmeal', 'fdel', 'fg'].includes(a)) return false;
+  if (a === 'qclear') { query = ''; const q = $('#q'); if (q) { q.value = ''; q.focus(); } el.hidden = true; $('#rows').innerHTML = addRows(overlay.key); $$('#chips button').forEach(b => b.classList.toggle('on', b.dataset.c === cat)); buzz('tick'); return true; }
+  if (a === 'cedit') { openPop({ kind: 'cedit', id: el.dataset.id }); return true; }
+  if (a === 'psaveopen') { openPop({ kind: 'plate', m: el.dataset.m }); return true; }
+  if (a === 'csave') {
+    const f = S.custom.find(x => x.id === el.dataset.id), nf = f && formFood('m', f);
+    if (!nf) { buzz('warn'); toast('A food needs its kcal'); return true; }
+    S.custom[S.custom.indexOf(f)] = cleanFood(nf, false); save(); buzz('ok'); toast(`${nf.n} saved`); closePop(); return true;
+  }
+  if (a === 'psave') {
+    const items = (S.food[day] || []).filter(e => e.m === el.dataset.m).map(e => ({ ...e })), n = ($('#pl_n')?.value || '').trim().slice(0, 40);
+    if (!n) { buzz('warn'); toast('Give the plate a name'); return true; }
+    if (S.plates.length >= 40) { buzz('warn'); toast('Limit of 40 plates reached: delete one first'); return true; }
+    S.plates.unshift({ n, items }); save(); buzz('ok'); toast(`${n} saved under Plates`); closePop(); return true;
+  }
+  if (a === 'plate') {
+    const pl = S.plates[+el.dataset.i]; if (!pl) return true;
+    for (const e of pl.items) bump(el.dataset.m, e, e.q);
+    buzz('ok'); toast(`${pl.n} added`); refreshAdd(); return true;
+  }
+  if (a === 'delplate') {
+    const i = +el.dataset.i, pl = S.plates[i]; if (!pl) return true;
+    S.plates.splice(i, 1); save(); refreshAdd();
+    undoable(`${pl.n} deleted`, () => S.plates.splice(i, 0, pl));
+    return true;
+  }
+  if (['pq', 'pqset', 'pmeal', 'padd', 'pg', 'pqin'].includes(a)) {
+    const f = pop && pickFood(pop.id);
+    if (!f) return true;
+    const paint = () => {
+      const qi = $('#pqin'); if (qi && document.activeElement !== qi) qi.value = PORT.q;
+      const g = $('#pg'); if (g && document.activeElement !== g) g.value = Math.round(PORT.q * f.g);
+      const t = $('#psum'); if (t) t.innerHTML = foodSum({ ...f, q: PORT.q });
+      $$('.seg button[data-act="pqset"]').forEach(b => b.classList.toggle('on', +b.dataset.v === PORT.q));
+    };
+    if (a === 'pq') { PORT.q = qStep(PORT.q, +el.dataset.d); buzz('tick'); paint(); }
+    else if (a === 'pqset') { PORT.q = +el.dataset.v; buzz('tick'); paint(); }
+    else if (a === 'pqin') { const v = num(el.value, 0.05, 50); if (v != null) { PORT.q = r2(v); paint(); } }
+    else if (a === 'pg') { const g = num(el.value, 1, 5000); if (g != null && f.g) { PORT.q = clamp(r2(g / f.g), 0.01, 50); paint(); } }
+    else if (a === 'pmeal') { PORT.m = el.dataset.v; buzz('tick'); $$('.seg button[data-act="pmeal"]').forEach(b => b.classList.toggle('on', b.dataset.v === PORT.m)); }
+    else {
+      bump(PORT.m, f, PORT.q); buzz('ok');
+      toast(`${qtxt(PORT.q)} × ${f.n} · ${MEALS.find(m => m[0] === PORT.m)[1].toLowerCase()}`);
+      closePop();
+    }
+    return true;
+  }
+  if (!['fq', 'fqset', 'fmeal', 'fdel', 'fg', 'fqin', 'fnum', 'fmove', 'fcopy', 'fcopyd', 'fsave'].includes(a)) return false;
   const list = S.food[day] || [], i = pop?.i, e = list[i];
   if (!e) return true;
   const paint = () => {
-    const q = $('#fq'); if (q) q.textContent = qtxt(e.q);
+    const q = $('#fqin'); if (q && document.activeElement !== q) q.value = e.q;
     const t = $('#fsum'); if (t) t.innerHTML = foodSum(e);
     const g = $('#fg'); if (g && document.activeElement !== g) g.value = Math.round(e.q * e.g);
     $$('.seg button[data-act="fqset"]').forEach(b => b.classList.toggle('on', +b.dataset.v === e.q));
   };
-  if (a === 'fg') { const g = num(el.value, 1, 5000); if (g == null || !e.g) return true; e.q = clamp(Math.round(g / e.g * 100) / 100, 0.01, 50); save(); paint(); return true; }
-  if (a === 'fq') { e.q = clamp(Math.round((e.q + +el.dataset.d) * 2) / 2, 0.5, 50); save(); buzz('tick'); paint(); return true; }
+  if (a === 'fg') { const g = num(el.value, 1, 5000); if (g == null || !e.g) return true; e.q = clamp(r2(g / e.g), 0.01, 50); save(); paint(); return true; }
+  if (a === 'fqin') { const v = num(el.value, 0.01, 50); if (v != null) { e.q = r2(v); save(); paint(); } return true; }
+  if (a === 'fq') { e.q = qStep(e.q, +el.dataset.d); save(); buzz('tick'); paint(); return true; }
   if (a === 'fqset') { e.q = +el.dataset.v; save(); buzz('tick'); paint(); return true; }
   if (a === 'fmeal') { e.m = el.dataset.v; save(); buzz('tick'); render(); return true; }
+  if (a === 'fnum') {
+    const nf = formFood('e', e);
+    if (!nf) { buzz('warn'); toast('Enter the kcal for one portion'); return true; }
+    const was = { ...e };
+    for (const k of ['c', 'ft', 'g']) delete e[k];
+    Object.assign(e, nf, { src: 'mine' });
+    // Its own entry from now on: the library food keeps its numbers, and adding that food again starts a new line.
+    if (FOODIDX.has(e.id) && (e.k !== was.k || e.p !== was.p || e.n !== was.n)) e.id = 'e' + Date.now().toString(36);
+    save(); buzz('ok'); render();
+    toast('Numbers changed', 6000, { label: 'Undo', fn: () => { const L = S.food[day] || [], j = L.indexOf(e); if (j >= 0) L[j] = was; save(); render(); } });
+    return true;
+  }
+  if (a === 'fsave') {
+    if (S.custom.length >= 300) { buzz('warn'); toast('Limit of 300 own foods reached'); return true; }
+    const f = cleanFood({ ...e, id: 'x' + Date.now().toString(36), cat: 'mine', src: 'mine' }, false);
+    S.custom.push(f); save(); buzz('ok'); toast(`${f.n} is now under Mine`); render(); return true;
+  }
+  if (a === 'fmove' || a === 'fcopy' || a === 'fcopyd') {
+    const to = a === 'fcopyd' ? shift(day, +el.dataset.d) : $('#fday')?.value;
+    if (!DATE.test(to || '') || to > todayKey()) { buzz('warn'); toast('Choose a day up to today'); return true; }
+    if (to === day && a === 'fmove') return true;
+    const copy = { ...e };
+    (S.food[to] ||= []).push(copy);
+    if (a === 'fmove') { list.splice(i, 1); if (!list.length) delete S.food[day]; }
+    const k = day;
+    save(); buzz('ok'); closePop();
+    toast(`${a === 'fmove' ? 'Moved' : 'Copied'} to ${dateLabel(to, { weekday: 'short', day: 'numeric', month: 'short' })}`, 6000, { label: 'Undo', fn: () => {
+      const L = S.food[to] || [], j = L.indexOf(copy); if (j >= 0) L.splice(j, 1); if (!L.length) delete S.food[to];
+      if (a === 'fmove') (S.food[k] ||= []).splice(i, 0, e);
+      save(); render();
+    } });
+    return true;
+  }
   const k = day;
   list.splice(i, 1); if (!list.length) delete S.food[k];
   save(); closePop();
