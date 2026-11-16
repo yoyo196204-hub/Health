@@ -99,12 +99,30 @@ class HealthReader(private val a: MainActivity) {
         }
     }
 
+    // Filled while reading: for each kind of data, when its newest record was written into Health Connect (by which
+    // app), and which apps wrote anything. The write time is what tells "Zepp has not passed new data on yet" apart
+    // from "this app has not read it yet"; the read time alone says nothing about how fresh the data is.
+    private var wrote = HashMap<String, Pair<Long, String>>()
+    private var origins = HashSet<String>()
+    private val keyOf: Map<KClass<out Record>, String> = types.entries.associate { it.value to it.key }
+
     private suspend fun <T : Record> readAll(c: HealthConnectClient, type: KClass<T>, range: TimeRangeFilter, each: (T) -> Unit) {
         var token: String? = null
         var pages = 0
+        val key = keyOf[type]
         do {
             val page = c.readRecords(ReadRecordsRequest(type, range, pageSize = 1000, pageToken = token))
-            page.records.forEach(each)
+            for (r in page.records) {
+                val pkg = r.metadata.dataOrigin.packageName
+                if (pkg != a.packageName) {
+                    origins += pkg
+                    if (key != null) {
+                        val w = r.metadata.lastModifiedTime.toEpochMilli()
+                        if (w > (wrote[key]?.first ?: 0L)) wrote[key] = w to pkg
+                    }
+                }
+                each(r)
+            }
             token = page.pageToken
         } while (token != null && ++pages < 300)
     }
@@ -133,14 +151,47 @@ class HealthReader(private val a: MainActivity) {
                 g.result[metric]?.let { v -> val x = value(v); if (x > 0) day(g.startTime.toLocalDate())?.put(key, Math.round(x * 10) / 10.0) }
             }
         }
+        wrote = HashMap(); origins = HashSet()
         daily("steps", "st", StepsRecord.COUNT_TOTAL) { it.toDouble() }
         daily("distance", "di", DistanceRecord.DISTANCE_TOTAL) { it.inMeters }
         daily("active", "ak", ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL) { it.inKilocalories }
         daily("total", "tk", TotalCaloriesBurnedRecord.ENERGY_TOTAL) { it.inKilocalories }
 
+        // Each app's own steps and distance, day by day. Health Connect's daily total above merges every app by its
+        // priority list, and on Android 14+ the phone itself counts steps: the merge then differs from what the watch
+        // app shows. When the watch wrote steps for a day, its own count is used and the merge is kept beside it.
+        // A record that crosses midnight is shared between the two days by time.
+        fun spread(s: Instant, e: Instant, v: Double, put: (LocalDate, Double) -> Unit) {
+            if (!e.isAfter(s)) { put(dateOf(s), v); return }
+            val total = Duration.between(s, e).toMillis().toDouble()
+            var t = s
+            while (t.isBefore(e)) {
+                val next = minOf(e, dateOf(t).plusDays(1).atStartOfDay(zone).toInstant())
+                if (!next.isAfter(t)) break
+                put(dateOf(t), v * Duration.between(t, next).toMillis() / total)
+                t = next
+            }
+        }
+        val stepBy = HashMap<LocalDate, HashMap<String, Double>>()
+        val distBy = HashMap<LocalDate, HashMap<String, Double>>()
+        var stepEnd = 0L
+        safe("steps") {
+            readAll(c, StepsRecord::class, instants) { r ->
+                val pkg = r.metadata.dataOrigin.packageName
+                if (r.endTime.toEpochMilli() > stepEnd) stepEnd = r.endTime.toEpochMilli()
+                spread(r.startTime, r.endTime, r.count.toDouble()) { d, v -> stepBy.getOrPut(d) { HashMap() }.merge(pkg, v) { x, y -> x + y } }
+            }
+        }
+        safe("distance") {
+            readAll(c, DistanceRecord::class, instants) { r ->
+                val pkg = r.metadata.dataOrigin.packageName
+                spread(r.startTime, r.endTime, r.distance.inMeters) { d, v -> distBy.getOrPut(d) { HashMap() }.merge(pkg, v) { x, y -> x + y } }
+            }
+        }
+
         // Sleep: the night is filed under the morning it ends. The longest session is the main sleep; others are naps.
         // seg: the night as it happened, [minutes after the start, length, stage 1 awake, 2 light, 3 deep, 4 REM].
-        class Night(val start: Instant, val end: Instant, val d: Long, val l: Long, val r: Long, val w: Long, val seg: JSONArray)
+        class Night(val start: Instant, val end: Instant, val d: Long, val l: Long, val r: Long, val w: Long, val seg: JSONArray, val pkg: String)
         val nights = HashMap<LocalDate, MutableList<Night>>()
         safe("sleep") {
             readAll(c, SleepSessionRecord::class, instants) { s ->
@@ -177,26 +228,38 @@ class HealthReader(private val a: MainActivity) {
                     }
                 }
                 if (d + l + r == 0L) l = Duration.between(s.startTime, s.endTime).toMinutes() - w
-                if (d + l + r >= 15) nights.getOrPut(s.endTime.atZone(s.endZoneOffset ?: zone).toLocalDate()) { ArrayList() }.add(Night(s.startTime, s.endTime, d, l, r, w, seg))
+                if (d + l + r >= 15) nights.getOrPut(s.endTime.atZone(s.endZoneOffset ?: zone).toLocalDate()) { ArrayList() }.add(Night(s.startTime, s.endTime, d, l, r, w, seg, s.metadata.dataOrigin.packageName))
             }
         }
+        // The watch app: the first of the known wearable apps that wrote anything. Its own figures win wherever another
+        // app (the phone's step counter, a phone sleep tracker) wrote the same kind of data for the same day.
+        val watch = WATCH.firstOrNull { it in origins }
+        for ((d, by) in stepBy) {
+            val o = day(d) ?: continue
+            val w = watch?.let { by[it] } ?: continue
+            if (w < 1) continue
+            o.optDouble("st").takeIf { !it.isNaN() && Math.abs(it - w) >= 1 }?.let { o.put("sa", Math.round(it).toDouble()) }
+            o.put("st", Math.round(w).toDouble())
+        }
+        for ((d, by) in distBy) { val o = day(d) ?: continue; watch?.let { by[it] }?.takeIf { it > 0 }?.let { o.put("di", Math.round(it * 10) / 10.0) } }
         val mainSleep = HashMap<LocalDate, Night>()
-        for ((date, list) in nights) {
+        for ((date, all) in nights) {
+            val list = all.filter { it.pkg == watch }.ifEmpty { all }
             val m = list.maxByOrNull { it.d + it.l + it.r } ?: continue
             val o = day(date) ?: continue
             mainSleep[date] = m
             val on = m.start.atZone(zone).toLocalTime().let { it.hour * 60 + it.minute }.let { if (it > 720) it - 1440 else it }
             val off = m.end.atZone(zone).toLocalTime().let { it.hour * 60 + it.minute }
-            val naps = list.filter { it !== m }.sumOf { it.d + it.l + it.r }
+            val naps = list.filter { it !== m && it.end <= m.start || it !== m && it.start >= m.end }.sumOf { it.d + it.l + it.r }
             o.put("sl", JSONObject().put("d", m.d).put("l", m.l).put("r", m.r).put("w", m.w).put("on", on).put("off", off)
                 .put("bed", Duration.between(m.start, m.end).toMinutes()).put("nap", naps).apply { if (m.seg.length() > 0) put("seg", m.seg) })
         }
 
         // Point readings: daily average, or the morning value for weight and body fat.
-        safe("resting") { avg(c, RestingHeartRateRecord::class, instants, { dateOf(it.time) }, { it.beatsPerMinute.toDouble() }) { d, v -> day(d)?.put("rh", v.roundToInt()) } }
-        safe("hrv") { avg(c, HeartRateVariabilityRmssdRecord::class, instants, { dateOf(it.time) }, { it.heartRateVariabilityMillis }) { d, v -> day(d)?.put("hv", Math.round(v * 10) / 10.0) } }
-        safe("spo2") { avg(c, OxygenSaturationRecord::class, instants, { dateOf(it.time) }, { it.percentage.value }) { d, v -> day(d)?.put("o2", Math.round(v * 10) / 10.0) } }
-        safe("breathing") { avg(c, RespiratoryRateRecord::class, instants, { dateOf(it.time) }, { it.rate }) { d, v -> day(d)?.put("br", Math.round(v * 10) / 10.0) } }
+        safe("resting") { avg(c, watch, RestingHeartRateRecord::class, instants, { dateOf(it.time) }, { it.beatsPerMinute.toDouble() }) { d, v -> day(d)?.put("rh", v.roundToInt()) } }
+        safe("hrv") { avg(c, watch, HeartRateVariabilityRmssdRecord::class, instants, { dateOf(it.time) }, { it.heartRateVariabilityMillis }) { d, v -> day(d)?.put("hv", Math.round(v * 10) / 10.0) } }
+        safe("spo2") { avg(c, watch, OxygenSaturationRecord::class, instants, { dateOf(it.time) }, { it.percentage.value }) { d, v -> day(d)?.put("o2", Math.round(v * 10) / 10.0) } }
+        safe("breathing") { avg(c, watch, RespiratoryRateRecord::class, instants, { dateOf(it.time) }, { it.rate }) { d, v -> day(d)?.put("br", Math.round(v * 10) / 10.0) } }
         safe("weight") { first(c, WeightRecord::class, instants, { it.time }) { r -> day(dateOf(r.time))?.put("wt", Math.round(r.weight.inKilograms * 10) / 10.0) } }
         safe("bodyfat") { first(c, BodyFatRecord::class, instants, { it.time }) { r -> day(dateOf(r.time))?.put("bf", Math.round(r.percentage.value * 10) / 10.0) } }
         safe("vo2") { first(c, Vo2MaxRecord::class, instants, { it.time }, latest = true) { r -> day(dateOf(r.time))?.put("vo", Math.round(r.vo2MillilitersPerMinuteKilogram * 10) / 10.0) } }
@@ -221,14 +284,19 @@ class HealthReader(private val a: MainActivity) {
         }
 
         // Heart-rate samples, sorted by time, used four ways below.
-        var hrT = LongArray(0); var hrB = IntArray(0)
+        var hrT = LongArray(0); var hrB = IntArray(0); var hrEnd = 0L
         safe("heart") {
-            val t = ArrayList<Long>(); val b = ArrayList<Int>()
+            val t = ArrayList<Long>(); val b = ArrayList<Int>(); val fromWatch = ArrayList<Boolean>()
             readAll(c, HeartRateRecord::class, instants) { r ->
-                if (t.size < 600_000) for (x in r.samples) if (x.beatsPerMinute in 30..230) { t += x.time.toEpochMilli(); b += x.beatsPerMinute.toInt() }
+                val w = r.metadata.dataOrigin.packageName == watch
+                if (t.size < 600_000) for (x in r.samples) if (x.beatsPerMinute in 30..230) { t += x.time.toEpochMilli(); b += x.beatsPerMinute.toInt(); fromWatch += w }
             }
-            val order = t.indices.sortedBy { t[it] }
+            // A second device's samples on a day the watch covered would double-count minutes and mix two sensors.
+            val watchDays = HashSet<LocalDate>()
+            for (i in t.indices) if (fromWatch[i]) watchDays += dateOf(Instant.ofEpochMilli(t[i]))
+            val order = t.indices.filter { fromWatch[it] || dateOf(Instant.ofEpochMilli(t[it])) !in watchDays }.sortedBy { t[it] }
             hrT = LongArray(order.size) { t[order[it]] }; hrB = IntArray(order.size) { b[order[it]] }
+            if (hrT.isNotEmpty()) hrEnd = hrT.last()
         }
         fun samples(s: Long, e: Long): IntRange {
             var lo = java.util.Arrays.binarySearch(hrT, s); if (lo < 0) lo = -lo - 1
@@ -280,24 +348,42 @@ class HealthReader(private val a: MainActivity) {
                 val r = samples(w.optLong(0), w.optLong(1))
                 if (r.last - r.first >= 9) win.put(JSONObject().put("s", w.optLong(0)).put("a", Math.round(r.map { hrB[it] }.average() * 10) / 10.0).put("n", r.last - r.first + 1))
             }
-            return finish(days, from, today, sessions.map { it.json }, has("exercise") && !exFailed, win, granted, errors)
+            return finish(days, from, today, sessions.map { it.json }, has("exercise") && !exFailed, win, granted, errors, fresh(watch, stepEnd, hrEnd, mainSleep.values.maxOfOrNull { it.end.toEpochMilli() } ?: 0L))
         }
-        return finish(days, from, today, sessions.map { it.json }, has("exercise") && !exFailed, JSONArray(), granted, errors)
+        return finish(days, from, today, sessions.map { it.json }, has("exercise") && !exFailed, JSONArray(), granted, errors, fresh(watch, stepEnd, hrEnd, mainSleep.values.maxOfOrNull { it.end.toEpochMilli() } ?: 0L))
     }
 
     private fun finish(days: TreeMap<LocalDate, JSONObject>, from: LocalDate, to: LocalDate, ex: List<JSONObject>, exAllowed: Boolean,
-                       win: JSONArray, granted: Set<String>, errors: JSONArray): JSONObject {
+                       win: JSONArray, granted: Set<String>, errors: JSONArray, fresh: JSONObject): JSONObject {
         val d = JSONObject()
         for ((k, v) in days) if (v.length() > 0) d.put(k.toString(), v)
         return JSONObject().put("from", from.toString()).put("to", to.toString()).put("days", d)
             .put("ex", if (exAllowed) JSONArray(ex) else JSONObject.NULL).put("win", win)
-            .put("granted", JSONArray(perm.filterValues { it in granted }.keys)).put("errors", errors)
+            .put("granted", JSONArray(perm.filterValues { it in granted }.keys)).put("errors", errors).put("fresh", fresh)
+            .put("read", System.currentTimeMillis())
     }
 
-    private suspend fun <T : Record> avg(c: HealthConnectClient, type: KClass<T>, range: TimeRangeFilter, date: (T) -> LocalDate, v: (T) -> Double, put: (LocalDate, Double) -> Unit) {
+    // How fresh the data is: per kind, when its newest record was written into Health Connect and by which app, and
+    // for steps, heart rate and sleep the latest moment the data itself reaches.
+    private fun fresh(watch: String?, stepEnd: Long, hrEnd: Long, sleepEnd: Long): JSONObject {
+        val o = JSONObject()
+        for ((k, v) in wrote) o.put(k, JSONObject().put("w", v.first).put("src", appName(v.second)))
+        fun upTo(k: String, e: Long) { if (e > 0) (o.optJSONObject(k) ?: JSONObject().also { o.put(k, it) }).put("e", e) }
+        upTo("steps", stepEnd); upTo("heart", hrEnd); upTo("sleep", sleepEnd)
+        if (watch != null) o.put("watch", appName(watch))
+        o.put("apps", JSONArray(origins.map { appName(it) }.distinct().sorted()))
+        return o
+    }
+
+    // The day's average, from the watch app alone on days it wrote any: two devices' readings are not averaged together.
+    private suspend fun <T : Record> avg(c: HealthConnectClient, watch: String?, type: KClass<T>, range: TimeRangeFilter, date: (T) -> LocalDate, v: (T) -> Double, put: (LocalDate, Double) -> Unit) {
         val sums = HashMap<LocalDate, DoubleArray>()
-        readAll(c, type, range) { r -> sums.getOrPut(date(r)) { DoubleArray(2) }.let { it[0] += v(r); it[1]++ } }
-        for ((d, s) in sums) put(d, s[0] / s[1])
+        val mine = HashMap<LocalDate, DoubleArray>()
+        readAll(c, type, range) { r ->
+            sums.getOrPut(date(r)) { DoubleArray(2) }.let { it[0] += v(r); it[1]++ }
+            if (r.metadata.dataOrigin.packageName == watch) mine.getOrPut(date(r)) { DoubleArray(2) }.let { it[0] += v(r); it[1]++ }
+        }
+        for ((d, s) in sums) { val m = mine[d]; put(d, if (m != null) m[0] / m[1] else s[0] / s[1]) }
     }
     // The earliest reading of each day (a morning weigh-in), or the latest when asked.
     private suspend fun <T : Record> first(c: HealthConnectClient, type: KClass<T>, range: TimeRangeFilter, time: (T) -> Instant, latest: Boolean = false, put: (T) -> Unit) {
@@ -309,6 +395,9 @@ class HealthReader(private val a: MainActivity) {
         }
         pick.values.forEach(put)
     }
+
+    private val WATCH = listOf(MainActivity.ZEPP, "com.mi.health", "com.xiaomi.wearable", "fi.polar.polarflow",
+        "com.garmin.android.apps.connectmobile", "com.fitbit.FitbitMobile", "com.samsung.android.wear.shealth")
 
     private fun appName(pkg: String) = when (pkg) {
         MainActivity.ZEPP -> "Zepp"

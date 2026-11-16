@@ -31,7 +31,7 @@ const TABS = Object.keys(VIEWS);
 const ALIAS = { heart: 'recovery', trend: 'review', train: 'training' };
 const POPS = { fedit: p => vFoodEdit(p.i), exinfo: p => vExInfo(p.id), cardioadd: () => vCardioAdd(), cardioinfo: p => vCardioInfo(p), sess: p => vSession(p),
   hrvinfo: p => vHrvInfo(p), labinfo: p => vLabInfo(p), recedit: p => vRecEdit(p), dayx: p => vDayDetail(p) };
-const PAGES = ['add', 'why', 'set', 'lab'];
+const PAGES = ['add', 'why', 'set', 'lab', 'beats'];
 const scrollMem = {};
 const BUILD = (document.querySelector('script[src^="app.js"]')?.getAttribute('src').split('v=')[1]) || 'dev';
 
@@ -41,10 +41,10 @@ function render() {
   settleTargets();
   // An evidence sheet opened from a page keeps that page underneath it.
   const base = overlay?.type === 'why' ? overlay.under : overlay;
-  const adding = base?.type === 'add' && MEALS.some(m => m[0] === base.key), setting = base?.type === 'set' || base?.type === 'lab';
+  const adding = base?.type === 'add' && MEALS.some(m => m[0] === base.key), setting = base?.type === 'set' || base?.type === 'lab' || base?.type === 'beats';
   try {
     const banner = (loadNote ? `<p class="flag banner">${loadNote} <button class="link" data-act="dismissnote">OK</button></p>` : '') + (saveFailed ? '<p class="flag banner">Storage is full or blocked: changes are not being kept. Export a backup from Me › Backup and data.</p>' : '');
-    $('#view').innerHTML = banner + (adding ? vAdd(base.key) : base?.type === 'lab' ? vLab(base.key) : setting ? vSet(base.key) : VIEWS[tab]());
+    $('#view').innerHTML = banner + (adding ? vAdd(base.key) : base?.type === 'lab' ? vLab(base.key) : base?.type === 'beats' ? vBeats(base.key) : setting ? vSet(base.key) : VIEWS[tab]());
     $('#sheet').innerHTML = pending ? (pending.type === 'halftone' ? vHalftone(pending) : pending.type === 'opengym' ? vOpenGym(pending) : vImport(pending)) : pop && POPS[pop.kind] ? part(POPS[pop.kind], pop) : overlay?.type === 'why' ? vWhy(overlay.key) : '';
   } catch (err) {
     console.error(err);
@@ -58,7 +58,7 @@ function render() {
   $$('#tabs a').forEach(a => a.classList.toggle('on', a.hash === '#' + tab));
   $('#tabs').style.setProperty('--i', TABS.indexOf(tab));
   document.documentElement.classList.toggle('still', !motionOK());
-  sheetEntered(); settle(); liveKick(); labKick();
+  sheetEntered(); settle(); liveKick(); labKick(); bxKick();
 }
 // Renders caused by the watch or the strap wait until you have finished typing in a field.
 function renderSoft() {
@@ -76,7 +76,7 @@ function route() {
   else if (VIEWS[a]) nextTab = a;
   if (next?.type === 'why' && was) next.under = was.type === 'why' ? was.under : was;
   if (next?.type === 'add' && was?.type !== 'add') { query = ''; cat = 'usual'; }
-  const page = o => o && (o.type === 'add' || o.type === 'set' || o.type === 'lab');
+  const page = o => o && (o.type === 'add' || o.type === 'set' || o.type === 'lab' || o.type === 'beats');
   let dir = null, top = false;
   if (next?.type === 'why' || was?.type === 'why') dir = null;
   else if (page(next) && !(page(was) && was.key === next.key)) { dir = 'push'; top = true; if (!page(was)) scrollMem[wasTab] = scrollY; }
@@ -113,11 +113,14 @@ const ACT = {
   thali: el => { const [name, parts] = THALI[+el.dataset.i]; for (const [id, n] of parts) bump(el.dataset.m, food(id), n); buzz('ok'); toast(`${name} added`); refreshAdd(); },
   cat: el => { cat = el.dataset.c; query = ''; buzz('tick'); render(); },
   custom: el => {
-    const f = cleanFood({ id: 'x' + Date.now(), n: $('#c_n').value, u: $('#c_u').value.trim(), k: $('#c_k').value, p: $('#c_p').value, fb: $('#c_fb').value, cat: 'mine' }, false);
+    const v = customValues();
+    if (CUSTOM.basis === '100' && v.g == null) { buzz('warn'); return toast('Enter the serving size in grams, so the panel per 100 g can be turned into a serving'); }
+    const f = cleanFood({ id: 'x' + Date.now(), n: $('#c_n').value, u: $('#c_u').value.trim() || (v.g ? `${v.g} g` : ''), k: v.k, p: v.p, c: v.c, ft: v.ft, fb: v.fb, g: v.g, src: 'mine', cat: 'mine' }, false);
     if (!f) { buzz('warn'); return toast('Name and kcal are needed'); }
     if (S.custom.length >= 300) { buzz('warn'); return toast('Limit of 300 own foods reached'); }
     S.custom.push(f); bump(el.dataset.m, f, 1); buzz('ok'); render();
   },
+  cbasis: el => { CUSTOM.basis = el.dataset.v; buzz('tick'); $$('.seg button[data-act="cbasis"]').forEach(b => b.classList.toggle('on', b.dataset.v === CUSTOM.basis)); customCheck(); },
   quick: el => {
     const k = num($('#k_k').value, 1, 5000), p = num($('#k_p').value, 0, 500) ?? 0;
     if (k == null) { buzz('warn'); return toast('Enter the calories'); }
@@ -172,7 +175,7 @@ const ACT = {
   sync: () => { buzz('tick'); syncNow(); },
   fullsync: () => syncNow(90),
   hcask: () => hcAsk(),
-  zepp: () => nat('openZepp'),
+  zepp: () => openZepp(),
   bkpick: () => { S.meta.welcomed = true; save(); nat('backupPick'); },
   shareweek: () => { const T = targets(); shareText('Health · week', shareWeek(T, range(7).map(k => dayCells(k, T)), energy())); },
 };
@@ -185,11 +188,29 @@ document.addEventListener('click', e => {
   if (el.dataset.repeat && e.isTrusted && repeated === el.dataset.repeat) { repeated = ''; return; }
   const a = el.dataset.act;
   if (ACT[a]) return ACT[a](el);
-  if (trainAct(a, el) || foodAct(a, el) || setAct(a, el) || ogAct(a, el) || labAct(a, el) || recAct(a, el)) return;
+  if (trainAct(a, el) || foodAct(a, el) || setAct(a, el) || ogAct(a, el) || labAct(a, el) || recAct(a, el) || bxAct(a, el) || checkAct(a, el)) return;
   if (a.startsWith('hr')) return hrAct(a, el);
   if (a.startsWith('w')) return watchAct(a);
 });
+// The custom food form as one serving, whichever way the panel was typed in. Per 100 g needs the serving's weight.
+function customValues() {
+  const n = id => num($(id)?.value, 0, 5000), g = num($('#c_g')?.value, 1, 5000);
+  const x = CUSTOM.basis === '100' ? (g != null ? g / 100 : null) : 1, sc = v => v == null || x == null ? null : Math.round(v * x * 10) / 10;
+  return { g, k: sc(n('#c_k')), p: sc(n('#c_p')) ?? 0, c: sc(n('#c_c')), ft: sc(n('#c_ft')), fb: sc(n('#c_fb')) ?? 0 };
+}
+// As the panel is typed: what one serving comes to, and whether its energy agrees with its own macros.
+function customCheck() {
+  const el = $('#c_chk');
+  if (!el) return;
+  const v = customValues();
+  if (v.k == null) { el.textContent = ''; return; }
+  const off = atwaterOff(v), serving = `One serving: ${fmt(v.k)} kcal · ${v.p} g protein${v.c != null ? ` · ${v.c} g carbs` : ''}${v.ft != null ? ` · ${v.ft} g fat` : ''}.`;
+  el.className = off != null && Math.abs(off) > 0.2 ? 'flag small' : 'sub small';
+  el.textContent = off != null && Math.abs(off) > 0.2 ? `${serving} Its energy and macros disagree by ${Math.round(Math.abs(off) * 100)}%: check the numbers against the pack.` : serving;
+}
 document.addEventListener('input', e => {
+  if (e.target.id === 'fg') { foodAct('fg', e.target); return; }
+  if (/^c_/.test(e.target.id)) { customCheck(); return; }
   if (e.target.id !== 'q') return;
   query = e.target.value;
   $('#rows').innerHTML = addRows(overlay.key);
@@ -215,6 +236,7 @@ document.addEventListener('change', e => {
   }
   else if (el.dataset.lift) logLift(el);
   else if (el.dataset.act === 'prehab') { if (el.checked) S.prehab[day] = true; else delete S.prehab[day]; save(); buzz(el.checked ? 'ok' : 'tick'); render(); }
+  else if (el.dataset.act === 'bxraw') bxAct('bxraw', el);
   else if (el.dataset.act === 'shoulder') { S.profile.shoulder = el.checked; save(); buzz('tick'); render(); }
   else if (el.dataset.act === 'cutg') { CUT.groups[el.dataset.v] = el.checked; buzz('tick'); render(); }
   else if (el.id === 'wfile' && el.files.length) { watchRead(el.files); el.value = ''; }
@@ -252,6 +274,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 applyTheme();
+if (backfillMacros()) save();
 dailyBackup();
 navigator.storage?.persist?.().catch(() => {});
 if (NATIVE) { document.documentElement.classList.add('native'); hcCheck(); backupInfo(); autoBackup(); ogInfo(); ogAuto(); remindStatus(); remindPlan(); strapAuto(); }

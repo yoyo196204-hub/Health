@@ -94,11 +94,25 @@ you log in openGym arrives with its name and the muscles it trains, from `opengy
 | Automation (Android app) | The remembered strap connects by itself when the app opens with it on your chest, and before 11 with no check yet that day the morning check starts by itself; both can be turned off under the morning check. On a day without a morning check the watch's night stands in for it in the verdict, and the verdict says what it rests on |
 | Lab (from Recovery or Today) | Breathe (resonance, cyclic sighing, box; with or without the strap, haptic cues per breath), the resonance finder, the orthostatic test, spot checks, and Live: an open-ended session with RMSSD, SDNN, pNN50, SD1/SD2, breathing rate and α1 moving as you watch, marks for what you are doing, each marked stretch read on its own and against your earlier ones, and the beats saved as a CSV file for other HRV software; every session kept |
 | A day in detail (tap a night, or Your day) | The watch's heart rate across 24 hours with sleep and workouts marked, the night stage by stage, and every number against your previous four weeks |
+| Beat by beat (from any morning check or Lab session) | The recording beat by beat: one finger reads each beat (time to the millisecond, RR, bpm, change from the last, and what correction it needed), a pinch zooms, the strip below moves the window; RMSSD, SDNN, pNN50, SD1/SD2, the Poincaré plot and the spectrum are worked out again for the stretch on screen |
+| Data checks (Me, and a line in Review when something needs a look) | About twenty fixed-rule checks across every dataset: food energy against its own macros, sleep stages against the night's total, watch resting and workout heart rate against the strap (Bland–Altman), saved RMSSD against its own beats, steps against distance, active against total energy, duplicate workouts, load typos, and how fresh the watch data is. Each gives its numbers and lists the records that failed |
 | Me | Your numbers, and a page each for goal, training, profile, data sources, all your data (see, change or delete any record), backup and data, feel, and the evidence |
 
 Gestures: swipe sideways to change tab, swipe right on a page to go back, swipe a row left to delete it (with undo), swipe a result card or a toast away, drag a sheet down or tap outside it to close.
 
 ## How the numbers are made
+
+- **Watch data, and how fresh it is**: Zepp passes the watch's data to Health Connect only when the Zepp app syncs with the
+  watch, so Today shows two times: when Zepp last wrote to Health Connect, and when Health last read it. Health reads
+  Health Connect on opening (after two minutes away), every five minutes while open, on pull-down, and twice on coming
+  back from "Open Zepp". Steps, distance, sleep, resting heart rate, HRV and heart samples come from the watch app's own
+  records on any day it wrote them, so they match Zepp rather than Health Connect's merge of every app (on Android 14+
+  the phone counts steps too); the merged step count is kept beside it and Data checks lists days where they differ.
+- **Food**: every food carries protein, available carbohydrate, fat and fibre, and the grams in its household unit, so a
+  portion can be weighed. Home dishes are recipe estimates; packaged foods come from their label panels (Open Food Facts,
+  barcode given), or only what the maker states when that is all there is (carbs and fat then stay unknown, never
+  guessed); raw ingredients from IFCT 2017 or USDA. Every panel is checked against its own macros (4/4/9, fibre 2) in the
+  tests, and your own foods and entries are checked the same way as you type them.
 
 - **Weight trend**: each weigh-in moves a smoothed line a tenth of the way; the weekly rate is the Theil–Sen
   slope (median of pairwise slopes) over 21 days, so one heavy evening cannot swing it. A weigh-in far from
@@ -159,10 +173,11 @@ Plain JavaScript, no build step. Scripts load in this order:
 | `feel.js` | Haptics, screen transitions, sheets, undo toasts, press and hold, pull to refresh |
 | `ui.js` | Shared building blocks, the chart and the muscle map |
 | `h9.js` | The strap: connection, the beat timeline, live trace, morning HRV check, cardio with α1, heart-rate recovery, crash-safe drafts |
+| `beats.js` | The beat explorer |
 | `lab.js` | The Lab: breathing pacer, resonance finder, orthostatic test, spot check, Live sessions and the beat export |
 | `watch.js` | Zepp CSV import |
 | `opengym.js` | openGym: its backup and CSV coming in, the folder link, Health's plan as an openGym plan file with backups and the block |
-| `view-*.js` | One file per screen; `view-records.js` is all your data and a day in detail |
+| `view-*.js` | One file per screen; `view-records.js` is all your data and a day in detail, `view-checks.js` the data checks |
 | `app.js` | State, routing, events |
 
 Exercise animations live in openGym. Tests: `node test/run.js` (the engine) and `node test/browser.js` (the screens in a real browser: that a finger scrolls every tab, fixed bars stay put, a Live session runs end to end; needs Playwright). Both run on GitHub before every build.

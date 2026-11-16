@@ -5,16 +5,50 @@
 function ageYears() { return (Date.now() - Date.parse(S.profile.dob)) / (365.25 * DAY); }
 
 // ---------- food ----------
+// Totals for a day or one meal. Carbs and fat are summed only over entries that know them (a maker that states just
+// energy and protein, or an old entry); kn is the energy those entries cover, so a split is never shown as complete
+// when part of the day is unknown.
 function totals(key, meal) {
-  const t = { k: 0, p: 0, fb: 0, n: 0 };
-  for (const e of S.food[key] || []) if (!meal || e.m === meal) { t.k += e.k * e.q; t.p += e.p * e.q; t.fb += e.fb * e.q; t.n++; }
+  const t = { k: 0, p: 0, fb: 0, c: 0, ft: 0, kn: 0, n: 0 };
+  for (const e of S.food[key] || []) if (!meal || e.m === meal) {
+    t.k += e.k * e.q; t.p += e.p * e.q; t.fb += e.fb * e.q; t.n++;
+    if (e.c != null && e.ft != null) { t.c += e.c * e.q; t.ft += e.ft * e.q; t.kn += e.k * e.q; }
+  }
   return t;
 }
-function food(id) {
-  const f = FOODS.find(x => x[0] === id);
-  return f ? { id: f[0], n: f[1], u: f[2], k: f[3], p: f[4], fb: f[7], cat: f[8] } : S.custom.find(x => x.id === id);
+// Every built-in food as one shape: { id, n, u, k, p, c, ft, fb, cat, g (grams in one unit, if known), src, ref }.
+// Home dishes carry src 'recipe' (an estimate from typical recipes); see data.js for the packaged and raw sources.
+const FOODIDX = new Map();
+for (const f of FOODS) FOODIDX.set(f[0], { id: f[0], n: f[1], u: f[2], k: f[3], p: f[4], c: f[5], ft: f[6], fb: f[7], cat: f[8], g: GRAMS[f[0]] || unitGrams(f[2]), src: 'recipe' });
+for (const f of PANEL_FOODS) FOODIDX.set(f.id, f);
+// "100 g", "50 g dry", "1 glass (250 ml)": the grams written in the unit itself.
+function unitGrams(u) { const m = /(\d+(?:\.\d+)?)\s*(g|ml)\b/.exec(u || ''); return m ? +m[1] : null; }
+function food(id) { return FOODIDX.get(id) || S.custom.find(x => x.id === id); }
+function allFoods() { return [...FOODIDX.values()].concat(S.custom); }
+// Energy that the macros themselves account for: 4 kcal/g protein and carbs, 9 fat, 2 fibre (FAO). A panel or an
+// entry that disagrees with its own macros by more than about a fifth has a typo somewhere.
+function atwater(f) { return f.c == null || f.ft == null ? null : 4 * f.p + 4 * f.c + 9 * f.ft + 2 * (f.fb || 0); }
+function atwaterOff(f) { const a = atwater(f); return a == null || !f.k ? null : (f.k - a) / Math.max(f.k, a); }
+// Entries logged before carbs and fat were kept: filled in from the food they came from, only where the stored
+// energy and protein still match it exactly (so an entry from a food that has since changed is left alone).
+function backfillMacros() {
+  let n = 0;
+  for (const list of Object.values(S.food)) for (const e of list) {
+    if (e.c != null) continue;
+    const f = FOODIDX.get(e.id);
+    if (!f || f.c == null || f.k !== e.k || f.p !== e.p) continue;
+    Object.assign(e, { c: f.c, ft: f.ft }); if (f.g && !e.g) e.g = f.g; if (f.src && !e.src) e.src = f.src; n++;
+  }
+  return n;
 }
-function allFoods() { return FOODS.map(f => food(f[0])).concat(S.custom); }
+// One portion in words: "1½ × 1 katori · about 225 g", or "65 g" for something weighed by the gram.
+function qtxt(q) { return q === 0.5 ? '½' : q === 1.5 ? '1½' : q === 2.5 ? '2½' : String(+q.toFixed(2)); }
+function portion(e) {
+  const g = e.g ? e.q * e.g : null;
+  if (g != null && /^100 (g|ml)$/.test(e.u)) return `${Math.round(g)} ${e.u.slice(4)}`;
+  const ml = / ml\b/.test(e.u) ? 'ml' : 'g';
+  return `${qtxt(e.q)} × ${e.u}${g != null && !/\(\d/.test(e.u) ? ` · about ${Math.round(g)} ${ml}` : g != null && e.q !== 1 ? ` · ${Math.round(g)} ${ml}` : ''}`;
+}
 function mainMeals(k) { return ['breakfast', 'lunch', 'dinner'].filter(m => (S.food[k] || []).some(e => e.m === m)).length; }
 // A day counts toward the burn estimate only if it looks complete, unless you say otherwise.
 function isComplete(k) {

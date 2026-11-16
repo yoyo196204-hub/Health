@@ -69,6 +69,7 @@ function vReview() {
   const bf = Object.keys(S.wx).sort().reverse().find(k => S.wx[k].bf);
   return `${masthead('Review', 'Last 7 days · tap any label for its evidence', { after: `<button class="mini" data-act="shareweek" aria-label="Share this week">Share</button>` })}
     <section class="block first">${matrix(T, days, cells)}</section>
+    ${part(checkBanner)}
     ${sec('What the data says to do', D.length ? `<ul class="dec">${D.slice(0, 5).map(([w, sig, act, ev]) => `<li class="w${w}"><a href="#why-${ev}"><span class="sig">${sig}</span><span class="act">${act}</span></a></li>`).join('')}</ul>` : para('Nothing triggered. Hold the plan.'))}
     ${sec('Energy ledger', table([
       trow(`Eaten, ${plural(E.n, 'complete day')}`, E.intake == null ? DASH : `${fmt(E.intake)} kcal`),

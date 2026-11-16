@@ -335,9 +335,26 @@ test('every food has a unique id, a known category, and calories that match its 
   for (const f of F) {
     assert.ok(!ids.has(f[0]), `duplicate ${f[0]}`); ids.add(f[0]);
     assert.ok(cats.has(f[8]), `${f[0]}: category ${f[8]}`);
-    const e = 4 * f[4] + 4 * f[5] + 9 * f[6];
+    // Carbs are available carbohydrate; fibre adds 2 kcal/g (FAO), as it does on Indian labels and in IFCT.
+    const e = 4 * f[4] + 4 * f[5] + 9 * f[6] + 2 * f[7];
     if (f[3] > 20) assert.ok(Math.abs(e - f[3]) / f[3] <= 0.15, `${f[0]}: ${f[3]} kcal vs ${e} from macros`);
   }
+  const G = run(c, 'GRAMS');
+  for (const [id, g] of Object.entries(G)) { assert.ok(ids.has(id), `GRAMS: unknown ${id}`); assert.ok(g > 0 && g <= 500, `GRAMS ${id}: ${g}`); }
+  // Packaged, powder and raw panels: unique, known category, every panel internally consistent within a fifth (the
+  // filter they were chosen by), and each serving exactly its panel scaled by the serving's weight.
+  for (const f of run(c, 'PANEL_FOODS')) {
+    assert.ok(!ids.has(f.id), `duplicate ${f.id}`); ids.add(f.id);
+    assert.ok(cats.has(f.cat), `${f.id}: category ${f.cat}`);
+    assert.ok(['label', 'brand', 'derived', 'ifct', 'usda'].includes(f.src) && f.ref, `${f.id}: source`);
+    assert.ok(f.g > 0 && f.k > 0 && f.p >= 0, f.id);
+    if (f.per) {
+      const [k, p, cb, ft, fb] = f.per, e = 4 * p + 4 * cb + 9 * ft + 2 * fb;
+      assert.ok(Math.abs(e - k) / Math.max(e, k) <= 0.2, `${f.id}: panel ${k} kcal vs ${Math.round(e)} from its macros`);
+      assert.ok(Math.abs(f.k - k * f.g / 100) <= 0.5 && Math.abs(f.p - p * f.g / 100) <= 0.05, `${f.id}: serving is not its panel scaled`);
+    } else assert.ok(f.c == null && f.ft == null, `${f.id}: a maker-stated food must not invent carbs or fat`);
+  }
+  assert.strictEqual(run(c, 'allFoods().length'), ids.size);
   for (const [name, parts] of run(c, 'THALI')) for (const [id] of parts) assert.ok(ids.has(id), `${name}: ${id}`);
   for (const id of [...Object.values(run(c, 'USUAL')).flat(), ...run(c, 'GAP')]) assert.ok(ids.has(id), id);
 });
@@ -561,6 +578,96 @@ test('openGym round trip: a session trained from Health’s plan comes back as t
 
 // ---- the web app as files: these guard against the failures that only show up on a phone ----
 const scripts = [...fs.readFileSync(path.join(root, 'index.html'), 'utf8').matchAll(/<script src="([a-z0-9-]+\.js)/g)].map(m => m[1]);
+test('a logged food keeps its carbs, fat and weight through saving and loading; unknown stays unknown', c => {
+  run(c, `S.food['2026-03-02'] = [
+    { id: 'amul_pbm', n: 'x', u: '1 pack (200 ml)', k: 108, p: 15, c: 8, ft: 1, fb: 0, g: 200, src: 'label', m: 'snack', q: 1.5 },
+    { id: 'amul_kool_protein', n: 'y', u: '1 bottle', k: 133, p: 10, fb: 0, m: 'snack', q: 1 },
+    { id: 'z', n: 'only carbs', u: '1', k: 100, p: 0, c: 25, fb: 0, m: 'snack', q: 0.05 }];
+    S = sanitize(JSON.parse(JSON.stringify(S)));`);
+  const L = run(c, "S.food['2026-03-02']");
+  assert.deepStrictEqual([L[0].c, L[0].ft, L[0].g, L[0].src, L[0].q], [8, 1, 200, 'label', 1.5]);
+  assert.ok(!('c' in L[1]) && !('ft' in L[1]), 'a maker-stated food has no carbs or fat');
+  assert.ok(!('c' in L[2]), 'carbs without fat cannot give a split, so neither is kept');
+  assert.strictEqual(L[2].q, 0.05, 'a weighed few grams is kept');
+  const t = run(c, "totals('2026-03-02')");
+  assert.strictEqual(t.c, 12); assert.strictEqual(t.ft, 1.5); assert.strictEqual(t.kn, 162);
+  assert.strictEqual(Math.round(t.k), 300);
+});
+test('old entries get carbs and fat from their food only when they still match it', c => {
+  const f = run(c, "food('chapati')");
+  run(c, `S.food['2026-03-03'] = [{ id: 'chapati', n: 'Chapati', u: '1 medium', k: ${f.k}, p: ${f.p}, fb: ${f.fb}, m: 'lunch', q: 2 },
+    { id: 'chapati', n: 'Chapati, edited', u: '1 medium', k: ${f.k + 30}, p: ${f.p}, fb: ${f.fb}, m: 'dinner', q: 1 }]`);
+  assert.strictEqual(run(c, 'backfillMacros()'), 1);
+  const L = run(c, "S.food['2026-03-03']");
+  assert.deepStrictEqual([L[0].c, L[0].ft, L[0].g], [f.c, f.ft, 40]);
+  assert.ok(L[1].c == null, 'an entry that no longer matches its food is left alone');
+  assert.strictEqual(run(c, "portion({ q: 1.5, u: '1 katori', g: 150 })"), '1½ × 1 katori · about 225 g');
+  assert.strictEqual(run(c, "portion({ q: 0.65, u: '100 g', g: 100 })"), '65 g');
+  assert.strictEqual(run(c, "Math.round(atwaterOff({ k: 400, p: 10, c: 10, ft: 1, fb: 0 }) * 100)"), 78);
+});
+test('a sync keeps the watch’s own steps, the merged count beside them, and when the watch last wrote', c => {
+  const today = run(c, 'todayKey()'), now = Date.now();
+  c.P = { from: today, to: today, ex: [], win: [], errors: ['vo2: not allowed'], read: now,
+    days: { [today]: { st: 8412, sa: 9020, di: 6100 } },
+    fresh: { watch: 'Zepp', apps: ['Zepp', 'Health Connect'], steps: { w: now - 36e5, e: now - 37e5, src: 'Zepp' }, heart: { w: now - 72e5, src: 'Zepp' }, bogus: { w: 1 } } };
+  run(c, 'mergeSync(P); S.meta.fresh = cleanFresh(Object.assign({}, P.fresh, { read: P.read, err: P.errors }))');
+  assert.strictEqual(run(c, `S.steps['${today}']`), 8412);
+  assert.strictEqual(run(c, `S.wx['${today}'].sa`), 9020);
+  const F = run(c, 'S.meta.fresh');
+  assert.strictEqual(F.watch, 'Zepp'); assert.deepStrictEqual(F.err, ['vo2: not allowed']);
+  assert.ok(!F.k.bogus, 'unknown kinds are dropped');
+  assert.strictEqual(run(c, 'watchWrote().k'), 'steps', 'the newest write by the watch app');
+  assert.deepStrictEqual(run(c, 'sanitize(JSON.parse(JSON.stringify(S))).meta.fresh'), F);
+});
+// A recording with known faults: breathing at 6 a minute, one missed beat, one extra, one far out of range.
+function plantedBeats() {
+  const rr = [];
+  for (let i = 0; i < 400; i++) rr.push(900 + 80 * Math.sin(i * 0.9 / 6 * 2 * Math.PI / 1.5) + (i % 7) * 3);
+  rr[100] = rr[100] * 2; rr.splice(200, 1, rr[200] * 0.4, rr[200] * 0.6); rr[300] = 4000;
+  return rr;
+}
+test('every corrected beat says what was done to it and which beat it came from; nothing else changes', c => {
+  c.raw = plantedBeats();
+  const C = run(c, 'rrClean(raw)');
+  assert.strictEqual(C.fix.length, C.rr.length); assert.strictEqual(C.src.length, C.rr.length);
+  for (let i = 1; i < C.src.length; i++) assert.ok(C.src[i] >= C.src[i - 1], 'beats stay in order');
+  const counted = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  C.fix.forEach((f, i) => { if (f && !(i && C.fix[i - 1] === f && C.src[i - 1] === C.src[i])) counted[f]++; });
+  assert.ok(C.kinds.missed >= 1 && counted[1] === C.kinds.missed, 'missed beats are marked, once each');
+  assert.ok(C.kinds.range >= 1, 'the out-of-range beat is found');
+  assert.ok(C.fix[C.src.indexOf(100)] === 1, 'the doubled beat at 100 is the one split');
+  // The flags change nothing about the result the app has always computed.
+  const M = run(c, 'hrvMetrics(raw)'), W = run(c, 'rrStats(rrClean(raw).rr)');
+  for (const k of ['rmssd', 'sdnn', 'pnn50', 'sd1', 'sd2', 'hr']) assert.ok(Math.abs(M[k] - W[k]) < 1e-9 * Math.max(1, M[k]), `${k}: ${M[k]} vs ${W[k]}`);
+});
+test('a window of beats is read exactly as the whole would be, and RMSSD rolls over its last 30 beats', c => {
+  c.rr = plantedBeats().slice(0, 90).map(x => Math.min(1400, x));
+  const part = run(c, 'rrStats(rr, 20, 70)'), alone = run(c, 'rrStats(rr.slice(20, 70))');
+  assert.deepStrictEqual(part, alone);
+  assert.strictEqual(run(c, 'rrStats(rr, 0, 9)'), null);
+  const roll = run(c, 'rollingRmssd(rr, 30)'), d = c.rr.slice(31, 61).map((x, i) => x - c.rr[30 + i]);
+  assert.ok(Math.abs(roll[60] - Math.sqrt(d.reduce((a, x) => a + x * x, 0) / 30)) < 1e-9);
+  assert.strictEqual(roll[29], null);
+});
+test('data checks find planted mistakes, and pass clean data', c => {
+  vm.runInContext('var SETPAGES = {};', c);
+  vm.runInContext(fs.readFileSync(path.join(root, 'view-checks.js'), 'utf8'), c, { filename: 'view-checks.js' });
+  const k = run(c, 'todayKey()'), y = run(c, 'shift(todayKey(), -1)');
+  run(c, `S.sleepx['${k}'] = { d: 90, l: 240, r: 90, w: 20, on: -60, bed: 450 }; S.sleep['${k}'] = 7;`);
+  run(c, `S.steps['${k}'] = 8000; S.wx['${k}'] = { di: 6000 };`);
+  let C = Object.fromEntries(run(c, 'memo.clear(), runChecks()').map(x => [x.id, x]));
+  assert.strictEqual(C['s-stage'].status, 'ok', C['s-stage'].result);
+  assert.strictEqual(C['a-stride'].status, 'ok');
+  assert.strictEqual(C['f-prot'].status, 'na');
+  run(c, `S.sleep['${y}'] = 8; S.sleepx['${y}'] = { d: 60, l: 200, r: 60, w: 10, on: -60, bed: 300 };
+    S.food['${k}'] = [{ id: 'q', n: 'Shake', u: '1', k: 50, p: 30, fb: 0, m: 'snack', q: 1 }, { id: 'r', n: 'Bar', u: '1', k: 400, p: 10, c: 10, ft: 1, fb: 0, m: 'snack', q: 1 }];
+    S.wx['${k}'].di = 60000; S.wx['${k}'].ak = 900; S.wx['${k}'].tk = 600;`);
+  C = Object.fromEntries(run(c, 'memo.clear(), runChecks()').map(x => [x.id, x]));
+  assert.strictEqual(C['s-stage'].status, 'bad'); assert.strictEqual(C['s-stage'].items.length, 2, 'the total and the time in bed');
+  assert.strictEqual(C['f-prot'].status, 'bad'); assert.strictEqual(C['f-atw'].status, 'look');
+  assert.strictEqual(C['a-stride'].status, 'look'); assert.strictEqual(C['a-kcal'].status, 'bad');
+  for (const x of Object.values(C)) assert.ok(['ok', 'look', 'bad', 'na'].includes(x.status) && x.result, x.id);
+});
 test('the page root keeps its default overflow, so the page scrolls by touch', () => {
   const css = fs.readFileSync(path.join(root, 'styles.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   for (const m of css.matchAll(/(?:^|})\s*(?:html|:root)\s*\{([^}]*)\}/g)) assert.ok(!/overflow(-[xy])?\s*:/.test(m[1]), 'html must not set overflow: ' + m[1].trim());

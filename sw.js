@@ -2,10 +2,10 @@
 // Every request for the app's own files asks GitHub for the current version first (a quick "has it changed?"
 // check), so a stale file can never be mixed with a new one; the saved copy is used only when offline.
 // STAMP is written by test/stamp.js and matches the ?v= on every file in index.html.
-const STAMP = '14f910e66a';
+const STAMP = '1cc129e028';
 const CACHE = 'health-' + STAMP;
 const SHELL = ['./', 'index.html', 'styles.css', 'lib.js', 'hrv.js', 'data.js', 'exercises.js', 'opengym-ids.js', 'body-data.js', 'store.js', 'model.js', 'train.js', 'native.js',
-  'feel.js', 'ui.js', 'h9.js', 'lab.js', 'watch.js', 'opengym.js', 'view-today.js', 'view-training.js', 'view-recovery.js', 'view-review.js', 'view-me.js', 'view-records.js', 'app.js',
+  'feel.js', 'ui.js', 'h9.js', 'lab.js', 'beats.js', 'watch.js', 'opengym.js', 'view-today.js', 'view-training.js', 'view-recovery.js', 'view-review.js', 'view-me.js', 'view-records.js', 'view-checks.js', 'app.js',
   'manifest.webmanifest'].map(f => /\.(js|css|webmanifest)$/.test(f) ? `${f}?v=${STAMP}` : f).concat(['icon-192.png', 'icon-512.png']);
 
 self.addEventListener('install', e => {

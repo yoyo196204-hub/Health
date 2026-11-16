@@ -37,11 +37,13 @@ function rollQD(a, w) {
 //  - and, added to the next one, makes about one normal beat is an extra beat: the two are merged;
 //  - a short beat followed by a long one (an ectopic beat and its pause) is evened out across the pair;
 //  - anything else is replaced by the local median.
-// Returns the corrected beats, the share of beats that needed correction, and the count of each kind.
+// Returns the corrected beats, the share of beats that needed correction, the count of each kind, and for each
+// corrected beat what was done to it (fix: 0 as recorded, then FIXK's order) and which raw beat it came from (src).
+const FIXK = ['', 'missed', 'extra', 'ectopic', 'other', 'range'];
 function rrClean(raw) {
   const rr = (raw || []).filter(x => Number.isFinite(x));
   const n0 = rr.length, kinds = { missed: 0, extra: 0, ectopic: 0, other: 0, range: 0 };
-  if (n0 < 3) return { rr: rr.filter(x => x > RR_LO && x < RR_HI), bad: 0, n: n0, kinds };
+  if (n0 < 3) { const ok = rr.map((x, i) => [x, i]).filter(([x]) => x > RR_LO && x < RR_HI); return { rr: ok.map(x => x[0]), bad: 0, n: n0, kinds, fix: ok.map(() => 0), src: ok.map(x => x[1]) }; }
   // Out of physiological range: replaced by the median of the in-range beats around it, before anything else.
   const inr = rr.map(x => x > RR_LO && x < RR_HI);
   const base = rr.map((x, i) => {
@@ -51,23 +53,26 @@ function rrClean(raw) {
     for (let j = Math.max(0, i - 5); j <= Math.min(n0 - 1, i + 5); j++) if (j !== i && inr[j]) nb.push(rr[j]);
     return nb.length ? qOf(sortedCopy(nb), 0.5) : null;
   });
-  const a = base.filter(x => x != null);
+  const ai = [], wasOut = [];
+  base.forEach((x, i) => { if (x != null) { ai.push(i); wasOut.push(!inr[i]); } });
+  const a = ai.map(i => base[i]);
   const med = rollMedian(a, 11), dev = a.map((x, i) => x - med[i]), qd = rollQD(dev, 91);
-  const out = [];
+  const out = [], fix = [], src = [];
+  const put = (v, k, i) => { out.push(v); fix.push(k); src.push(ai[i]); };
   let fixed = kinds.range;
   for (let i = 0; i < a.length; i++) {
     const m = med[i], thr = Math.max(0.12 * m, 5.2 * qd[i]), x = a[i];
-    if (Math.abs(x - m) <= thr) { out.push(x); continue; }
+    if (Math.abs(x - m) <= thr) { put(x, wasOut[i] ? 5 : 0, i); continue; }
     fixed++;
-    if (Math.abs(x / 2 - m) <= thr && x > m) { kinds.missed++; out.push(x / 2, x / 2); continue; }
+    if (Math.abs(x / 2 - m) <= thr && x > m) { kinds.missed++; put(x / 2, 1, i); put(x / 2, 1, i); continue; }
     const nx = a[i + 1];
-    if (nx != null && x < m && Math.abs(x + nx - m) <= thr) { kinds.extra++; out.push(x + nx); i++; continue; }
+    if (nx != null && x < m && Math.abs(x + nx - m) <= thr) { kinds.extra++; put(x + nx, 2, i); i++; continue; }
     if (nx != null && x < m && nx > med[i + 1] && Math.abs(nx - med[i + 1]) > Math.max(0.12 * med[i + 1], 5.2 * qd[i + 1])) {
-      kinds.ectopic++; fixed++; const e = (x + nx) / 2; out.push(e, e); i++; continue;
+      kinds.ectopic++; fixed++; const e = (x + nx) / 2; put(e, 3, i); put(e, 3, i + 1); i++; continue;
     }
-    kinds.other++; out.push(m);
+    kinds.other++; put(m, 4, i);
   }
-  return { rr: out, bad: n0 ? fixed / n0 : 0, n: n0, kinds };
+  return { rr: out, bad: n0 ? fixed / n0 : 0, n: n0, kinds, fix, src };
 }
 
 // ---------- the spectrum ----------
@@ -140,6 +145,35 @@ function hrvMetrics(raw, spectrum = true) {
       const pk = peakFreq(S, 0.1, 0.5);
       if (pk) { out.br = pk.f * 60; out.brProm = pk.prom; }
     }
+  }
+  return out;
+}
+
+// ---------- a stretch of already-corrected beats ----------
+// The time-domain and Poincaré measures of rr[i0..i1), exactly as hrvMetrics computes them, without correcting again
+// (the explorer corrects once, then reads any window of the result). null under 10 beats.
+function rrStats(rr, i0 = 0, i1 = rr.length) {
+  const n = i1 - i0;
+  if (n < 10) return null;
+  let s = 0, ss = 0, d2 = 0, dsum = 0, n50 = 0, lo = Infinity, hi = -Infinity;
+  for (let i = i0; i < i1; i++) {
+    const x = rr[i]; s += x; ss += x * x; if (x < lo) lo = x; if (x > hi) hi = x;
+    if (i > i0) { const d = x - rr[i - 1]; d2 += d * d; dsum += d; if (Math.abs(d) > 50) n50++; }
+  }
+  const m = s / n, sdnn = Math.sqrt(Math.max(0, (ss - n * m * m) / (n - 1))), nd = n - 1;
+  const rmssd = Math.sqrt(d2 / nd), sdsd = Math.sqrt(Math.max(0, (d2 - dsum * dsum / nd) / (nd - 1)));
+  const sd1 = Math.SQRT1_2 * sdsd, sd2 = Math.sqrt(Math.max(0, 2 * sdnn * sdnn - 0.5 * sdsd * sdsd));
+  return { n, dur: s / 1000, rr: m, hr: 60000 / m, rmssd, ln: Math.log(rmssd), sdnn, pnn50: n50 / nd * 100, sd1, sd2, minHr: 60000 / hi, maxHr: 60000 / lo };
+}
+// RMSSD over the w beats ending at each beat: how beat-to-beat variability moves through a recording.
+function rollingRmssd(rr, w = 30) {
+  const out = new Array(rr.length).fill(null);
+  let acc = 0;
+  const d = i => rr[i] - rr[i - 1];
+  for (let i = 1; i < rr.length; i++) {
+    acc += d(i) ** 2;
+    if (i > w) acc -= d(i - w) ** 2;
+    if (i >= w) out[i] = Math.sqrt(Math.max(0, acc) / w);
   }
   return out;
 }

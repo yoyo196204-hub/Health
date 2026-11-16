@@ -35,13 +35,19 @@ function dated(o, fn, max = 4000) {
   if (obj(o)) for (const k of Object.keys(o).sort().slice(-max)) if (DATE.test(k)) { const v = fn(o[k], k); if (v != null) r[k] = v; }
   return r;
 }
+const FOOD_SRC = ['recipe', 'label', 'brand', 'derived', 'ifct', 'usda', 'mine'];
 function cleanFood(e, logged) {
   if (!obj(e)) return null;
   const k = num(e.k, 0, 5000), id = str(e.id, 40), n = str(e.n, 80).trim();
   if (k == null || !id || !n || BAD.has(id)) return null;
   const f = { id, n, u: str(e.u, 40) || '1 serving', k, p: num(e.p, 0, 500) || 0, fb: num(e.fb, 0, 200) || 0, cat: str(e.cat, 12) };
+  // Carbs and fat only as a pair: one without the other cannot give the day's split. Absent means unknown, not zero.
+  const c = num(e.c, 0, 1000), ft = num(e.ft, 0, 500);
+  if (c != null && ft != null) Object.assign(f, { c, ft });
+  const g = num(e.g, 1, 5000); if (g != null) f.g = g;
+  if (FOOD_SRC.includes(e.src)) f.src = e.src;
   if (!logged) return f;
-  const q = num(e.q, 0.1, 50);
+  const q = num(e.q, 0.01, 50);
   if (q == null) return null;
   return Object.assign(f, { q, m: MEALS.some(m => m[0] === e.m) ? e.m : 'lunch' });
 }
@@ -171,7 +177,24 @@ function cleanSleepx(v) {
   return r;
 }
 // Extra daily figures from the watch: distance m, active and total kcal, body fat %, SpO2 %, breaths/min, VO2max, watch HRV ms.
-const WX = { di: [0, 200000], ak: [0, 10000], tk: [0, 15000], bf: [3, 70], o2: [70, 100], br: [4, 40], vo: [10, 90], hv: [1, 300] };
+const WX = { sa: [1, 100000], di: [0, 200000], ak: [0, 10000], tk: [0, 15000], bf: [3, 70], o2: [70, 100], br: [4, 40], vo: [10, 90], hv: [1, 300] };
+// What the last Health Connect read found about freshness: when it read, which app is the watch, and per kind of
+// data when its newest record was written (w), the latest moment the data reaches (e) and the app that wrote it.
+const FRESH_KINDS = ['steps', 'distance', 'active', 'total', 'sleep', 'heart', 'resting', 'hrv', 'weight', 'bodyfat', 'exercise', 'spo2', 'breathing', 'vo2'];
+function cleanFresh(v) {
+  if (!obj(v)) return null;
+  const r = { read: num(v.read, 1e12, 1e13), watch: str(v.watch, 30) || null, apps: Array.isArray(v.apps) ? v.apps.slice(0, 12).map(x => str(x, 30)).filter(Boolean) : [], k: {}, err: [] };
+  if (r.read == null) return null;
+  const src = obj(v.k) || v;
+  for (const k of FRESH_KINDS) {
+    const x = obj(src[k]);
+    if (!x) continue;
+    const w = num(x.w, 1e12, 1e13), e = num(x.e, 1e12, 1e13);
+    if (w != null || e != null) r.k[k] = { w, e, src: str(x.src, 30) || null };
+  }
+  if (Array.isArray(v.err)) r.err = v.err.slice(0, 8).map(x => str(x, 160)).filter(Boolean);
+  return r;
+}
 function cleanWx(v) {
   if (!obj(v)) return null;
   const r = {};
@@ -255,7 +278,7 @@ function sanitize(raw) {
     custom: list(raw.custom, 300, e => cleanFood(e, false)), freq,
     meta: {
       exported: DATE.test(meta.exported) ? meta.exported : null, watch: DATE.test(meta.watch) ? meta.watch : null,
-      sync: num(meta.sync, 1e12, 1e13), backup: DATE.test(meta.backup) ? meta.backup : null,
+      sync: num(meta.sync, 1e12, 1e13), fresh: cleanFresh(meta.fresh), backup: DATE.test(meta.backup) ? meta.backup : null,
       h9: h9 && str(h9.id, 64) ? { id: str(h9.id, 64), name: str(h9.name, 40) } : null,
       tgt: tg && num(tg.k, 800, 6000) != null && DATE.test(tg.at) ? { k: +tg.k, p: num(tg.p, 20, 400) || 0, at: tg.at, sig: str(tg.sig, 80) } : null,
       welcomed: meta.welcomed === true, imported: str(meta.imported, 40) || null,

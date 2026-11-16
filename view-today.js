@@ -39,9 +39,17 @@ function syncLine() {
   const st = SYNC.status;
   if (st && st.sdk !== 'ok') return `<p class="syncline flag" id="syncline">${st.sdk === 'update' ? 'Health Connect needs an update from the Play Store.' : 'Health Connect is not available on this phone.'}</p>`;
   if (st && !st.granted?.length) return `<div class="callout" id="syncline"><b>Bring in your watch data</b><span class="sub">Steps, sleep, heart rate, workouts and weight arrive by themselves from Health Connect. Nothing leaves the phone.</span><button class="solid" data-act="hcask">Allow access</button></div>`;
-  const stale = S.meta.watch && gapDays(S.meta.watch, todayKey()) >= 1 && new Date().getHours() >= 9;
-  const text = SYNC.busy ? 'Syncing with Health Connect…' : SYNC.err ? esc(SYNC.err) : S.meta.sync ? `Watch data synced ${ago(S.meta.sync)}${stale ? ` · latest from ${dateLabel(S.meta.watch)}` : ''}` : 'Not synced yet';
-  return `<div class="syncline ${SYNC.err ? 'err' : ''}" id="syncline"><span class="grow">${text}</span>${stale && APP?.zepp ? '<button class="mini" data-act="zepp">Open Zepp</button>' : ''}<button class="mini" data-act="sync" ${SYNC.busy ? 'disabled' : ''} aria-label="Sync now">↻</button></div>`;
+  // Two different times, said apart: when the watch app last passed data to Health Connect (how fresh the numbers
+  // really are), and when this app last read it. "Synced 1 min ago" alone would look fresh while showing old data.
+  const W = watchWrote(), lag = watchLagging(), F = S.meta.fresh;
+  const wrote = W ? `${esc(W.src || 'The watch')} passed data on ${ago(W.w)}` : '';
+  const text = SYNC.busy ? 'Reading Health Connect…' : SYNC.err ? esc(SYNC.err)
+    : !S.meta.sync ? 'Not read yet'
+    : W ? `${wrote}${freshParts().length ? ` · ${freshParts().join(', ')}` : ''}` : `Read ${ago(S.meta.sync)}`;
+  const sub = SYNC.busy || SYNC.err || !S.meta.sync ? '' : lag
+    ? `Nothing new from ${esc(W.src || 'the watch')} for ${ago(W.w).replace(/ ago$/, '')}. ${esc(W.src || 'The watch app')} only passes data on when it syncs with the watch: open it, let it sync, and come back.`
+    : `Health read it ${ago(F?.read || S.meta.sync)}${F?.err?.length ? ` · ${plural(F.err.length, 'kind')} could not be read` : ''}`;
+  return `<div class="syncline ${SYNC.err ? 'err' : lag ? 'lag' : ''}" id="syncline"><span class="grow"><span>${text}</span>${sub ? `<span class="sub small">${sub}</span>` : ''}</span>${APP?.zepp && (lag || !W) ? '<button class="mini" data-act="zepp">Open Zepp</button>' : ''}<button class="mini" data-act="sync" ${SYNC.busy ? 'disabled' : ''} aria-label="Read Health Connect now">${SYNC.busy ? '…' : '↻'}</button></div>`;
 }
 // A fresh install or a reinstall: offer the backup once. It goes for good when you dismiss it, choose a backup
 // folder, import, or once there is anything in the app at all, including watch data.
@@ -157,7 +165,7 @@ function vToday() {
   const T = targets(), t = totals(day), isToday = day === todayKey(), y = shift(day, -1);
   const meals = MEALS.map(([m, label]) => {
     const mt = totals(day, m), main = m !== 'snack';
-    const items = (S.food[day] || []).map((e, i) => [e, i]).filter(([e]) => e.m === m).map(([e, i]) => `<li data-flash="${esc(m + e.id)}" data-swipe="fdelrow" data-i="${i}"><button class="grow rowbtn" data-act="fedit" data-i="${i}"><span class="nm">${esc(e.n)}</span><span class="sub">${e.q} × ${esc(e.u)} · ${fmt(e.k * e.q)} kcal · ${r1(e.p * e.q)} g</span></button>
+    const items = (S.food[day] || []).map((e, i) => [e, i]).filter(([e]) => e.m === m).map(([e, i]) => `<li data-flash="${esc(m + e.id)}" data-swipe="fdelrow" data-i="${i}"><button class="grow rowbtn" data-act="fedit" data-i="${i}"><span class="nm">${esc(e.n)}</span><span class="sub">${esc(portion(e))} · ${fmt(e.k * e.q)} kcal · ${r1(e.p * e.q)} g protein</span></button>
         <button class="step" data-act="q" data-m="${m}" data-id="${esc(e.id)}" data-d="-0.5" aria-label="Less ${esc(e.n)}">−</button><button class="step" data-act="q" data-m="${m}" data-id="${esc(e.id)}" data-d="0.5" aria-label="More ${esc(e.n)}">+</button></li>`).join('');
     const canCopy = !mt.n && totals(y, m).n;
     const pOk = main && mt.p >= T.perMeal * 0.8;
@@ -174,7 +182,7 @@ function vToday() {
       <div class="legend"><div>${why('kcal', 'Calories')}<b class="num">${fmt(t.k)}<i> / ${fmt(T.kcal)}</i></b></div>
         <div>${why('protein', 'Protein')}<b class="num pr">${Math.round(t.p)}<i> / ${T.protein} g</i></b></div>
         <div>${why('fibre', 'Fibre')}<b class="num">${Math.round(t.fb)}<i> / ${T.fibre} g</i></b></div></div>
-      <p class="coach">${coach(T, t)}</p></section>
+      ${macroLine(t)}<p class="coach">${coach(T, t)}</p></section>
     <section class="vitals">
       ${vitalInput('weights', 'Weight', 'rate', 'kg', 'inputmode="decimal" step="0.1"', r1(T.wt))}
       ${vitalInput('steps', 'Steps', 'steps', `/&nbsp;${fmt(T.stepGoal)}`, 'inputmode="numeric"', '0')}
@@ -185,11 +193,24 @@ function vToday() {
 }
 
 // ---------- add food ----------
+const CUSTOM = { basis: '100' };
+// "1 katori · about 150 g" when a unit's weight is known and not already written in it.
+function unitText(f) { return f.g && !/\d\s*(g|ml)\b/.test(f.u) ? `${f.u} · about ${Math.round(f.g)} ${/glass|cup|ml/.test(f.u) ? 'ml' : 'g'}` : f.u; }
+// Where a packaged or raw food's numbers come from, in a word; home dishes are recipe estimates and say nothing.
+function srcTag(f) { const L = { label: 'pack label', brand: 'maker', derived: 'maker', ifct: 'IFCT', usda: 'USDA' }; return L[f.src] ? ` · <i class="srct">${L[f.src]}</i>` : ''; }
+// The day's carbs and fat, and how the energy splits, only as far as the logged foods know them.
+function macroLine(t) {
+  if (!t.n || !t.kn) return '';
+  const share = t.kn / t.k, kc = 4 * t.p + 4 * t.c + 9 * t.ft || 1;
+  const pc = x => Math.round(x / kc * 100);
+  return `<div class="macros"><div class="mbar" role="img" aria-label="Energy from protein, carbs and fat"><i class="mp" style="flex:${4 * t.p}"></i><i class="mc" style="flex:${4 * t.c}"></i><i class="mf" style="flex:${9 * t.ft}"></i></div>
+    <p class="sub num"><i class="k mp"></i>Protein ${pc(4 * t.p)}% <i class="k mc"></i>Carbs ${Math.round(t.c)} g · ${pc(4 * t.c)}% <i class="k mf"></i>Fat ${Math.round(t.ft)} g · ${pc(9 * t.ft)}%${share < 0.97 ? ` <span class="small">· split known for ${Math.round(share * 100)}% of the day's kcal</span>` : ''}</p></div>`;
+}
 function addRows(meal) {
   const q = query.trim().toLowerCase(), list = S.food[day] || [];
   const row = (f, del) => {
     const e = list.find(x => x.m === meal && x.id === f.id);
-    return `<li class="${e ? 'on' : ''}" data-flash="${esc(meal + f.id)}"><div class="grow" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="1"><span class="nm">${esc(f.n)}</span><span class="sub">${esc(f.u)} · ${fmt(f.k)} kcal · ${f.p} g protein</span></div>
+    return `<li class="${e ? 'on' : ''}" data-flash="${esc(meal + f.id)}"><div class="grow" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="1"><span class="nm">${esc(f.n)}</span><span class="sub">${esc(unitText(f))} · ${fmt(f.k)} kcal · ${f.p} g protein${srcTag(f)}</span></div>
       ${e ? `<button class="step" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="-0.5" aria-label="Less">−</button><b class="qty num">${e.q}</b><button class="step" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="0.5" aria-label="More">+</button>`
         : `${del ? `<button class="x" data-act="delcustom" data-id="${esc(f.id)}" aria-label="Delete ${esc(f.n)}">×</button>` : ''}<span class="add" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="1">+</span>`}</li>`;
   };
@@ -205,8 +226,13 @@ function addRows(meal) {
       <div class="fgrid"><input id="k_n" placeholder="What, optional" class="span2"><input id="k_k" type="number" inputmode="numeric" placeholder="kcal"><input id="k_p" type="number" inputmode="decimal" placeholder="Protein g"></div>
       <button class="solid" data-act="quick" data-m="${meal}">Add</button></div></li>` + (S.food[day] || []).filter(e => e.m === meal && e.cat === 'quick').map(e => row(e)).join('');
   if (cat === 'mine') return S.custom.map(f => row(f, true)).join('') + `<li class="form"><div class="grow"><span class="nm">Add your own</span>
-      <div class="fgrid"><input id="c_n" placeholder="Name" class="span2"><input id="c_u" placeholder="Serving, e.g. 1 bar"><input id="c_k" type="number" inputmode="decimal" placeholder="kcal">
-      <input id="c_p" type="number" inputmode="decimal" placeholder="Protein g"><input id="c_fb" type="number" inputmode="decimal" placeholder="Fibre g"></div>
+      <span class="sub">Copy the pack's panel exactly as printed. Most Indian labels give values per 100 g: choose that and enter the serving size in grams, and the serving is worked out for you.</span>
+      ${seg('cbasis', [['serving', 'Per serving'], ['100', 'Per 100 g / ml']], CUSTOM.basis, 'tight')}
+      <div class="fgrid"><input id="c_n" placeholder="Name" class="span2"><input id="c_u" placeholder="Serving, e.g. 1 bar"><input id="c_g" type="number" inputmode="decimal" placeholder="Serving g / ml">
+      <input id="c_k" type="number" inputmode="decimal" placeholder="kcal"><input id="c_p" type="number" inputmode="decimal" placeholder="Protein g">
+      <input id="c_c" type="number" inputmode="decimal" placeholder="Carbs g"><input id="c_ft" type="number" inputmode="decimal" placeholder="Fat g">
+      <input id="c_fb" type="number" inputmode="decimal" placeholder="Fibre g" class="span2"></div>
+      <p class="sub small" id="c_chk" aria-live="polite"></p>
       <button class="solid" data-act="custom" data-m="${meal}">Save and add</button></div></li>`;
   if (cat === 'usual') {
     const fr = S.freq[meal] || {}, ids = Object.keys(fr).sort((a, b) => fr[b] - fr[a]);
@@ -229,7 +255,14 @@ function bump(meal, f, d) {
   if (!f) return;
   const list = S.food[day] ||= [];
   let e = list.find(x => x.m === meal && x.id === f.id);
-  if (!e) { if (d <= 0) return; e = { id: f.id, n: f.n, u: f.u, k: f.k, p: f.p, fb: f.fb, cat: f.cat, m: meal, q: 0 }; list.push(e); }
+  if (!e) {
+    if (d <= 0) return;
+    e = { id: f.id, n: f.n, u: f.u, k: f.k, p: f.p, fb: f.fb, cat: f.cat, m: meal, q: 0 };
+    if (f.c != null && f.ft != null) Object.assign(e, { c: f.c, ft: f.ft });
+    if (f.g) e.g = f.g;
+    if (f.src) e.src = f.src;
+    list.push(e);
+  }
   e.q = r1(e.q + d);
   if (e.q <= 0) list.splice(list.indexOf(e), 1);
   if (!list.length) delete S.food[day];
@@ -243,12 +276,25 @@ function bump(meal, f, d) {
 function vFoodEdit(i) {
   const e = (S.food[day] || [])[i];
   if (!e) return '';
+  const src = { label: 'From the pack’s nutrition panel', brand: 'Energy and protein as the maker states them; carbs and fat are not published', derived: 'The maker’s energy, protein and fat; carbs are the energy left over', ifct: 'Indian Food Composition Tables 2017 (ICMR-NIN)', usda: 'USDA FoodData Central', recipe: 'Estimate from typical home recipes: oil and portion move it by about a fifth', mine: 'Your own entry' }[e.src];
+  const ref = FOODIDX.get(e.id)?.ref, unit = / ml\b|glass|cup/.test(e.u) ? 'ml' : 'g';
   return `${sheetTop(`${esc(e.u)} · ${fmt(e.k)} kcal · ${e.p} g protein each`, esc(e.n), `fedit-${i}`)}
-    <div class="wstep big"><button class="step" data-act="fq" data-d="-0.5" data-repeat="fq-">−</button><span class="grow"><b class="num" id="fq">${e.q}</b> × ${esc(e.u)}</span><button class="step" data-act="fq" data-d="0.5" data-repeat="fq+">+</button></div>
-    ${seg('fqset', [0.5, 1, 1.5, 2, 3].map(q => [q, q === 0.5 ? '½' : q === 1.5 ? '1½' : String(q)]), e.q, 'tight')}
-    <p class="num center fsum" id="fsum">${fmt(e.k * e.q)} kcal · ${r1(e.p * e.q)} g protein · ${r1(e.fb * e.q)} g fibre</p>
+    <div class="wstep big"><button class="step" data-act="fq" data-d="-0.5" data-repeat="fq-">−</button><span class="grow"><b class="num" id="fq">${qtxt(e.q)}</b> × ${esc(e.u)}</span><button class="step" data-act="fq" data-d="0.5" data-repeat="fq+">+</button></div>
+    ${seg('fqset', [0.25, 0.5, 1, 1.5, 2, 3].map(q => [q, qtxt(q)]), e.q, 'tight')}
+    ${e.g ? `<label class="weigh"><span>Weighed it?</span><span class="f"><input type="number" id="fg" data-act="fg" inputmode="decimal" step="1" min="1" value="${Math.round(e.q * e.g)}"><i>${unit}</i></span><span class="sub small">one ${esc(e.u)} is ${/\(\d/.test(e.u) ? '' : 'about '}${Math.round(e.g)} ${unit}</span></label>` : ''}
+    <div id="fsum">${foodSum(e)}</div>
+    ${src ? `<p class="sub small">${src}${ref ? ` · ${esc(ref)}` : ''}.</p>` : ''}
     <h3>Meal</h3>${seg('fmeal', MEALS, e.m)}
     <div class="rowb"><button class="danger" data-act="fdel">Remove</button><span class="grow"></span><button class="solid" data-act="popclose">Done</button></div></aside>`;
+}
+// What this portion holds, and the food per 100 g when its weight is known.
+function foodSum(e) {
+  const q = e.q, has = e.c != null, unit = / ml\b|glass|cup/.test(e.u) ? 'ml' : 'g';
+  const row = [[fmt(e.k * q), 'kcal'], [r1(e.p * q), 'g protein'], [has ? r1(e.c * q) : DASH, 'g carbs'], [has ? r1(e.ft * q) : DASH, 'g fat']];
+  const per = e.g ? `Per 100 ${unit}: ${Math.round(e.k / e.g * 100)} kcal · ${r1(e.p / e.g * 100)} g protein${has ? ` · ${r1(e.c / e.g * 100)} g carbs · ${r1(e.ft / e.g * 100)} g fat` : ''} · ${r1(e.fb / e.g * 100)} g fibre` : `${r1(e.fb * q)} g fibre`;
+  const off = atwaterOff(e);
+  const chk = off != null && e.k >= 20 && Math.abs(off) > 0.2 ? `<p class="flag small">The energy and the macros of this food disagree by ${Math.round(Math.abs(off) * 100)}%: one of the numbers is probably mistyped.</p>` : '';
+  return `${stats(row, 'tight')}<p class="sub small num center">${per}</p>${chk}`;
 }
 SWIPE.fdelrow = el => {
   const k = day, list = S.food[k] || [], i = +el.dataset.i, e = list[i];
@@ -260,11 +306,17 @@ SWIPE.fdelrow = el => {
 function foodAct(a, el) {
   if (a === 'qweigh') { const i = document.querySelector('input[data-log="weights"]'); if (i) { i.scrollIntoView({ block: 'center', behavior: motionOK() ? 'smooth' : 'auto' }); setTimeout(() => i.focus(), motionOK() ? 350 : 0); } return true; }
   if (a === 'fedit') { openPop({ kind: 'fedit', i: +el.dataset.i }); return true; }
-  if (!['fq', 'fqset', 'fmeal', 'fdel'].includes(a)) return false;
+  if (!['fq', 'fqset', 'fmeal', 'fdel', 'fg'].includes(a)) return false;
   const list = S.food[day] || [], i = pop?.i, e = list[i];
   if (!e) return true;
-  const paint = () => { const q = $('#fq'); if (q) q.textContent = e.q; const t = $('#fsum'); if (t) t.textContent = `${fmt(e.k * e.q)} kcal · ${r1(e.p * e.q)} g protein · ${r1(e.fb * e.q)} g fibre`; $$('.seg button[data-act="fqset"]').forEach(b => b.classList.toggle('on', +b.dataset.v === e.q)); };
-  if (a === 'fq') { e.q = clamp(r1(e.q + +el.dataset.d), 0.5, 50); save(); buzz('tick'); paint(); return true; }
+  const paint = () => {
+    const q = $('#fq'); if (q) q.textContent = qtxt(e.q);
+    const t = $('#fsum'); if (t) t.innerHTML = foodSum(e);
+    const g = $('#fg'); if (g && document.activeElement !== g) g.value = Math.round(e.q * e.g);
+    $$('.seg button[data-act="fqset"]').forEach(b => b.classList.toggle('on', +b.dataset.v === e.q));
+  };
+  if (a === 'fg') { const g = num(el.value, 1, 5000); if (g == null || !e.g) return true; e.q = clamp(Math.round(g / e.g * 100) / 100, 0.01, 50); save(); paint(); return true; }
+  if (a === 'fq') { e.q = clamp(Math.round((e.q + +el.dataset.d) * 2) / 2, 0.5, 50); save(); buzz('tick'); paint(); return true; }
   if (a === 'fqset') { e.q = +el.dataset.v; save(); buzz('tick'); paint(); return true; }
   if (a === 'fmeal') { e.m = el.dataset.v; save(); buzz('tick'); render(); return true; }
   const k = day;

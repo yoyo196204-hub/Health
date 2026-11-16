@@ -121,8 +121,8 @@ addEventListener('keydown', e => { if (e.key === 'Escape') { if (pop) closePop()
 // belong to the phone's own back gesture, or on anything that scrolls sideways itself.
 (() => {
   let st = null;
-  const NOGO = 'input, textarea, select, .chips, .seg.scroll, .cards, .wave, .trace, .orb, .rfbars, .sheet, #tabs';
-  const pageOpen = () => overlay && ['add', 'set', 'lab'].includes(overlay.type);
+  const NOGO = 'input, textarea, select, .chips, .seg.scroll, .cards, .wave, .trace, .orb, .rfbars, .bx, .sheet, #tabs';
+  const pageOpen = () => overlay && ['add', 'set', 'lab', 'beats'].includes(overlay.type);
   document.addEventListener('touchstart', e => {
     st = null;
     if (e.touches.length !== 1) return;
@@ -203,7 +203,7 @@ const PTR_AT = 64;
   let y0 = null, x0 = 0, armed = false, active = false;
   const el = () => $('#ptr');
   const blocked = t => document.body.classList.contains('sheet-open') || document.body.classList.contains('adding') || document.body.classList.contains('setting')
-    || t.closest('input, textarea, select, .chips, .seg, .sheet, .wave, .trace, .cards, [data-swipe], .orb');
+    || t.closest('input, textarea, select, .chips, .seg, .sheet, .wave, .trace, .cards, [data-swipe], .orb, .bx');
   document.addEventListener('touchstart', e => {
     y0 = null;
     if (scrollY > 2 || e.touches.length > 1 || blocked(e.target) || REFRESH.on) return;
