@@ -90,9 +90,9 @@ function sessionList() {
   const pending = range(7).filter(k => !S.lifts[k]).flatMap(k => sessions(k).filter(s => s.og).map(s => ({ k, s })));
   if (!ks.length && !pending.length) return para(S.meta.og || OGF.folder ? 'No lifting in the last three weeks.' : 'Sessions you log in openGym appear here with every set. Link openGym in Me › Data sources.');
   return `<ul class="list">${pending.map(({ k, s }) => `<li><span class="grow"><span class="nm">${esc(s.kind)} ${src('watch')}</span><span class="sub">${dateLabel(k, { weekday: 'short', day: 'numeric', month: 'short' })} · ${dur(s.dur / 60)}${s.avg ? ` · avg ${Math.round(s.avg)} bpm` : ''} · sets arrive with openGym’s next backup</span></span></li>`).join('')}
-    ${ks.map(k => { const St = dayStats(k), L = S.lifts[k];
-      return `<li><button class="rowbtn" data-act="sessinfo" data-k="${k}"><span class="grow"><span class="nm">${esc(dayName(k))} ${L.src === 'og' ? '<span class="src s-og">openGym</span>' : ''}</span>
-        <span class="sub">${dateLabel(k, { weekday: 'short', day: 'numeric', month: 'short' })} · ${plural(St.sets, 'set')} · ${fmt(St.load)} kg${St.mins ? ` · ${dur(St.mins)}` : ''}${St.h?.avg ? ` · ${Math.round(St.h.avg)} bpm avg` : ''}${St.prs ? ` · <b class="up">${plural(St.prs, 'best')}</b>` : ''}</span></span><span class="chev">›</span></button></li>`; }).join('')}</ul>`;
+    ${ks.map((k, i) => { const St = dayStats(k), L = S.lifts[k];
+      return `${i === 4 ? `</ul><details class="inner hist"><summary>Earlier · ${ks.length - 4}</summary><ul class="list">` : ''}<li><button class="rowbtn" data-act="sessinfo" data-k="${k}"><span class="grow"><span class="nm">${esc(dayName(k))} ${L.src === 'og' ? '<span class="src s-og">openGym</span>' : ''}</span>
+        <span class="sub">${dateLabel(k, { weekday: 'short', day: 'numeric', month: 'short' })} · ${plural(St.sets, 'set')} · ${fmt(St.load)} kg${St.mins ? ` · ${dur(St.mins)}` : ''}${St.h?.avg ? ` · ${Math.round(St.h.avg)} bpm avg` : ''}${St.prs ? ` · <b class="up">${plural(St.prs, 'best')}</b>` : ''}</span></span><span class="chev">›</span></button></li>`; }).join('')}</ul>${ks.length > 4 ? '</details>' : ''}`;
 }
 function vSession(p) {
   const k = p.k, L = S.lifts[k];
@@ -168,16 +168,16 @@ function vTraining() {
   const P = prog(), A = activityWeek();
   return `${masthead('Training', `${esc(P.short)} · ${S.profile.equip === 'home' ? 'dumbbells at home' : 'gym'}${S.profile.shoulder ? ' · shoulder care' : ''}`, { after: `<a class="mini icon" href="#set-train" aria-label="Plan settings">${ICON.gear}</a>` })}
     ${part(staleStrip)}${part(nextCard)}${part(shoulderCard)}
-    ${sec('Last three weeks', weekStrip() + part(sessionList), { why: ['lift', 'Why this plan'] })}
     ${sec('This week', `<div class="pair">
         <div><span class="sub">Active minutes</span><b class="num">${Math.round(A.who)}<i> / 150</i></b>${meter(A.who, 150, A.who >= 150 ? 'ok' : '')}</div>
         <div><span class="sub">Strength days</span><b class="num">${A.strengthDays}<i> / ${P.per}</i></b>${meter(A.strengthDays, P.per, A.strengthDays >= P.per ? 'ok' : '')}</div></div>
         ${para(`WHO: 150–300 moderate minutes, vigorous counting double, and muscle-strengthening on 2 or more days.${A.vig >= 1 ? ` ${Math.round(A.vig)} vigorous minutes so far.` : ''}`)}`, { why: ['zones', 'How it counts'] })}
+    ${sec('Last three weeks', weekStrip() + part(sessionList), { why: ['lift', 'Why this plan'] })}
     ${sec('Muscles, last 7 days', muscleBlock(), { why: ['volume', 'How sets count'] })}
     ${sec('Strength, 12 weeks', part(strengthBlock), { why: ['e1rm', 'Best estimates'] })}
     ${sec('Cardio with the H9', strapBlock('workout') + strapMsg() + '<div class="rowb"><button class="ghost" data-act="cardioadd">Log cardio by hand</button></div>', { why: ['zones', 'Zones'] })}
-    ${sec('Aerobic threshold', part(thresholdBlock), { why: ['dfa', 'From your beats'] })}
-    ${sec('Cardio, last 14 days', part(cardioList), { why: ['devices', 'Watch vs strap'] })}`;
+    ${sec('Cardio, last 14 days', part(cardioList), { why: ['devices', 'Watch vs strap'] })}
+    ${sec('Aerobic threshold', part(thresholdBlock), { why: ['dfa', 'From your beats'] })}`;
 }
 
 // ---------- sheets ----------

@@ -131,6 +131,22 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     assert.ok(await page.evaluate(() => !!document.querySelector('.ckbanner.bad')), 'Review says something does not add up');
     await page.evaluate(() => { S.food[todayKey()] = S.food[todayKey()].filter(e => e.id !== 'qt'); save(); });
   });
+  await test('recovery, training, review: the inputs behind the verdict, nights that end, short session list, honest links', async () => {
+    await page.evaluate(() => { const k = shift(todayKey(), -1); S.sleepx[k] = { d: 60, l: 200, r: 60, w: 10, on: -60 }; S.sleep[k] = 5.5; save(); });
+    await go('recovery');
+    assert.strictEqual(await page.evaluate(() => document.querySelectorAll('.verdict .sgn').length), 4);
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll('.nights .sub')].some(e => /23:00–04:30/.test(e.textContent))), 'a night with no time in bed ends when its stages do');
+    await page.tap('.sgn[data-to="rc-sleep"]'); await page.waitForTimeout(700);
+    assert.ok(await page.evaluate(() => Math.abs(document.getElementById('rc-sleep').getBoundingClientRect().top) < 200), 'tapping an input scrolls to its section');
+    await shot('recovery');
+    await go('training');
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll('#view .block')].findIndex(b => /This week/.test(b.textContent)) < [...document.querySelectorAll('#view .block')].findIndex(b => /Last three weeks/.test(b.textContent))));
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll('#view .block')].find(b => /Last three weeks/.test(b.querySelector('h2').textContent)).querySelectorAll(':scope > ul.list > li').length <= 4 + 7));
+    await go('review');
+    const lk = await page.evaluate(() => [...document.querySelectorAll('.lk')].map(e => e.textContent));
+    assert.ok(lk.length >= 5 && lk.every(t => /link|variation|of 14 days/.test(t)), lk.join(' | '));
+    assert.ok(lk.filter(t => /link/.test(t)).every(t => /95%/.test(t)), 'every named link carries its interval');
+  });
   await test('food: an Amul pack from its label, weighed by the gram, with carbs and fat on Today', async () => {
     await go('add-snack');
     await page.tap('.chips button[data-c="amul"]');

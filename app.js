@@ -176,6 +176,7 @@ const ACT = {
   fullsync: () => syncNow(90),
   hcask: () => hcAsk(),
   zepp: () => openZepp(),
+  jump: el => { const t = document.getElementById(el.dataset.to); if (t) { buzz('tick'); t.scrollIntoView({ block: 'start', behavior: motionOK() ? 'smooth' : 'auto' }); } },
   bkpick: () => { S.meta.welcomed = true; save(); nat('backupPick'); },
   shareweek: () => { const T = targets(); shareText('Health · week', shareWeek(T, range(7).map(k => dayCells(k, T)), energy())); },
 };

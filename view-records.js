@@ -190,7 +190,7 @@ function vDayDetail(p) {
   return `${sheetTop('A day in detail', dateLabel(k, { weekday: 'long', day: 'numeric', month: 'long' }), `dayx-${k}`)}
     <div class="rowb spread">${nav(-1)}${nav(1)}</div>
     ${curve ? `<h3>Heart rate, 24 hours</h3>${curve}` : ''}
-    ${hyp ? `<h3>Last night${sx.on != null ? `, ${hm(sx.on)} to ${hm(sx.off ?? sx.on + (sx.bed || 0))}` : ''}</h3>${hyp}` : sx ? `<h3>Last night</h3>${stageBar(sx)}` : ''}
+    ${hyp ? `<h3>Last night${sx.on != null ? `, ${hm(sx.on)} to ${hm(sx.off ?? sx.on + (sx.bed || sx.d + sx.l + sx.r + sx.w))}` : ''}</h3>${hyp}` : sx ? `<h3>Last night</h3>${stageBar(sx)}` : ''}
     ${rows ? `<h3>Against your previous four weeks</h3><table class="dayt">${rows}</table>${para('Usual is your own average ± one standard deviation over the 28 days before. Beyond it is <i>high</i> or <i>low</i> for you; beyond two is <i>very</i>. Green and red only where the direction has a known meaning.')}` : para('Nothing from the watch for this day.')}
     ${!curve && !hyp && NATIVE ? para('The 24-hour curve and the stage-by-stage night arrive with the next sync from Health Connect.') : ''}</aside>`;
 }

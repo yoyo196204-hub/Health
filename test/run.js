@@ -668,6 +668,26 @@ test('data checks find planted mistakes, and pass clean data', c => {
   assert.strictEqual(C['a-stride'].status, 'look'); assert.strictEqual(C['a-kcal'].status, 'bad');
   for (const x of Object.values(C)) assert.ok(['ok', 'look', 'bad', 'na'].includes(x.status) && x.result, x.id);
 });
+test('links in your data: the 95% interval decides whether a link is named, and too few days say so', c => {
+  vm.runInContext(fs.readFileSync(path.join(root, 'view-review.js'), 'utf8'), c, { filename: 'view-review.js' });
+  const q = l => run(c, `rRead(${JSON.stringify(l)})`);
+  assert.match(q({ n: 9, r: null }).txt, /9 of 14 days/);
+  assert.match(q({ n: 30, r: null }).txt, /too little variation/);
+  // r 0.30 at n 29: z 0.31, se 0.196, interval -0.07 to 0.60, so not named. At n 60 it is (0.05 to 0.51).
+  const a = q({ n: 29, r: 0.3 }), b = q({ n: 60, r: 0.3 });
+  assert.match(a.txt, /no clear link/); assert.match(a.txt, /−0\.07 to \+0\.60/);
+  assert.match(b.txt, /moderate positive link/); assert.match(b.txt, /\+0\.05 to \+0\.51/);
+  assert.match(q({ n: 40, r: -0.6 }).txt, /strong negative link/);
+});
+test('recovery shows the four inputs of the verdict, each with its own state', c => {
+  for (const f of ['ui.js', 'view-recovery.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), c, { filename: f });
+  const k = run(c, 'todayKey()');
+  run(c, `S.sleep['${k}'] = 5.5; S.sleepx['${k}'] = { d: 60, l: 200, r: 60, w: 10, on: -60 };`);
+  const html = run(c, 'memo.clear(), signals(readiness())');
+  assert.strictEqual((html.match(/class="sgn /g) || []).length, 4);
+  assert.match(html, /5\.5<i> h<\/i>.*under 6 h/s);
+  assert.match(html, /sgn s1" data-act="jump" data-to="rc-sleep"/);
+});
 test('the page root keeps its default overflow, so the page scrolls by touch', () => {
   const css = fs.readFileSync(path.join(root, 'styles.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   for (const m of css.matchAll(/(?:^|})\s*(?:html|:root)\s*\{([^}]*)\}/g)) assert.ok(!/overflow(-[xy])?\s*:/.test(m[1]), 'html must not set overflow: ' + m[1].trim());
