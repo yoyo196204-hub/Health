@@ -371,7 +371,7 @@ function vLab(kind) {
         ${para('30 seconds settle, then the recording. Five minutes is the length the standards use for comparing frequency measures.')}`;
   }
   const hist = labHist(kind);
-  return `${masthead(L.n, 'Strap lab', { before: '<button class="nav" data-act="close" aria-label="Back">‹</button>', after: why(L.ev, 'Evidence') })}
+  return `${masthead(L.n, 'Strap lab', { before: `<button class="nav" data-act="close" aria-label="Back">${ic('back')}</button>`, after: why(L.ev, 'Evidence') })}
     <div class="lab lab-${kind}">${running || res ? '' : `<p class="sub">${L.d}.</p>`}${running || res ? '' : strapLine}${body}${strapMsg()}
     ${hist.length && !running ? sec(`Your sessions · ${hist.length}`, `<ul class="list swipelist">${hist.slice(0, 40).map(x => `<li data-swipe="labdel" data-k="${x.k}" data-t="${x.t}"><button class="rowbtn" data-act="labinfo" data-k="${x.k}" data-t="${x.t}"><span class="grow"><span class="nm">${dateLabel(x.k, { weekday: 'short', day: 'numeric', month: 'short' })} · ${hm(new Date(x.t).getHours() * 60 + new Date(x.t).getMinutes())}</span><span class="sub">${labSummary(x)}</span></span><span class="chev">›</span></button></li>`).join('')}</ul>`) : ''}</div>`;
 }

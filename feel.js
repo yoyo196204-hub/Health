@@ -121,18 +121,19 @@ addEventListener('keydown', e => { if (e.key === 'Escape') { if (pop) closePop()
 // belong to the phone's own back gesture, or on anything that scrolls sideways itself.
 (() => {
   let st = null;
-  const NOGO = 'input, textarea, select, .chips, .seg.scroll, .cards, .wave, .trace, .orb, .rfbars, .bx, .sheet, #tabs';
+  const NOGO = 'input, textarea, select, .chips, .seg.scroll, .cards, .todo, .wave, .trace, .orb, .rfbars, .bx, .scrub, .sheet, #tabs, #fab';
   const pageOpen = () => overlay && ['add', 'set', 'lab', 'beats'].includes(overlay.type);
   document.addEventListener('touchstart', e => {
     st = null;
     if (e.touches.length !== 1) return;
     const t = e.touches[0], x = t.clientX, w = innerWidth;
-    const row = e.target.closest('[data-swipe]'), toastEl = e.target.closest('#toast.show');
+    const row = e.target.closest('[data-swipe]'), toastEl = e.target.closest('#toast.show'), food = e.target.closest('.foods li[data-press]');
     if (toastEl) { st = { kind: 'toast', el: toastEl, x0: x, y0: t.clientY }; return; }
     if (row && !e.target.closest('input, select, textarea')) { st = { kind: 'row', el: row, x0: x, y0: t.clientY, t0: performance.now() }; return; }
+    if (food && x > 22 && !e.target.closest('button')) { st = { kind: 'amount', el: food, x0: x, y0: t.clientY, t0: performance.now() }; return; }
     if (x < 22 || x > w - 22 || pop || document.body.classList.contains('sheet-open') || e.target.closest(NOGO)) return;
     if (HR.mode && !overlay) return;   // a live recording is never swiped away from
-    st = { kind: pageOpen() ? 'back' : overlay ? null : 'tab', x0: x, y0: t.clientY, t0: performance.now() };
+    st = { kind: pageOpen() ? 'back' : overlay ? null : tab === 'food' ? 'day' : TABS.includes(tab) ? 'tab' : tab === 'me' ? 'back' : null, x0: x, y0: t.clientY, t0: performance.now() };
     if (!st.kind) st = null;
   }, { passive: true });
   document.addEventListener('touchmove', e => {
@@ -152,6 +153,17 @@ addEventListener('keydown', e => { if (e.key === 'Escape') { if (pop) closePop()
       st.el.style.opacity = (1 - Math.min(0.35, Math.abs(dx) / 900)).toFixed(3);
       const now = Math.abs(dx) > 80 && !edge;
       if (now !== !!st.armed) { st.armed = now; buzz('tick'); }
+    } else if (st.kind === 'day') {
+      const fut = dx < 0 && day >= todayKey();
+      st.el.style.transform = `translateX(${(fut ? dx * 0.1 : dx * 0.5).toFixed(1)}px)`;
+      st.el.style.opacity = (1 - Math.min(0.3, Math.abs(dx) / 900)).toFixed(3);
+      const now = Math.abs(dx) > 70 && !fut;
+      if (now !== !!st.armed) { st.armed = now; buzz('tick'); }
+    } else if (st.kind === 'amount') {
+      const d = Math.max(0, dx), r = d < 70 ? d : 70 + (d - 70) * 0.25;
+      st.el.style.transform = `translateX(${r.toFixed(1)}px)`;
+      const now = d > 64;
+      if (now !== !!st.armed) { st.armed = now; st.el.classList.toggle('pressing', now); buzz('tick'); }
     } else if (st.kind === 'back') {
       const d = Math.max(0, dx);
       st.el.style.transform = `translateX(${(d * 0.6).toFixed(1)}px)`;
@@ -176,6 +188,13 @@ addEventListener('keydown', e => { if (e.key === 'Escape') { if (pop) closePop()
       const i = TABS.indexOf(tab), to = TABS[i + (dx < 0 ? 1 : -1)];
       if ((Math.abs(dx) > 80 || fast) && to) { el.style.transform = ''; el.style.opacity = ''; buzz('swipe'); location.hash = to; }
       else { el.style.transform = ''; el.style.opacity = ''; }
+    } else if (kind === 'day') {
+      el.style.transform = ''; el.style.opacity = '';
+      const d = dx < 0 ? 1 : -1;
+      if ((Math.abs(dx) > 70 || fast) && !(d > 0 && day >= todayKey())) { buzz('swipe'); transition(d > 0 ? 'fwd' : 'back', () => { day = shift(day, d); render(); }); }
+    } else if (kind === 'amount') {
+      el.style.transform = ''; el.classList.remove('pressing');
+      if (dx > 64 && PRESS.food) { buzz('ok'); PRESS.food(el); }
     } else if (kind === 'back') {
       el.style.transform = ''; el.style.opacity = '';
       if (dx > 90 || (fast && dx > 0)) { buzz('swipe'); goBack(); }
@@ -196,6 +215,75 @@ addEventListener('keydown', e => { if (e.key === 'Escape') { if (pop) closePop()
 })();
 SWIPE.hrresdone = () => hrAct('hrresdone');
 
+// ---------- the ruler ----------
+// [data-scrub] is a tape of ticks under a fixed needle. Dragging moves the tape; each step that passes the needle
+// ticks, and the value is handed to SCRUB[kind] as it changes. Let go fast and it keeps rolling, slowing down, and
+// settles on a step. Arrow keys move it one step.
+const SCRUB = {};
+function scrubTo(kind, v) {
+  const el = document.querySelector(`[data-scrub="${kind}"]`);
+  if (!el || el.dataset.drag) return;
+  const { step, min, max, px } = el.dataset, x = -((clamp(v, +min, +max) - +min) / +step) * +px;
+  el.dataset.v = v; el.setAttribute('aria-valuenow', v);
+  const tape = el.firstElementChild; tape.style.transition = 'transform .45s var(--spring)'; tape.style.transform = `translateX(${x.toFixed(1)}px)`;
+}
+(() => {
+  let g = null;
+  const geo = el => ({ step: +el.dataset.step, min: +el.dataset.min, max: +el.dataset.max, px: +el.dataset.px });
+  const place = (el, off) => { el.firstElementChild.style.transform = `translateX(${off.toFixed(1)}px)`; };
+  const valAt = (G, off) => clamp(Math.round(-off / G.px) * G.step + G.min, G.min, G.max);
+  const emit = (el, v) => {
+    v = +v.toFixed(4);
+    if (v === +el.dataset.v) return;
+    el.dataset.v = v; el.setAttribute('aria-valuenow', v); buzz('tick'); SCRUB[el.dataset.scrub]?.(v);
+  };
+  document.addEventListener('pointerdown', e => {
+    const el = e.target.closest('[data-scrub]');
+    if (!el) return;
+    const G = geo(el), off0 = -((+el.dataset.v - G.min) / G.step) * G.px;
+    g = { el, G, x0: e.clientX, off0, off: off0, last: [[performance.now(), e.clientX]], id: e.pointerId };
+    el.dataset.drag = '1'; el.firstElementChild.style.transition = 'none';
+    try { el.setPointerCapture(e.pointerId); } catch (err) { /* not capturable */ }
+    cancelAnimationFrame(el._roll);
+  });
+  document.addEventListener('pointermove', e => {
+    if (!g || e.pointerId !== g.id) return;
+    const { G } = g, lo = -((G.max - G.min) / G.step) * G.px;
+    let off = g.off0 + (e.clientX - g.x0);
+    off = off > 0 ? off * 0.3 : off < lo ? lo + (off - lo) * 0.3 : off;
+    g.off = off; place(g.el, off); emit(g.el, valAt(G, off));
+    g.last.push([performance.now(), e.clientX]); if (g.last.length > 5) g.last.shift();
+  });
+  const end = e => {
+    if (!g || (e.pointerId != null && e.pointerId !== g.id)) return;
+    const { el, G } = g, L = g.last, dt = L.length > 1 ? L[L.length - 1][0] - L[0][0] : 0;
+    let v = dt > 0 ? (L[L.length - 1][1] - L[0][1]) / dt : 0, off = g.off;
+    const lo = -((G.max - G.min) / G.step) * G.px;
+    g = null;
+    const settle = () => {
+      const target = clamp(Math.round(off / G.px) * G.px, lo, 0);
+      el.firstElementChild.style.transition = 'transform .4s var(--spring)'; place(el, target); emit(el, valAt(G, target)); delete el.dataset.drag;
+    };
+    if (Math.abs(v) < 0.25 || !motionOK()) return settle();
+    let t = performance.now();
+    const roll = now => {
+      const ms = now - t; t = now;
+      off = clamp(off + v * ms, lo, 0); v *= Math.pow(0.994, ms);
+      place(el, off); emit(el, valAt(G, off));
+      if (Math.abs(v) > 0.03 && off > lo && off < 0) el._roll = requestAnimationFrame(roll); else settle();
+    };
+    el._roll = requestAnimationFrame(roll);
+  };
+  document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
+  document.addEventListener('keydown', e => {
+    const el = e.target.closest?.('[data-scrub]');
+    if (!el || !['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+    e.preventDefault();
+    const G = geo(el), v = clamp(+el.dataset.v + (e.key === 'ArrowRight' ? G.step : -G.step), G.min, G.max);
+    emit(el, v); scrubTo(el.dataset.scrub, v);
+  });
+})();
+
 // ---------- pull to refresh ----------
 // From the top of any tab, pull down: past the line it ticks, and letting go fetches everything at once.
 const PTR_AT = 64;
@@ -203,7 +291,7 @@ const PTR_AT = 64;
   let y0 = null, x0 = 0, armed = false, active = false;
   const el = () => $('#ptr');
   const blocked = t => document.body.classList.contains('sheet-open') || document.body.classList.contains('adding') || document.body.classList.contains('setting')
-    || t.closest('input, textarea, select, .chips, .seg, .sheet, .wave, .trace, .cards, [data-swipe], .orb, .bx');
+    || t.closest('input, textarea, select, .chips, .seg, .sheet, .wave, .trace, .cards, .todo, [data-swipe], .orb, .bx, .scrub');
   document.addEventListener('touchstart', e => {
     y0 = null;
     if (scrollY > 2 || e.touches.length > 1 || blocked(e.target) || REFRESH.on) return;
@@ -315,6 +403,7 @@ function jumpbar() {
   jumpObs?.disconnect(); jumpObs = null;
   const v = $('#view');
   if (!v || overlay || !['recovery', 'training', 'review'].includes(tab)) return;
+  if (v.querySelector(':scope > .jumpbar')) v.querySelector(':scope > .jumpbar').remove();
   const secs = [...v.querySelectorAll(':scope > section.block')].filter(x => x.querySelector(':scope > .mh > h2'));
   if (secs.length < 3) return;
   const byTitle = new Map(), owner = new Map();

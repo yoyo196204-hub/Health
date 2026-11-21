@@ -14,7 +14,7 @@ function sandbox() {
   };
   ctx.self = ctx;
   vm.createContext(ctx);
-  for (const f of ['lib.js', 'hrv.js', 'data.js', 'exercises.js', 'opengym-ids.js', 'body-data.js', 'store.js', 'model.js', 'train.js'])
+  for (const f of ['lib.js', 'hrv.js', 'data.js', 'exercises.js', 'opengym-ids.js', 'body-data.js', 'store.js', 'model.js', 'energy.js', 'insights.js', 'train.js'])
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
   // What native.js would define outside the app, then the openGym link, which uses it.
   ctx.window = ctx; ctx.location = { origin: 'https://x', pathname: '/' };
@@ -574,6 +574,72 @@ test('openGym round trip: a session trained from Health’s plan comes back as t
   const want = run(c, `sessionPlan('${k}', 'UB').lifts.map(l => l.id)`);
   assert.deepStrictEqual(Object.keys(L.ex).sort(), [...want].sort(), 'every exercise maps back to Health’s own');
   assert.strictEqual(run(c, 'nextDay(shift(todayKey(), 1))'), 'LB', 'the rotation carries on from it');
+});
+
+// ---- the energy model and the insights engine ----
+test('energy model: learns a burn far from the formula, and its interval narrows with data', c => {
+  // 60 days: someone who truly burns 2,300 kcal, eats 1,800 on logged days, weighs in daily with ±0.5 kg of water noise.
+  run(c, `S = sanitize({ profile: { sex: 'm', dob: '1995-01-01', h: 180, w0: 95, waist0: 104, days: 3 } });
+    let r = 11; const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647;
+    let w = 95; for (let n = 60; n >= 0; n--) { const k = shift(todayKey(), -n);
+      S.weights[k] = Math.round((w + (rnd() - 0.5) * 1.6) * 10) / 10; S.steps[k] = 6000;
+      if (n > 0 && n % 4 !== 0) S.food[k] = [{ id: 'q' + n, n: 'Meal', u: 'entry', k: 1800, p: 120, fb: 25, q: 1, m: 'lunch' }, { id: 'r' + n, n: 'Meal', u: 'entry', k: 0.01, p: 0, fb: 0, q: 1, m: 'dinner' }];
+      S.full[k] = n % 4 !== 0;
+      w -= 500 / rhoOf(w, bodyFat().pct).rho; }
+    memo.clear();`);
+  const M = run(c, 'energyModel()'), early = run(c, `energyModel(shift(todayKey(), -45))`);
+  assert.ok(Math.abs(M.E - 2300) < 200, `learned ${Math.round(M.E)} kcal against a true 2,300`);
+  assert.ok(M.lo < 2300 && M.hi > 2300, `the 95% interval ${Math.round(M.lo)}–${Math.round(M.hi)} holds the truth`);
+  assert.ok(M.sd < early.sd * 0.8, `interval narrowed: ${Math.round(early.sd)} → ${Math.round(M.sd)}`);
+  assert.ok(M.formula > 2500, 'the formula alone would have been well off');
+  assert.ok(M.rho > 6000 && M.rho < 8500, `energy in a kg of change ${Math.round(M.rho)}`);
+  assert.ok(run(c, 'targets().trust') > 0.5, 'the target leans on the learned burn');
+});
+test('energy model: a missing log adds uncertainty, not bias; a wild weigh-in barely moves it', c => {
+  run(c, `S = sanitize({}); for (let n = 40; n >= 0; n--) { const k = shift(todayKey(), -n); S.weights[k] = 90 - (40 - n) * 0.05; } memo.clear();`);
+  const a = run(c, 'energyModel()');
+  run(c, `S.weights[shift(todayKey(), -1)] = 96; memo.clear();`);
+  const b = run(c, 'energyModel()');
+  assert.ok(Math.abs(b.W - a.W) < 0.6, `trend weight moved ${r(b.W - a.W)} kg for a 6 kg typo`);
+  assert.strictEqual(a.conf, 'calibrating', 'no food log: still calibrating, never confident');
+  function r(x) { return Math.round(x * 100) / 100; }
+});
+test('links: detrending stops two things that drift together from looking linked', c => {
+  // HRV rises and sleep rises over 90 days, but day to day they are independent noise.
+  run(c, `S = sanitize({}); let r = 5; const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647;
+    for (let n = 90; n >= 0; n--) { const k = shift(todayKey(), -n), t = (90 - n) / 90;
+      S.sleep[k] = Math.round((6 + t * 1.5 + (rnd() - 0.5) * 1.2) * 10) / 10; S.hrv[k] = { rmssd: 35 + t * 15 + (rnd() - 0.5) * 8, hr: 60, q: 95 }; } memo.clear();`);
+  const raw = run(c, `pearson(range(90).filter(k => S.sleep[k] != null && S.hrv[k]).map(k => [S.sleep[k], Math.log(S.hrv[k].rmssd)]))`);
+  const L = run(c, `linkRead(LINKS.find(l => l.id === 'sl-hrv'))`);
+  assert.ok(raw > 0.4, `raw correlation is spuriously strong (${raw.toFixed(2)})`);
+  assert.notStrictEqual(L.status, 'clear', `detrended: ${L.status}, r ${L.r && L.r.toFixed(2)}`);
+});
+test('links: a real day-to-day effect is found, in units, with an interval', c => {
+  // Each extra hour of sleep adds 8% HRV the next morning, on top of noise.
+  run(c, `S = sanitize({}); let r = 9; const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647;
+    for (let n = 70; n >= 0; n--) { const k = shift(todayKey(), -n), sl = 7 + (rnd() - 0.5) * 2.4;
+      S.sleep[k] = Math.round(sl * 10) / 10; S.hrv[k] = { rmssd: 45 * Math.exp(0.077 * (sl - 7) + (rnd() - 0.5) * 0.12), hr: 60, q: 95 }; } memo.clear();`);
+  const L = run(c, `linkRead(LINKS.find(l => l.id === 'sl-hrv'))`);
+  assert.strictEqual(L.status, 'clear');
+  assert.ok(L.elo < 8 && L.ehi > 8 && L.eff > 4 && L.eff < 12, `effect ${L.eff.toFixed(1)}% (${L.elo.toFixed(1)} to ${L.ehi.toFixed(1)})`);
+  assert.ok(L.agrees, 'in the direction the research expects');
+});
+test('sleep regularity index: identical nights score 100, shifted nights score lower', c => {
+  run(c, `S = sanitize({}); for (let n = 14; n >= 0; n--) { const k = shift(todayKey(), -n); S.sleep[k] = 7.5; S.sleepx[k] = { d: 80, l: 250, r: 100, w: 20, on: -30 }; } memo.clear();`);
+  assert.strictEqual(Math.round(run(c, 'sri().v')), 100);
+  // Alternate nights two hours later: half the pairs lose 2 h at each end, 240 of 1,440 minutes.
+  run(c, `for (let n = 14; n >= 0; n -= 2) S.sleepx[shift(todayKey(), -n)].on = 90; memo.clear();`);
+  const v = run(c, 'sri().v');
+  assert.ok(Math.abs(v - (-100 + 200 * (1440 - 240) / 1440)) < 1, `SRI ${v}`);
+});
+test('recovery number sits inside the zone the verdict chose', c => {
+  c.raw = seedV3(); run(c, 'S = sanitize(raw); memo.clear()');
+  const R = run(c, 'recoveryScore(shift(todayKey(), -1))'), lv = R.level;
+  if (R.score != null) {
+    const [lo, hi] = { easy: [1, 33], care: [34, 66], go: [67, 99] }[lv];
+    assert.ok(R.score >= lo && R.score <= hi, `${lv}: ${R.score}`);
+  }
+  assert.ok(R.parts.length >= 1);
 });
 
 // ---- the web app as files: these guard against the failures that only show up on a phone ----

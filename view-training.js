@@ -166,7 +166,7 @@ function thresholdBlock() {
 // ---------- the screen ----------
 function vTraining() {
   const P = prog(), A = activityWeek();
-  return `${masthead('Training', `${esc(P.short)} · ${S.profile.equip === 'home' ? 'dumbbells at home' : 'gym'}${S.profile.shoulder ? ' · shoulder care' : ''}`, { after: `<a class="mini icon" href="#set-train" aria-label="Plan settings">${ICON.gear}</a>` })}
+  return `${appbar('Train', `${esc(P.short)} · ${S.profile.equip === 'home' ? 'dumbbells at home' : 'gym'}${S.profile.shoulder ? ' · shoulder care' : ''}`, `<a class="mini icon" href="#set-train" aria-label="Plan settings">${ICON.gear}</a>`)}
     ${part(staleStrip)}${part(nextCard)}${part(shoulderCard)}
     ${sec('This week', `<div class="pair">
         <div><span class="sub">Active minutes</span><b class="num">${Math.round(A.who)}<i> / 150</i></b>${meter(A.who, 150, A.who >= 150 ? 'ok' : '')}</div>

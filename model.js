@@ -94,27 +94,27 @@ function weighCheck(k, v) {
 function liveTargets() {
   return cached('TL', () => {
     const p = S.profile, set = S.settings, ser = series(), wt = ser.length ? ser[ser.length - 1].t : p.w0;
-    const bmr = 10 * wt + 6.25 * p.h - 5 * ageYears() + (p.sex === 'm' ? 5 : -161);
     const st = range(7).map(k => S.steps[k]).filter(v => v != null);
     const steps = st.length ? mean(st) : 2000;
     // Lifting sessions a week: what you actually did over the last four weeks once there is that much history,
     // otherwise the days you said you train.
     const firstLift = Object.keys(S.lifts).sort()[0], perWk = firstLift && gapDays(firstLift, todayKey()) >= 28 ? range(28).filter(liftedOn).length / 4 : p.days;
-    const formula = bmr * 1.2 + steps * 0.0004 * wt + perWk * 250 / 7;
-    // Your own burn: intake on complete days minus the energy in the weight trend.
+    const F = formulaBurn(wt, steps, perWk), bmr = F.bmr, formula = F.tdee;
+    // Your own burn, from the energy model (energy.js): the scale and the complete days of food, together.
     const full = range(21).filter(k => S.food[k] && isComplete(k));
-    const intake = full.length ? mean(full.map(k => totals(k).k)) : null, sl = slope();
-    const measured = full.length >= 7 && sl != null ? intake - sl * 7700 : null;
-    // Lean on your data gradually, from 7 complete days to fully at 20, within ±25% of the formula.
-    const trust = measured == null ? 0 : clamp((full.length - 6) / 14, 0, 1);
+    const intake = full.length ? mean(full.map(k => totals(k).k)) : null, sl = slope(), M = energyModel();
+    const measured = M.E != null && M.conf !== 'calibrating' ? M.E : null;
+    // Lean on your data as its interval narrows: none at ±300 kcal (the formula's own error), fully at ±150; and never
+    // further than 25% from the formula, whatever the data says.
+    const trust = measured == null ? 0 : clamp((300 - M.sd) / 150, 0, 1);
     const tdee = formula + trust * (clamp(measured ?? formula, formula * 0.75, formula * 1.25) - formula);
-    const pace = PACE[set.pace][1];
-    const deficit = Math.min(pace / 100 * wt * 7700 / 7, 0.25 * tdee);
+    const pace = PACE[set.pace][1], rho = rhoOf(wt, bodyFat().pct).rho;
+    const deficit = Math.min(pace / 100 * wt * rho / 7, 0.25 * tdee);
     const live = Math.max(p.sex === 'm' ? 1600 : 1400, Math.round((tdee - deficit) / 50) * 50);
     const ref = 25 * (p.h / 100) ** 2, adj = wt > ref ? ref + 0.25 * (wt - ref) : wt, pf = set.protein === 'high' ? 2.0 : 1.6;
     const base = Math.round((steps + 1000) / 500) * 500;
     return {
-      wt, bmr, formula, tdee, perWk, measured, trust, complete: full.length, intake, deficit, live, adj, slope: sl, steps, pf,
+      wt, bmr, formula, tdee, perWk, measured, trust, complete: full.length, intake, deficit, live, adj, slope: sl, steps, pf, rho, model: M,
       liveProtein: Math.round(pf * adj / 5) * 5, perMeal: Math.round(0.4 * adj / 5) * 5,
       stepGoal: steps >= 8000 ? clamp(Math.round(steps / 500) * 500, 8000, 10000) : clamp(base, 3000, 8000),
       bmi: wt / (p.h / 100) ** 2,
@@ -322,10 +322,10 @@ function activityWeek(end = todayKey()) {
 }
 // ---------- energy ledger ----------
 function energy() {
-  const T = targets(), full = range(21).filter(k => S.food[k] && isComplete(k));
-  const delta = T.slope == null ? null : T.slope * 7700, implied = T.intake != null && delta != null && full.length >= 7 ? T.intake - delta : null;
+  const T = targets(), M = T.model, full = range(21).filter(k => S.food[k] && isComplete(k));
+  const delta = T.slope == null ? null : T.slope * T.rho, implied = M.E != null && M.conf !== 'calibrating' ? M.E : null;
   const watch = range(21).map(k => S.wx[k]?.tk).filter(v => v != null);
-  return { n: full.length, intake: T.intake, delta, implied, gap: implied == null ? null : (implied - T.formula) / T.formula * 100, watch: watch.length >= 7 ? mean(watch) : null };
+  return { n: full.length, intake: T.intake, delta, implied, sd: M.sd, gap: implied == null ? null : (implied - T.formula) / T.formula * 100, watch: watch.length >= 7 ? mean(watch) : null, M };
 }
 
 // ---------- body: where the trend is heading ----------
