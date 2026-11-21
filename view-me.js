@@ -133,10 +133,11 @@ function sourcesSection() {
     : para(`Connect from Train or Recovery. ${NATIVE ? 'The app remembers it after the first time.' : ''}`);
   // Zepp's export: the zip as it arrives (password and all), or the CSV files from inside it. In the app, Health
   // Connect covers the recent weeks; this is for the history before them.
-  const zepp = watchPreview ? watchPreviewBlock() : WZIP.busy || WZIP.need || WZIP.err ? watchZipBlock() : `<details class="inner" ${NATIVE ? '' : 'open'}><summary>${NATIVE ? 'Bring in your older Zepp history' : 'Import a Zepp export'}</summary><ol class="sub steps"><li>Zepp › Profile › Settings › Account › Export data. Choose everything, or at least activity, sleep, heart rate and body.</li><li>Zepp emails a zip and shows its password. Download the zip; there is no need to unzip it.</li><li>Tap below and pick the zip. The password is asked for here, and everything is read on this phone.</li></ol>
+  const zepp = watchPreview ? watchPreviewBlock() : WZIP.busy || WZIP.need || WZIP.err ? watchZipBlock() : `<details class="inner" ${NATIVE ? '' : 'open'}><summary>${NATIVE ? 'Bring in your older history' : 'Import a Zepp export or a Health Connect backup'}</summary><ol class="sub steps"><li>Zepp › Profile › Settings › Account › Export data. Choose everything, or at least activity, sleep, heart rate and body.</li><li>Zepp emails a zip and shows its password. Download the zip; there is no need to unzip it.</li><li>Tap below and pick the zip. The password is asked for here, and everything is read on this phone.</li></ol>
       ${NATIVE ? para('Health Connect only reaches back as far as Zepp has been writing to it, and this app reads at most 120 days of it. The export fills in everything before: longer baselines for resting heart rate and sleep, and more days for the links in your data.') : ''}
-      <button class="ghost" data-act="wpick">Choose the Zepp zip or its CSV files</button></details>`;
-  return `<h3>Health Connect ${NATIVE ? '' : '<span class="src">in the app</span>'}</h3>${hc}<h3>openGym</h3>${part(ogSourcesBlock)}<h3>Polar H9</h3>${strap}<h3>Amazfit files</h3>${zepp}
+      ${para('A Health Connect backup works too: in Health Connect’s own settings (Settings › Security and privacy › Health Connect › Export), the “Health Connect.zip” it writes holds every app’s data, as far back as Health Connect has it. Pick that zip the same way.')}
+      <button class="ghost" data-act="wpick">Choose a Zepp or Health Connect zip</button></details>`;
+  return `<h3>Health Connect ${NATIVE ? '' : '<span class="src">in the app</span>'}</h3>${hc}<h3>openGym</h3>${part(ogSourcesBlock)}<h3>Polar H9</h3>${strap}<h3>History files</h3>${zepp}
     <input type="file" id="wfile" accept=".zip,.csv,application/zip,application/x-zip-compressed,text/csv,text/comma-separated-values" multiple hidden>`;
 }
 
