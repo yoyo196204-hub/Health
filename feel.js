@@ -11,13 +11,13 @@
 // One touch never buzzes twice: a lighter haptic within 90 ms of another is dropped.
 const ACT_HOLD = {};   // actions that need a press and hold, filled in by each screen
 const SWIPE = {};      // what a committed swipe on [data-swipe] does, filled in by each screen
-const HAPTIC = { press: [5], tick: [9], swipe: [8, 30, 12], ok: [18], done: [16, 60, 16, 60, 40], warn: [34, 50, 34], heavy: [40],
+const HAPTIC = { press: [5], detent: [4], tick: [9], swipe: [8, 30, 12], ok: [18], done: [16, 60, 16, 60, 40], warn: [34, 50, 34], heavy: [40],
   inhale: [8, 40, 12, 40, 16, 40, 22], exhale: [22, 40, 16, 40, 10], hold: [6] };
-const HAPTIC_RANK = { press: 0, hold: 0, tick: 1, swipe: 2, inhale: 2, exhale: 2, ok: 3, warn: 4, heavy: 4, done: 5 };
+const HAPTIC_RANK = { press: 0, hold: 0, detent: 1, tick: 1, swipe: 2, inhale: 2, exhale: 2, ok: 3, warn: 4, heavy: 4, done: 5 };
 let lastBuzz = { t: 0, r: -1 };
 function buzz(kind) {
   const mode = S?.settings?.haptics || 'full';
-  if (mode === 'off' || (mode === 'subtle' && (kind === 'tick' || kind === 'press'))) return;
+  if (mode === 'off' || (mode === 'subtle' && (kind === 'tick' || kind === 'press' || kind === 'detent'))) return;
   const now = performance.now(), r = HAPTIC_RANK[kind] ?? 1;
   if (now - lastBuzz.t < 90 && r <= lastBuzz.r) return;
   // The press already answered this touch: the tick of the choice it makes would be a second buzz for one tap.
@@ -79,7 +79,7 @@ document.addEventListener('click', e => {
 // A sheet that is not its own address (editing an entry, a confirmation) sits on the history stack, so the
 // phone's back gesture closes it like any other screen.
 let pop = null, popKey = '';
-function openPop(p) { pop = p; history.pushState({ pop: 1 }, ''); buzz('tick'); render(); }
+function openPop(p) { pop = p; history.pushState({ pop: 1 }, ''); buzz('tick'); renderView(); }
 function closePop() { if (!pop) return; if (history.state?.pop) history.back(); else { pop = null; render(); } }
 addEventListener('popstate', () => { if (pop) { pop = null; render(); } });
 // The sheet slides in only when it first appears, not on every re-render while it is open.
@@ -235,7 +235,7 @@ function scrubTo(kind, v) {
   const emit = (el, v) => {
     v = +v.toFixed(4);
     if (v === +el.dataset.v) return;
-    el.dataset.v = v; el.setAttribute('aria-valuenow', v); buzz('tick'); SCRUB[el.dataset.scrub]?.(v);
+    el.dataset.v = v; el.setAttribute('aria-valuenow', v); buzz('detent'); SCRUB[el.dataset.scrub]?.(v);
   };
   document.addEventListener('pointerdown', e => {
     const el = e.target.closest('[data-scrub]');

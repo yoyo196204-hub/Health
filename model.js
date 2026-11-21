@@ -8,7 +8,8 @@ function ageYears() { return (Date.now() - Date.parse(S.profile.dob)) / (365.25 
 // Totals for a day or one meal. Carbs and fat are summed only over entries that know them (a maker that states just
 // energy and protein, or an old entry); kn is the energy those entries cover, so a split is never shown as complete
 // when part of the day is unknown.
-function totals(key, meal) {
+function totals(key, meal) { return cached(`TT${key}${meal || ''}`, () => totalsOf(key, meal)); }
+function totalsOf(key, meal) {
   const t = { k: 0, p: 0, fb: 0, c: 0, ft: 0, kn: 0, n: 0 };
   for (const e of S.food[key] || []) if (!meal || e.m === meal) {
     t.k += e.k * e.q; t.p += e.p * e.q; t.fb += e.fb * e.q; t.n++;
@@ -53,7 +54,7 @@ function mainMeals(k) { return ['breakfast', 'lunch', 'dinner'].filter(m => (S.f
 // A day counts toward the burn estimate only if it looks complete, unless you say otherwise.
 function isComplete(k) {
   if (S.full[k] != null) return S.full[k];
-  return totals(k).k >= 1000 && mainMeals(k) >= 2;
+  return cached('IC' + k, () => totals(k).k >= 1000 && mainMeals(k) >= 2);
 }
 
 // ---------- weight ----------

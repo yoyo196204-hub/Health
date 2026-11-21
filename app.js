@@ -86,9 +86,15 @@ function paint(el, html, fresh) {
 }
 let screenKey = '';
 
+// Moving between screens or opening a sheet changes nothing in the data, so what was worked out from it is kept:
+// the learned burn, the links and the patterns are not worked out again just to show another tab. Anything that
+// changes the data goes through save(), which clears it; so does a new day.
+let viewOnly = false, memoDay = todayKey();
+function renderView() { viewOnly = true; render(); }
 // A failure in one screen must never blank the app or touch stored data.
 function render() {
-  memo.clear(); softQueued = false;
+  if (!viewOnly || memoDay !== todayKey()) memo.clear();
+  viewOnly = false; memoDay = todayKey(); softQueued = false;
   settleTargets();
   // An evidence sheet opened from a page keeps that page underneath it.
   const base = overlay?.type === 'why' ? overlay.under : overlay;
@@ -146,7 +152,7 @@ function route() {
   }
   const go = () => {
     overlay = next; tab = nextTab; pop = null;
-    render();
+    renderView();
     if (top) scrollTo(0, 0);
     else if (dir === 'pop') scrollTo(0, scrollMem[tab] || 0);
     if (addNext === 'find' && overlay?.type === 'add') setTimeout(() => $('#q')?.focus(), 60);

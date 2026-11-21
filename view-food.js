@@ -243,6 +243,8 @@ function vAdd(meal) {
 }
 function bump(meal, f, d) {
   if (!f) return;
+  // A run of adds (a plate, a copied meal) is one moment: its milestones are read once, after the last of them.
+  if (!bump.was) { bump.was = { k: day, ...totals(day) }; setTimeout(milestones, 0); }
   const list = S.food[day] ||= [];
   let e = list.find(x => x.m === meal && x.id === f.id);
   if (!e) {
@@ -251,6 +253,8 @@ function bump(meal, f, d) {
     if (f.c != null && f.ft != null) Object.assign(e, { c: f.c, ft: f.ft });
     if (f.g) e.g = f.g;
     if (f.src) e.src = f.src;
+    // When it was eaten, for logs made on the day: what meal timing does to sleep is read from these.
+    if (day === todayKey()) e.t = Date.now();
     list.push(e);
   }
   e.q = r2(e.q + d);
@@ -260,6 +264,16 @@ function bump(meal, f, d) {
   if (d > 0) flash(meal + f.id);
   buzz('tick');
   save();
+}
+
+// The moments worth feeling: protein reaching its target (the one number most worth hitting), and the day's
+// calories passing the target (said once, plainly, without alarm).
+function milestones() {
+  const b = bump.was; bump.was = null;
+  if (!b) return;
+  const T = targets(), a = totals(b.k);
+  if (b.p < T.protein && a.p >= T.protein) { buzz('done'); toast(`Protein target reached: ${Math.round(a.p)} of ${T.protein} g`, 3200); }
+  else if (b.k <= T.kcal && a.k > T.kcal) { buzz('warn'); toast(`${fmt(a.k - T.kcal)} kcal past the target. The weekly average is what counts.`, 4200); }
 }
 
 // ---------- any amount: the portion sheet ----------

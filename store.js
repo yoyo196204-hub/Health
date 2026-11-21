@@ -49,6 +49,7 @@ function cleanFood(e, logged) {
   if (!logged) return f;
   const q = num(e.q, 0.01, 50);
   if (q == null) return null;
+  const t = num(e.t, 1e12, 1e13); if (t != null) f.t = Math.round(t);
   return Object.assign(f, { q, m: MEALS.some(m => m[0] === e.m) ? e.m : 'lunch' });
 }
 function cleanPlate(x) {

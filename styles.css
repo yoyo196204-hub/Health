@@ -1046,3 +1046,5 @@ canvas.bx.sq { aspect-ratio: 1; height: auto; background: var(--bg2); border-rad
 .k.band.c-fuel { background: var(--kc); opacity: .25; }
 .k.bar { background: var(--kc, var(--accent)); opacity: .3; height: 10px; }
 .k.goal { height: 0; border-top: 1.5px dashed var(--soft); }
+td .why, .fs-kv .why { font: 500 14px var(--sans); letter-spacing: 0; text-transform: none; color: var(--ink2); padding: 0; margin: 0; }
+td .why::after { content: ' ›'; color: var(--faint); }

@@ -70,7 +70,7 @@ const setsOn = k => S.lifts[k] ? Object.values(S.lifts[k].ex).reduce((a, x) => a
 function onsetDev(k) {
   const on = S.sleepx[k]?.on;
   if (on == null) return null;
-  const base = range(28, shift(k, -1)).map(d => S.sleepx[d]?.on).filter(v => v != null);
+  const base = cached('ON' + k, () => range(28, shift(k, -1)).map(d => S.sleepx[d]?.on).filter(v => v != null));
   return base.length >= 7 ? Math.abs(on - median(base)) / 60 : null;
 }
 const LINKS = [

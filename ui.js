@@ -159,7 +159,13 @@ function meter2(frac, c, tick = null, over = false) {
 }
 // The header of a tab: what day it is and the title on the left; status and you on the right.
 function appbar(title, eyebrow = '', right = '') {
-  return `<header class="appbar"><div class="grow">${eyebrow ? `<div class="eyebrow">${eyebrow}</div>` : ''}<h1>${title}</h1></div>${right}<a class="avatar" href="#me" aria-label="You and your settings">${ic('person')}${S.meta.exported == null && Object.keys(S.food).length > 30 ? '<i class="bd"></i>' : ''}</a></header>`;
+  return `<header class="appbar"><div class="grow">${eyebrow ? `<div class="eyebrow">${eyebrow}</div>` : ''}<h1>${title}</h1></div>${right}<a class="avatar" href="#me" aria-label="You and your settings">${ic('person')}${backupDue() ? '<i class="bd" title="Backup needs you"></i>' : ''}</a></header>`;
+}
+// The dot on your face at the top: the backup needs you (no folder on the phone, or no export for two weeks in Chrome).
+function backupDue() {
+  if (Object.keys(S.food).length + Object.keys(S.weights).length < 14) return false;
+  if (NATIVE) return !BACKUP.folder || (!!S.meta.backup && gapDays(S.meta.backup, todayKey()) >= 3);
+  return !S.meta.exported || gapDays(S.meta.exported, todayKey()) > 14;
 }
 // A card's heading with its domain icon in its colour.
 function cardHead(title, icon, c, right = '') { return `<div class="mh"><span class="ico" style="--c:${c}">${ic(icon)}</span><h2>${title}</h2>${right}</div>`; }

@@ -65,6 +65,8 @@ class Feel(private val a: MainActivity) {
         if (!v.hasVibrator()) return
         val e: VibrationEffect = when (kind) {
             "press" -> compose(Triple(TICK, 1f, 0)) ?: predefined(VibrationEffect.EFFECT_TICK) ?: VibrationEffect.createOneShot(6, 120)
+            // The ruler: one light detent per step, like a dial.
+            "detent" -> compose(Triple(TICK, 0.55f, 0)) ?: predefined(VibrationEffect.EFFECT_TICK) ?: VibrationEffect.createOneShot(5, 90)
             "tick" -> compose(Triple(CLICK, 0.6f, 0)) ?: predefined(VibrationEffect.EFFECT_TICK) ?: VibrationEffect.createOneShot(10, 150)
             "swipe" -> compose(Triple(TICK, 0.8f, 0), Triple(CLICK, 0.7f, 40)) ?: predefined(VibrationEffect.EFFECT_CLICK) ?: VibrationEffect.createOneShot(12, 170)
             "ok" -> compose(Triple(CLICK, 1f, 0), Triple(TICK, 0.6f, 50)) ?: predefined(VibrationEffect.EFFECT_CLICK) ?: VibrationEffect.createOneShot(16, 210)
