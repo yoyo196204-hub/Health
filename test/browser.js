@@ -395,6 +395,13 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await go('add-snack'); await page.waitForTimeout(400);
     await page.fill('#q', 'haldiram bhujia'); await page.waitForTimeout(500);
     assert.ok(await page.evaluate(() => document.querySelectorAll('#rows li[data-id^="b"]').length) > 0, 'Haldiram packs found by name');
+    // Whole foods from OpenNutrition come up too, and log with their numbers.
+    await page.fill('#q', 'quinoa'); await page.waitForTimeout(500);
+    const wid = await page.evaluate(() => document.querySelector('#rows li[data-id^="n"]')?.dataset.id);
+    assert.ok(wid, 'quinoa found in OpenNutrition');
+    await page.tap(`#rows li[data-id="${wid}"] .grow`); await page.waitForTimeout(300);
+    const w = await page.evaluate(id => (S.food[todayKey()] || []).find(x => x.id === id), wid);
+    assert.ok(w && w.k > 0 && w.c != null && w.src === 'on', JSON.stringify(w));
     await go('today');
   });
   await test('no errors were thrown on any screen', async () => assert.deepStrictEqual(errors, []));

@@ -283,7 +283,7 @@ Plain JavaScript, no build step. Scripts load in this order:
 | `opengym.js` | openGym: its backup and CSV coming in, the folder link, Health's plan as an openGym plan file with backups and the block |
 | `view-*.js` | One file per screen; `view-food.js` is the diary and everything about adding and changing food, `view-review.js` is Insights, `view-recovery.js` is Heart, `view-records.js` is all your data and a day in detail, `view-checks.js` the data checks |
 | `scan.js` | The pack scanner: camera, barcode reading, the offline lookup, what a pack says per 100 kcal |
-| `products.js`, `zxing.min.js` | Loaded only when the scanner or food search needs them: the Open Food Facts list (built by `test/build-products.py`) and the ZXing barcode reader |
+| `products.js`, `whole.js`, `zxing.min.js` | Loaded only when the scanner or food search needs them: the Open Food Facts list (built by `test/build-products.py`), everyday whole foods from OpenNutrition (`test/build-whole.py`), and the ZXing barcode reader |
 | `app.js` | State, routing, events, and the patching renderer |
 
 Exercise animations live in openGym. Tests: `node test/run.js` (the engine) and `node test/browser.js` (the screens in a real browser: that a finger scrolls every tab, fixed bars stay put, a Live session runs end to end; needs Playwright). Both run on GitHub before every build.
@@ -313,5 +313,8 @@ the 1,324 entries whose names and muscles come from ExerciseDB v1 by AscendAPI v
 No openGym code, descriptions, pictures or animations are copied into Health.
 
 Packaged foods in `products.js` come from [Open Food Facts](https://world.openfoodfacts.org), under the Open Database
-License (`licenses/OpenFoodFacts-ODbL.txt`). Barcodes are read with [ZXing for JavaScript](https://github.com/zxing-js/library),
+License (`licenses/OpenFoodFacts-ODbL.txt`). Everyday whole foods in `whole.js` (3,248: meats, fish, grains, fruit, vegetables, dairy, tofu and the like) come from
+[OpenNutrition](https://www.opennutrition.app), under the Open Database License (`licenses/OpenNutrition-ODbL.txt`); only
+foods traced to a national food table (USDA, Canadian Nutrient File, Australian Nutrient Database, Frida) are included.
+Its barcoded products are North American and are not included. Barcodes are read with [ZXing for JavaScript](https://github.com/zxing-js/library),
 under the Apache License 2.0 (`licenses/zxing-js-Apache-2.0.txt`), where the browser has no barcode reader of its own.

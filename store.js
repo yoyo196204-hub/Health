@@ -35,7 +35,7 @@ function dated(o, fn, max = 4000) {
   if (obj(o)) for (const k of Object.keys(o).sort().slice(-max)) if (DATE.test(k)) { const v = fn(o[k], k); if (v != null) r[k] = v; }
   return r;
 }
-const FOOD_SRC = ['recipe', 'label', 'brand', 'derived', 'ifct', 'usda', 'mine'];
+const FOOD_SRC = ['recipe', 'label', 'brand', 'derived', 'ifct', 'usda', 'mine', 'on'];
 function cleanFood(e, logged) {
   if (!obj(e)) return null;
   const k = num(e.k, 0, 5000), id = str(e.id, 40), n = str(e.n, 80).trim();

@@ -78,6 +78,41 @@ function lookupCode(code) {
   return null;
 }
 
+// ---------- whole foods (OpenNutrition) ----------
+// Everyday foods traced to national food tables, for the food search: what the library's own Indian and raw foods
+// do not cover (tofu, quinoa, a cut of meat, a fruit). Loaded with the pack list, the first time Add food opens.
+let WHOLE = null;
+function wholeLoad() {
+  if (WHOLE) return Promise.resolve(WHOLE);
+  return wholeLoad.p ||= loadScript('whole.js').then(() => {
+    const map = new Map(), rows = [];
+    for (const line of (self.ONDB || '').split('\n')) { const id = line.slice(0, line.indexOf('|')); map.set(id, line); rows.push([fnorm(line.split('|', 2)[1]), id]); }
+    self.ONDB = '';
+    WHOLE = { map, rows };
+    if (overlay?.type === 'add' && query) refreshAdd();
+    return WHOLE;
+  });
+}
+function wholeFood(id) {
+  if (!WHOLE || !/^n[A-Za-z0-9]{6,20}$/.test(id || '')) return null;
+  const line = WHOLE.map.get(id.slice(1));
+  if (!line) return null;
+  const [, n, u, sg, k, p, c, ft, fb, sug, tabs] = line.split('|'), x = s => (s === '' ? null : +s), g = +sg, f = g / 100;
+  const food = { id, n, u, g, k: Math.round(x(k) * f * 10) / 10, p: r1(x(p) * f), fb: r1((x(fb) || 0) * f), cat: 'whole', src: 'on', tabs,
+    per100: { k: x(k), p: x(p), c: x(c), ft: x(ft), fb: x(fb), sug: x(sug) }, unit: / ml\)/.test(u) ? 'ml' : 'g' };
+  if (x(c) != null && x(ft) != null) Object.assign(food, { c: r1(x(c) * f), ft: r1(x(ft) * f) });
+  return food;
+}
+// Every word in the name; a name that starts with the first word comes first, then shorter names.
+function wholeSearch(q, n = 8) {
+  if (!WHOLE) return [];
+  const words = fnorm(q).split(' ').filter(w => w.length > 1);
+  if (!words.length || words.join('').length < 3) return [];
+  const hits = [];
+  for (const [hay, id] of WHOLE.rows) if (words.every(w => hay.includes(w))) hits.push([(hay.startsWith(words[0]) ? 0 : 1) + hay.length / 200, id]);
+  return hits.sort((a, b) => a[0] - b[0]).slice(0, n).map(h => wholeFood('n' + h[1])).filter(Boolean);
+}
+
 // ---------- the camera ----------
 async function scanStart() {
   if (SCAN.stream || SCAN.starting) return;

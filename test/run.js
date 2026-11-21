@@ -1029,6 +1029,19 @@ test('the scanner list: real barcodes, panels that add up, India covered, and a 
   assert.strictEqual(run(c, `eanOK('8901262010024')`), false);
   assert.strictEqual(run(c, `cleanFood({ id: 'x1', n: 'Bar', k: 200, bc: '8901262010023' }).bc`), '8901262010023');
 });
+test('whole foods from OpenNutrition: every one traced to a food table, and its energy agrees with its macros', () => {
+  const ctx = { self: {} }; ctx.self = ctx; vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(path.join(root, 'whole.js'), 'utf8'), ctx);
+  const L = ctx.ONDB.split('\n'), bad = [];
+  for (const line of L) {
+    const [id, n, u, g, k, p, c, ft, fb, , tabs] = line.split('|').map((v, i) => (i > 2 && i < 10 && v !== '' ? +v : v));
+    if (!id || !n || !u || !(g > 0) || !tabs) bad.push(line);
+    const e = 4 * p + 4 * c + 9 * ft + 2 * (fb || 0);
+    if (k > 30 && Math.abs(e - k) / k > 0.35) bad.push(`${n}: ${k} kcal vs ${Math.round(e)}`);
+  }
+  assert.deepStrictEqual(bad.slice(0, 5), []);
+  assert.ok(L.length > 3000, `${L.length} foods`);
+});
 test('a script that fails to load is caught before the app starts', () => {
   const t = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
   assert.ok(t.indexOf('(function boot()') >= 0 && t.indexOf('(function boot()') < t.indexOf('let S = load()'));
