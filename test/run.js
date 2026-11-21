@@ -667,7 +667,7 @@ test('old entries get carbs and fat from their food only when they still match i
   const L = run(c, "S.food['2026-03-03']");
   assert.deepStrictEqual([L[0].c, L[0].ft, L[0].g], [f.c, f.ft, 40]);
   assert.ok(L[1].c == null, 'an entry that no longer matches its food is left alone');
-  assert.strictEqual(run(c, "portion({ q: 1.5, u: '1 katori', g: 150 })"), '1½ × 1 katori · about 225 g');
+  assert.strictEqual(run(c, "portion({ q: 1.5, u: '1 katori', g: 150 })"), '1½ × katori · about 225 g');
   assert.strictEqual(run(c, "portion({ q: 0.65, u: '100 g', g: 100 })"), '65 g');
   assert.strictEqual(run(c, "Math.round(atwaterOff({ k: 400, p: 10, c: 10, ft: 1, fb: 0 }) * 100)"), 78);
 });
@@ -745,14 +745,20 @@ test('links in your data: the 95% interval decides whether a link is named, and 
   assert.match(b.txt, /moderate positive link/); assert.match(b.txt, /\+0\.05 to \+0\.51/);
   assert.match(q({ n: 40, r: -0.6 }).txt, /strong negative link/);
 });
-test('recovery shows the four inputs of the verdict, each with its own state', c => {
-  for (const f of ['ui.js', 'view-recovery.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), c, { filename: f });
+test('recovery shows each part of its number, each against your own normal and linked to its section', c => {
+  c.raw = seedV3(); run(c, 'S = sanitize(raw); var SCRUB = {}, PRESS = {}, SWIPE = {};');
+  for (const f of ['ui.js', 'view-today.js', 'view-recovery.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), c, { filename: f });
   const k = run(c, 'todayKey()');
-  run(c, `S.sleep['${k}'] = 5.5; S.sleepx['${k}'] = { d: 60, l: 200, r: 60, w: 10, on: -60 };`);
-  const html = run(c, 'memo.clear(), signals(readiness())');
-  assert.strictEqual((html.match(/class="sgn /g) || []).length, 4);
-  assert.match(html, /5\.5<i> h<\/i>.*under 6 h/s);
-  assert.match(html, /sgn s1" data-act="jump" data-to="rc-sleep"/);
+  run(c, `S.sleep['${k}'] = 5.5; S.sleepx['${k}'] = { d: 60, l: 200, r: 60, w: 10, on: -60 }; S.hrv['${k}'] = { rmssd: 40, hr: 60, q: 95 };`);
+  const html = run(c, 'memo.clear(), recoveryHero()'), R = run(c, 'recoveryScore()');
+  assert.ok(R.parts.length >= 2, `parts: ${R.parts.map(p => p.id)}`);
+  assert.strictEqual((html.match(/class="part rowbtn"/g) || []).length, R.parts.length);
+  assert.match(html, /data-to="rc-sleep"><span class="pl">Sleep/);
+  assert.match(html, /5h 30m/);
+  // Short sleep counts against the day: its dot sits left of centre.
+  const sl = R.parts.find(p => p.id === 'sleep');
+  assert.ok(sl.z < 0, `sleep z ${sl.z}`);
+  if (R.score != null) assert.match(html, new RegExp(`>${R.score}<small>%`));
 });
 test('the page root keeps its default overflow, so the page scrolls by touch', () => {
   const css = fs.readFileSync(path.join(root, 'styles.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');

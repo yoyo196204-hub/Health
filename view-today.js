@@ -110,7 +110,7 @@ function fuelCard() {
   }).join('');
   return `<section class="card" id="fuel">${cardHead('Fuel', 'food', 'var(--fuel)', '<a class="more-link" href="#food" data-act="gotoday">Diary ›</a>')}
     <div class="eatline"><b class="num">${fmt(t.k)}</b><i>of ${fmt(T.kcal)} kcal</i><span class="grow ${left < 0 ? 'over' : ''}">${fmt(Math.abs(left))} ${left < 0 ? 'over' : 'left'}</span></div>
-    ${meter2(t.k / T.kcal, left < 0 ? 'var(--bad)' : 'var(--fuel)')}
+    ${meter2(t.k / T.kcal, left < 0 ? 'var(--bad)' : 'var(--fuel)', null, true)}
     <div class="macs">${mac('Protein', 'var(--pro)', t.p, T.protein, 'g')}${mac('Carbs', 'var(--carb)', t.c, null, 'g', carbRef)}${mac('Fat', 'var(--fat)', t.ft, null, 'g', fatRef)}${mac('Fibre', 'var(--fibre)', t.fb, T.fibre, 'g')}</div>
     <div class="mrows">${rows}</div>
     <p class="coach">${coach(T, t, k)}</p></section>`;
@@ -188,7 +188,7 @@ function vLog() {
 const WG = { s: 'weights', v: null, k: null };
 function wgBase(s) {
   if (s === 'waist') { const wk = Object.keys(S.waist).sort().pop(); return wk ? S.waist[wk] : S.profile.waist0; }
-  return r1(trendOn(todayKey()) ?? S.profile.w0);
+  return r1(energyModel().W ?? trendOn(todayKey()) ?? S.profile.w0);
 }
 function vWeigh() {
   const s = WG.s, isW = s === 'weights', k = WG.k || todayKey(), base = wgBase(s), v = WG.v ?? S[s][k] ?? base, step = isW ? 0.1 : 0.5;

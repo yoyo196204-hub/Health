@@ -153,9 +153,9 @@ function ring(key, frac, { c = 'var(--accent)', size = 100, stroke = 9, inner = 
   </svg><div>${inner}</div></div>`;
 }
 // A thin meter in a colour, with an optional tick (a target inside a longer scale).
-function meter2(frac, c, tick = null) {
+function meter2(frac, c, tick = null, over = false) {
   const f = clamp(frac || 0, 0, 1.6);
-  return `<div class="meter2" style="--c:${c}"><i class="${f > 1 ? 'over' : ''}" style="width:${(Math.min(1, f) * 100).toFixed(1)}%"></i>${tick != null ? `<span class="tick" style="left:${(clamp(tick, 0, 1) * 100).toFixed(1)}%"></span>` : ''}</div>`;
+  return `<div class="meter2" style="--c:${c}"><i class="${over && f > 1 ? 'over' : ''}" style="width:${(Math.min(1, f) * 100).toFixed(1)}%"></i>${tick != null ? `<span class="tick" style="left:${(clamp(tick, 0, 1) * 100).toFixed(1)}%"></span>` : ''}</div>`;
 }
 // The header of a tab: what day it is and the title on the left; status and you on the right.
 function appbar(title, eyebrow = '', right = '') {

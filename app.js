@@ -132,7 +132,7 @@ function route() {
   if (PAGES.includes(a)) next = { type: a, key: b };
   else if (VIEWS[a]) nextTab = a;
   if (next?.type === 'why' && was) next.under = was.type === 'why' ? was.under : was;
-  if (next?.type === 'add' && was?.type !== 'add') { query = ''; cat = addNext && addNext !== 'find' ? addNext : 'usual'; }
+  if (next?.type === 'add' && was?.type !== 'add') { query = ''; cat = addNext && addNext !== 'find' ? addNext : 'usual'; ADDORDER.meal = null; }
   const page = o => o && (o.type === 'add' || o.type === 'set' || o.type === 'lab' || o.type === 'beats');
   let dir = null, top = false;
   if (next?.type === 'why' || was?.type === 'why') dir = null;

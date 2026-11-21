@@ -113,6 +113,8 @@ function vFood() {
 
 // ---------- add food ----------
 const CUSTOM = { basis: '100' };
+// The order of the usual foods, fixed for as long as the add page stays on one meal and day.
+const ADDORDER = { meal: null, day: null, ids: [] };
 // "1 katori · about 150 g" when a unit's weight is known and not already written in it.
 function unitText(f) { return f.g && !/\d\s*(g|ml)\b/.test(f.u) ? `${f.u} · about ${Math.round(f.g)} ${/glass|cup|ml/.test(f.u) ? 'ml' : 'g'}` : f.u; }
 // Where a packaged or raw food's numbers come from, in a word; home dishes are recipe estimates and say nothing.
@@ -216,8 +218,11 @@ function addRows(meal) {
       <p class="sub small" id="c_chk" aria-live="polite"></p>
       <button class="solid" data-act="custom" data-m="${meal}">Save and add</button></div></li>`;
   if (cat === 'usual') {
-    const fr = S.freq[meal] || {}, ids = Object.keys(fr).sort((a, b) => fr[b] - fr[a]);
-    return [...new Set([...ids, ...USUAL[meal]])].slice(0, 16).map(food).filter(Boolean).map(f => row(f, S.custom.includes(f))).join('');
+    if (ADDORDER.meal !== meal || ADDORDER.day !== day) {
+      const fr = S.freq[meal] || {}, ids = Object.keys(fr).sort((a, b) => fr[b] - fr[a]);
+      Object.assign(ADDORDER, { meal, day, ids: [...new Set([...ids, ...USUAL[meal]])].slice(0, 16) });
+    }
+    return ADDORDER.ids.map(food).filter(Boolean).map(f => row(f, S.custom.includes(f))).join('');
   }
   return allFoods().filter(f => f.cat === cat).map(f => row(f, f.cat === 'mine')).join('');
 }

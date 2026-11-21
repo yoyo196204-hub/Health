@@ -43,7 +43,7 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     const y = await page.evaluate(() => { const r = document.querySelector('#view header h1').getBoundingClientRect(); return Math.round(r.top + r.height / 2); });
     await drag(320, y, 60, y + 8);
     const s = await page.evaluate(() => ({ tab, tr: document.getElementById('view').style.transform }));
-    assert.deepStrictEqual(s, { tab: 'recovery', tr: '' });
+    assert.deepStrictEqual(s, { tab: 'food', tr: '' });
   });
   await test('adding food: the bar with the total stays at the bottom of the screen', async () => {
     await go('add-lunch');
@@ -134,25 +134,28 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
   await test('recovery, training, review: the inputs behind the verdict, nights that end, short session list, honest links', async () => {
     await page.evaluate(() => { const k = shift(todayKey(), -1); S.sleepx[k] = { d: 60, l: 200, r: 60, w: 10, on: -60 }; S.sleep[k] = 5.5; save(); });
     await go('recovery');
-    assert.strictEqual(await page.evaluate(() => document.querySelectorAll('.verdict .sgn').length), 4);
+    assert.ok(await page.evaluate(() => document.querySelectorAll('.rhero .part').length) >= 2, 'the recovery number shows its parts');
     assert.ok(await page.evaluate(() => [...document.querySelectorAll('.nights .sub')].some(e => /23:00–04:30/.test(e.textContent))), 'a night with no time in bed ends when its stages do');
-    await page.tap('.sgn[data-to="rc-sleep"]'); await page.waitForTimeout(700);
+    await page.evaluate(() => { const k = todayKey(); S.sleep[k] = 6.2; save(); render(); });
+    await page.tap('.part[data-to="rc-sleep"]'); await page.waitForTimeout(700);
     assert.ok(await page.evaluate(() => Math.abs(document.getElementById('rc-sleep').getBoundingClientRect().top) < 200), 'tapping an input scrolls to its section');
     await shot('recovery');
     await go('training');
     assert.ok(await page.evaluate(() => [...document.querySelectorAll('#view .block')].findIndex(b => /This week/.test(b.textContent)) < [...document.querySelectorAll('#view .block')].findIndex(b => /Last three weeks/.test(b.textContent))));
     assert.ok(await page.evaluate(() => [...document.querySelectorAll('#view .block')].find(b => /Last three weeks/.test(b.querySelector('h2').textContent)).querySelectorAll(':scope > ul.list > li').length <= 4 + 7));
     await go('review');
-    const lk = await page.evaluate(() => [...document.querySelectorAll('.lk')].map(e => e.textContent));
-    assert.ok(lk.length >= 5 && lk.every(t => /link|variation|of 14 days/.test(t)), lk.join(' | '));
-    assert.ok(lk.filter(t => /link/.test(t)).every(t => /95%/.test(t)), 'every named link carries its interval');
+    const lk = await page.evaluate(() => [...document.querySelectorAll('.lrow, .lneed span')].map(e => e.textContent));
+    assert.ok(lk.length >= 5, lk.join(' | '));
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll('.lrow')].every(r => /No clear effect|\(.* to .*\)/.test(r.textContent))), 'every link with an effect carries its interval');
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll('.lneed span')].every(e => /\d+ more days/.test(e.textContent))), 'links still waiting say how long');
+    assert.ok(await page.evaluate(() => /kcal a day/.test(document.getElementById('in-burn')?.textContent || '')), 'the learned burn is shown');
   });
   await test('food: an Amul pack from its label, weighed by the gram, with carbs and fat on Today', async () => {
     await go('add-snack');
     await page.tap('.chips button[data-c="amul"]');
     await shot('add-amul');
     await page.tap('li[data-flash="snackamul_pbm"] .add');
-    await go('today');
+    await go('food');
     const line = await page.evaluate(() => document.querySelector('.macros')?.textContent || '');
     assert.ok(/Carbs \d+ g/.test(line) && /Fat \d+ g/.test(line), line);
     const i = await page.evaluate(() => S.food[todayKey()].findIndex(e => e.id === 'amul_pbm'));
@@ -211,7 +214,7 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await page.tap('[data-act="fcopyd"][data-d="-1"]'); await page.waitForTimeout(300);
     assert.ok(await page.evaluate(() => (S.food[shift(todayKey(), -1)] || []).some(x => x.n === 'Chapati, big')), 'copied to the day before');
     // Two foods in lunch, then saved as a plate.
-    await page.evaluate(() => { S.food[todayKey()].forEach(x => { x.m = 'lunch'; }); save(); render(); });
+    await go('food'); await page.evaluate(() => { day = todayKey(); S.food[todayKey()].forEach(x => { x.m = 'lunch'; }); save(); render(); });
     await page.tap('[data-act="psaveopen"][data-m="lunch"]'); await page.waitForTimeout(400);
     await page.fill('#pl_n', 'My usual lunch'); await page.tap('[data-act="psave"]'); await page.waitForTimeout(300);
     assert.strictEqual(await page.evaluate(() => S.plates[0]?.n), 'My usual lunch');

@@ -46,8 +46,8 @@ function qtxt(q) { const w = Math.floor(q), f = { 25: '¼', 50: '½', 75: '¾' }
 function portion(e) {
   const g = e.g ? e.q * e.g : null;
   if (g != null && /^100 (g|ml)$/.test(e.u)) return `${Math.round(g)} ${e.u.slice(4)}`;
-  const ml = / ml\b/.test(e.u) ? 'ml' : 'g';
-  return `${qtxt(e.q)} × ${e.u}${g != null && !/\(\d/.test(e.u) ? ` · about ${Math.round(g)} ${ml}` : g != null && e.q !== 1 ? ` · ${Math.round(g)} ${ml}` : ''}`;
+  const ml = / ml\b/.test(e.u) ? 'ml' : 'g', u = e.q === 1 ? e.u : /^1 [a-z]/i.test(e.u) ? e.u.slice(2) : e.u;
+  return `${e.q === 1 && /^1 /.test(e.u) ? '' : `${qtxt(e.q)} × `}${u}${g != null && !/\(\d/.test(e.u) ? ` · about ${Math.round(g)} ${ml}` : g != null && e.q !== 1 ? ` · ${Math.round(g)} ${ml}` : ''}`;
 }
 function mainMeals(k) { return ['breakfast', 'lunch', 'dinner'].filter(m => (S.food[k] || []).some(e => e.m === m)).length; }
 // A day counts toward the burn estimate only if it looks complete, unless you say otherwise.
