@@ -32,7 +32,7 @@ const TABS = ['today', 'food', 'recovery', 'training', 'review'];
 const ALIAS = { heart: 'recovery', trend: 'review', insights: 'review', train: 'training', diary: 'food' };
 const POPS = { fedit: p => vFoodEdit(p.i), portion: p => vPortion(p), cedit: p => vCustomEdit(p), plate: p => vPlateSave(p), exinfo: p => vExInfo(p.id), cardioadd: () => vCardioAdd(), cardioinfo: p => vCardioInfo(p), sess: p => vSession(p),
   hrvinfo: p => vHrvInfo(p), labinfo: p => vLabInfo(p), recedit: p => vRecEdit(p), dayx: p => vDayDetail(p), log: p => vLog(p), weigh: p => vWeigh(p) };
-const PAGES = ['add', 'why', 'set', 'lab', 'beats'];
+const PAGES = ['add', 'why', 'set', 'lab', 'beats', 'scan'];
 const scrollMem = {};
 const BUILD = (document.querySelector('script[src^="app.js"]')?.getAttribute('src').split('v=')[1]) || 'dev';
 
@@ -98,12 +98,12 @@ function render() {
   settleTargets();
   // An evidence sheet opened from a page keeps that page underneath it.
   const base = overlay?.type === 'why' ? overlay.under : overlay;
-  const adding = base?.type === 'add' && MEALS.some(m => m[0] === base.key), setting = base?.type === 'set' || base?.type === 'lab' || base?.type === 'beats';
+  const adding = base?.type === 'add' && MEALS.some(m => m[0] === base.key), setting = base?.type === 'set' || base?.type === 'lab' || base?.type === 'beats' || base?.type === 'scan';
   const key = base ? `${base.type}-${base.key}` : tab + (tab === 'food' ? day : '');
   try {
-    const banner = (loadNote ? `<p class="flag banner">${loadNote} <button class="link" data-act="dismissnote">OK</button></p>` : '') + (saveFailed ? '<p class="flag banner">Storage is full or blocked: changes are not being kept. Export a backup from You › Backup and data.</p>' : '');
+    const banner = (loadNote ? `<p class="flag banner">${loadNote} <button class="link" data-act="dismissnote" data-dismiss>OK</button></p>` : '') + (saveFailed ? '<p class="flag banner">Storage is full or blocked: changes are not being kept. Export a backup from You › Backup and data.</p>' : '');
     $('#view > .jumpbar')?.remove();
-    paint($('#view'), banner + (adding ? vAdd(base.key) : base?.type === 'lab' ? vLab(base.key) : base?.type === 'beats' ? vBeats(base.key) : setting ? vSet(base.key) : VIEWS[tab]()), key !== screenKey);
+    paint($('#view'), banner + (adding ? vAdd(base.key) : base?.type === 'lab' ? vLab(base.key) : base?.type === 'beats' ? vBeats(base.key) : base?.type === 'scan' ? vScan(base.key) : setting ? vSet(base.key) : VIEWS[tab]()), key !== screenKey);
     paint($('#sheet'), pending ? (pending.type === 'halftone' ? vHalftone(pending) : pending.type === 'opengym' ? vOpenGym(pending) : vImport(pending)) : pop && POPS[pop.kind] ? part(POPS[pop.kind], pop) : overlay?.type === 'why' ? vWhy(overlay.key) : '', !$('#sheet .sheet'));
     screenKey = key;
   } catch (err) {
@@ -121,7 +121,7 @@ function render() {
   $('#tabs').style.setProperty('--i', Math.max(0, TABS.indexOf(tab)));
   $('#tabs').style.setProperty('--on', TABS.includes(tab) ? 1 : 0);
   document.documentElement.classList.toggle('still', !motionOK());
-  jumpbar(); sheetEntered(); settle(); liveKick(); labKick(); bxKick();
+  jumpbar(); sheetEntered(); sheetLift(); settle(); liveKick(); labKick(); bxKick(); scanKick();
 }
 // Renders caused by the watch or the strap wait until you have finished typing in a field.
 function renderSoft() {
@@ -143,8 +143,9 @@ function route() {
   if (PAGES.includes(a)) next = { type: a, key: b };
   else if (VIEWS[a]) nextTab = a;
   if (next?.type === 'why' && was) next.under = was.type === 'why' ? was.under : was;
+  if (next?.type === 'add') offLoad().catch(() => {});
   if (next?.type === 'add' && was?.type !== 'add') { query = ''; cat = addNext && addNext !== 'find' ? addNext : 'usual'; ADDORDER.meal = null; }
-  const page = o => o && (o.type === 'add' || o.type === 'set' || o.type === 'lab' || o.type === 'beats');
+  const page = o => o && (o.type === 'add' || o.type === 'set' || o.type === 'lab' || o.type === 'beats' || o.type === 'scan');
   let dir = null, top = false;
   if (next?.type === 'why' || was?.type === 'why') dir = null;
   else if (page(next) && was?.type === 'add' && next.type === 'add') { dir = null; }
@@ -198,10 +199,10 @@ const ACT = {
   custom: el => {
     const v = customValues();
     if (CUSTOM.basis === '100' && v.g == null) { buzz('warn'); return toast('Enter the serving size in grams, so the panel per 100 g can be turned into a serving'); }
-    const f = cleanFood({ id: 'x' + Date.now(), n: $('#c_n').value, u: $('#c_u').value.trim() || (v.g ? `${v.g} g` : ''), k: v.k, p: v.p, c: v.c, ft: v.ft, fb: v.fb, g: v.g, src: 'mine', cat: 'mine' }, false);
+    const f = cleanFood({ id: 'x' + Date.now(), n: $('#c_n').value, u: $('#c_u').value.trim() || (v.g ? `${v.g} g` : ''), k: v.k, p: v.p, c: v.c, ft: v.ft, fb: v.fb, g: v.g, src: 'mine', cat: 'mine', bc: CUSTOM.bc }, false);
     if (!f) { buzz('warn'); return toast('Name and kcal are needed'); }
     if (S.custom.length >= 300) { buzz('warn'); return toast('Limit of 300 own foods reached'); }
-    S.custom.push(f); bump(el.dataset.m, f, 1); buzz('ok'); render();
+    S.custom.push(f); CUSTOM.bc = null; bump(el.dataset.m, f, 1); buzz('ok'); render();
   },
   cbasis: el => { CUSTOM.basis = el.dataset.v; buzz('tick'); $$('.seg button[data-act="cbasis"]').forEach(b => b.classList.toggle('on', b.dataset.v === CUSTOM.basis)); customCheck(); },
   quick: el => {
@@ -283,7 +284,7 @@ document.addEventListener('click', e => {
   if (ACT[a]) return ACT[a](el);
   const ta = todayAct(a, el);
   if (ta === 'nav') { e.preventDefault(); return; }
-  if (ta || trainAct(a, el) || foodAct(a, el) || setAct(a, el) || ogAct(a, el) || labAct(a, el) || recAct(a, el) || bxAct(a, el) || checkAct(a, el)) return;
+  if (ta || scanAct(a, el) || trainAct(a, el) || foodAct(a, el) || setAct(a, el) || ogAct(a, el) || labAct(a, el) || recAct(a, el) || bxAct(a, el) || checkAct(a, el)) return;
   if (a.startsWith('hr')) return hrAct(a, el);
   if (a.startsWith('w')) return watchAct(a);
 });

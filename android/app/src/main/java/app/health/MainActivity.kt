@@ -1,6 +1,8 @@
 package app.health
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.content.pm.PackageManager
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.content.res.Configuration
@@ -10,6 +12,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -48,6 +51,7 @@ class MainActivity : ComponentActivity() {
     private val queued = ArrayList<String>()
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var afterBluetooth: ((Boolean) -> Unit)? = null
+    private var cameraAsk: PermissionRequest? = null
 
     // Activity results are registered up front, as Android requires.
     val pickFiles = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -60,6 +64,11 @@ class MainActivity : ComponentActivity() {
     val healthPermissions = registerForActivityResult(PermissionController.createRequestPermissionResultContract()) { health.status() }
     private val bluetoothPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
         afterBluetooth?.invoke(r.values.all { it }); afterBluetooth = null
+    }
+    // The scanner asks for the camera; Android asks you once, and the page gets it only if you allow it.
+    private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        cameraAsk?.let { if (ok) it.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) else it.deny() }
+        cameraAsk = null
     }
     private val notifyPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         emit("remind", JSONObject().put("allowed", ok).toString())
@@ -95,7 +104,8 @@ class MainActivity : ComponentActivity() {
             allowFileAccess = false
             allowContentAccess = false
             setSupportMultipleWindows(false)
-            mediaPlaybackRequiresUserGesture = true
+            // The only video is the scanner's own camera view; nothing remote can be loaded to play.
+            mediaPlaybackRequiresUserGesture = false
         }
         web.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? =
@@ -121,6 +131,16 @@ class MainActivity : ComponentActivity() {
                 fileCallback = cb
                 // CSV and JSON files are labelled inconsistently by file managers; the page checks the content itself.
                 return try { pickFiles.launch(arrayOf("*/*")); true } catch (e: Exception) { fileCallback = null; false }
+            }
+
+            // Only the app's own page, and only the camera (no microphone), for the barcode scanner.
+            override fun onPermissionRequest(request: PermissionRequest) {
+                main.post {
+                    val video = request.resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)
+                    if (!video || request.origin.host != HOST || request.resources.size != 1) { request.deny(); return@post }
+                    if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE))
+                    else { cameraAsk?.deny(); cameraAsk = request; cameraPermission.launch(Manifest.permission.CAMERA) }
+                }
             }
         }
         web.addJavascriptInterface(Bridge(this), "HealthNative")

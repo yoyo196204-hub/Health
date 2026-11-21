@@ -1050,3 +1050,78 @@ td .why, .fs-kv .why { font: 500 14px var(--sans); letter-spacing: 0; text-trans
 td .why::after { content: ' ›'; color: var(--faint); }
 a.solid.link { background: var(--accent); color: var(--on-accent); padding: 0 22px; }
 a.ghost.link { background: var(--bg3); color: var(--ink); padding: 0 18px; }
+
+/* ---------- depth: layers that move (motion.js) ---------- */
+/* --lift is how far the top sheet is open. The page sinks back under it: smaller, dimmer, its corners rounding,
+   against black, the way a card is set down under another. While a finger holds the sheet, no easing: it follows. */
+body { --lift: 0; --fold: 0; }
+:root:has(body.sheet-open:not(.adding):not(.setting)), body.sheet-open:not(.adding):not(.setting) { background: #000; }
+body.sheet-open:not(.adding):not(.setting) #view, body.lifting:not(.adding):not(.setting) #view {
+  background: var(--bg); transform-origin: 50% var(--lift-y, 50vh); overflow: hidden;
+  transform: translateY(calc(var(--lift) * 12px)) scale(calc(1 - var(--lift) * .06));
+  border-radius: calc(var(--lift) * 26px); filter: brightness(calc(1 - var(--lift) * .3)) saturate(calc(1 - var(--lift) * .2)); }
+#view { transition: transform .5s var(--spring), opacity .3s var(--ease), filter .4s var(--ease), border-radius .4s var(--ease); }
+body.lifting #view, body.lifting .scrim, body.lifting #tabs, body.lifting #fab { transition: none !important; animation: none !important; }
+body.lifting .scrim { opacity: var(--lift); }
+body.sheet-open #tabs, body.sheet-open #fab { transform: translateY(calc(var(--lift) * 10px)) scale(calc(1 - var(--lift) * .04)); filter: brightness(calc(1 - var(--lift) * .3)); transition: transform .5s var(--spring), filter .4s; }
+.scrim { background: rgba(0, 0, 0, .38); }
+/* The sheet carries its own colour below its bottom edge, so a springy entrance that overshoots shows sheet, not page. */
+.sheet { box-shadow: 0 -1px 0 var(--line2), 0 -18px 50px -20px rgba(0, 0, 0, .55), 0 220px 0 0 var(--bg2); transition: transform .45s var(--spring); }
+.sheet.enter { animation: rise .62s var(--spring); }
+
+/* Flinging a banner, a callout or the insight card: it rises off the page as it moves. */
+.flinging { position: relative; z-index: 6; box-shadow: var(--shadow2) !important; will-change: transform; }
+[data-fling], .callout:has(> .x) { touch-action: pan-y; }
+
+/* Pressing a card tips it toward the finger and sinks it a little; letting go springs it back. */
+.card.tap, .tile, .ds, .duo > .card, .meal.card { transition: transform .55s var(--spring), box-shadow .35s var(--ease), background-color .2s; }
+.pressed { transform: perspective(800px) rotateX(var(--tx, 0deg)) rotateY(var(--ty, 0deg)) scale(.972) !important; transition-duration: .14s !important; }
+
+/* The insight deck: the cards waiting behind the top one show as edges under it. */
+.card.insight.deck { overflow: visible; margin-bottom: 22px;
+  box-shadow: var(--shadow), var(--hi), 0 7px 0 -3px color-mix(in srgb, var(--bg2) 70%, var(--bg)), 0 14px 0 -7px color-mix(in srgb, var(--bg2) 40%, var(--bg)); }
+.deckdots { display: flex; gap: 4px; justify-content: center; margin: 8px 0 0; grid-column: 1 / -1; }
+.deckdots i { width: 5px; height: 5px; border-radius: 3px; background: var(--line2); transition: width .4s var(--spring), background .3s; }
+.deckdots i.on { width: 14px; background: var(--accent); }
+.insight.enter { animation: deck-in .55s var(--spring) both; }
+@keyframes deck-in { from { transform: translateY(12px) scale(.94); opacity: .4; } }
+
+/* Scrolling: the title of a tab drifts up slower than the page and fades, so the cards slide over it. */
+.appbar { position: relative; z-index: 0; transform-origin: left top; will-change: auto;
+  transform: translateY(calc(var(--fold) * 22px)) scale(calc(1 - var(--fold) * .05)); opacity: calc(1 - var(--fold) * .6); }
+#view > .card, #view > section, #view > .duo, #view > .todo, #view > .callout { position: relative; z-index: 1; }
+
+/* ---------- the scanner ---------- */
+.searchbar .scanbtn { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 38px; height: 38px; border: 0; border-radius: 12px; background: color-mix(in srgb, var(--fuel) 16%, var(--bg3)); color: var(--fuel); display: grid; place-items: center; }
+.searchbar .scanbtn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; }
+.searchbar .clr:not([hidden]) ~ .scanbtn { display: none; }
+.foods li.subhead { cursor: default; border: 0; padding: 18px 0 4px; }
+.scanbox { position: relative; aspect-ratio: 4 / 3.2; border-radius: var(--r3); overflow: hidden; background: #000; margin: 4px 0 10px; box-shadow: var(--shadow2); }
+.scanbox video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: filter .4s var(--ease), transform .6s var(--spring); }
+.scanbox.paused video { filter: brightness(.45) blur(3px); transform: scale(1.04); }
+.scanbox .guide { position: absolute; left: 5%; right: 5%; top: 50%; height: 45%; transform: translateY(-50%); border-radius: 18px; box-shadow: 0 0 0 999px rgba(0, 0, 0, .35); }
+.scanbox .guide::before, .scanbox .guide::after { content: ''; position: absolute; inset: 0; border-radius: 18px; border: 2.5px solid rgba(255, 255, 255, .9);
+  -webkit-mask: linear-gradient(#000 0 0) top left / 28px 28px no-repeat, linear-gradient(#000 0 0) top right / 28px 28px no-repeat, linear-gradient(#000 0 0) bottom left / 28px 28px no-repeat, linear-gradient(#000 0 0) bottom right / 28px 28px no-repeat;
+  mask: linear-gradient(#000 0 0) top left / 28px 28px no-repeat, linear-gradient(#000 0 0) top right / 28px 28px no-repeat, linear-gradient(#000 0 0) bottom left / 28px 28px no-repeat, linear-gradient(#000 0 0) bottom right / 28px 28px no-repeat; }
+.scanbox .guide i { position: absolute; left: 8%; right: 8%; top: 50%; height: 2px; border-radius: 2px; background: var(--accent); box-shadow: 0 0 14px 2px var(--accent); animation: sweep 1.8s var(--ease) infinite alternate; }
+.scanbox.paused .guide i { animation-play-state: paused; opacity: 0; }
+@keyframes sweep { from { transform: translateY(-34px); } to { transform: translateY(34px); } }
+.scanerr { position: absolute; left: 16px; right: 16px; bottom: 14px; margin: 0; color: #fff; font-size: 13.5px; text-align: center; text-shadow: 0 1px 6px rgba(0, 0, 0, .8); }
+.scanbox .torch { position: absolute; right: 12px; bottom: 12px; width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, .45); color: #fff; display: grid; place-items: center; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.scanbox .torch svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.scanbox .torch.on { background: var(--accent); color: var(--on-accent); }
+.scard { position: relative; z-index: 2; margin-top: -54px; padding: 18px; border-radius: var(--r3); background: var(--bg2); box-shadow: var(--shadow2), var(--hi); display: grid; gap: 6px; animation: scard-in .6s var(--spring) both; touch-action: pan-y; }
+.scard h2 { font-size: 20px; letter-spacing: -.015em; }
+@keyframes scard-in { from { transform: translateY(60px) scale(.96); opacity: 0; } }
+.scard .m4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 6px; }
+.scard .m4 > div { display: grid; justify-items: center; padding: 10px 2px; border-radius: 14px; background: var(--bg3); }
+.scard .m4 b { font: 700 19px var(--sans); letter-spacing: -.02em; } .scard .m4 b i { font-style: normal; font-size: 12px; color: var(--soft); margin-left: 1px; }
+.scard .m4 span { font-size: 11px; color: var(--soft); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.pv { list-style: none; padding: 0; margin: 6px 0 4px; display: grid; gap: 8px; }
+.pv li { display: flex; gap: 10px; align-items: flex-start; }
+.pv li > i { flex: none; width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; background: var(--mid); }
+.pv li.good > i { background: var(--good); } .pv li.bad > i { background: var(--bad); }
+.pv b { display: block; font-size: 14.5px; }
+.scanman { display: flex; gap: 8px; margin-top: 14px; }
+.scanman input { flex: 1; min-width: 0; }
+.scanman input { min-height: 46px; padding: 0 14px; border-radius: 14px; border: 1px solid transparent; background: var(--bg3); outline: none; font-variant-numeric: tabular-nums; } .scanman input:focus { border-color: var(--accent); }

@@ -958,6 +958,31 @@ test('no two files declare the same name, and none hides a browser built-in', ()
   const hit = BUILTIN.filter(n => seen[n]).map(n => `${n} in ${seen[n].join(', ')}`);
   assert.deepStrictEqual(hit, [], 'hides a browser built-in');
 });
+test('the scanner list: real barcodes, panels that add up, India covered, and a pack becomes a food', () => {
+  const ctx = { self: {} }; ctx.self = ctx; vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(path.join(root, 'products.js'), 'utf8'), ctx);
+  const L = ctx.OFFDB.split('\n'), bad = [];
+  let india = 0;
+  const codes = new Set();
+  for (const line of L) {
+    const [code, n, , , , , k, p, c, ft, fb] = line.split('|'), x = v => (v === '' ? null : +v);
+    if (codes.has(code)) bad.push(`${code} twice`); codes.add(code);
+    if (!/^\d{8,14}$/.test(code) || !n || !(x(k) >= 0)) bad.push(line);
+    if (code.startsWith('890')) india++;
+    if (x(c) != null && x(ft) != null && x(k) > 20) { const e = 4 * x(p) + 4 * x(c) + 9 * x(ft) + 2 * (x(fb) || 0); if (Math.abs(e - x(k)) / x(k) > 0.36) bad.push(`${code} ${n}: ${k} kcal vs ${Math.round(e)}`); }
+  }
+  assert.deepStrictEqual(bad.slice(0, 5), []);
+  assert.ok(india > 10000, `${india} Indian packs`);
+  const c = sandbox();
+  vm.runInContext(fs.readFileSync(path.join(root, 'products.js'), 'utf8').replace('self.OFFDB', 'var OFFDB'), c);
+  vm.runInContext(fs.readFileSync(path.join(root, 'view-food.js'), 'utf8').match(/^const fnorm = .*$/m)[0], c);
+  vm.runInContext(fs.readFileSync(path.join(root, 'scan.js'), 'utf8').replace("FLING.scanagain", "var FLING = {}; FLING.scanagain"), c);
+  const f = run(c, `(() => { const map = new Map(); for (const l of OFFDB.split('\\n')) map.set(l.slice(0, l.indexOf('|')), l); OFF = { map, rows: [] }; return food('b8901262010023'); })()`);
+  assert.ok(f && f.k > 0 && f.g > 0 && f.c != null && /amul/i.test(f.n), JSON.stringify(f));
+  assert.strictEqual(run(c, `eanOK('8901262010023')`), true);
+  assert.strictEqual(run(c, `eanOK('8901262010024')`), false);
+  assert.strictEqual(run(c, `cleanFood({ id: 'x1', n: 'Bar', k: 200, bc: '8901262010023' }).bc`), '8901262010023');
+});
 test('a script that fails to load is caught before the app starts', () => {
   const t = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
   assert.ok(t.indexOf('(function boot()') >= 0 && t.indexOf('(function boot()') < t.indexOf('let S = load()'));

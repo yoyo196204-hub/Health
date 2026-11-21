@@ -112,7 +112,7 @@ function vFood() {
 }
 
 // ---------- add food ----------
-const CUSTOM = { basis: '100' };
+const CUSTOM = { basis: '100', bc: null };
 // The order of the usual foods, fixed for as long as the add page stays on one meal and day.
 const ADDORDER = { meal: null, day: null, ids: [] };
 // "1 katori · about 150 g" when a unit's weight is known and not already written in it.
@@ -191,6 +191,9 @@ function addRows(meal) {
       ${e ? `<button class="step" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="-0.5" aria-label="Less">−</button><b class="qty num">${qtxt(e.q)}</b><button class="step" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="0.5" aria-label="More">+</button>`
         : `${mine ? `<button class="x" data-act="cedit" data-id="${esc(f.id)}" aria-label="Change ${esc(f.n)}">✎</button>` : ''}<span class="add" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="1" aria-hidden="true">+</span>`}</li>`;
   };
+  // Packs from Open Food Facts follow the library's own foods, under their own heading.
+  const packs = q ? offSearch(q).filter(f => !S.custom.some(c => c.bc === f.bc)) : [];
+  if (q && packs.length) return searchFoods(q).map(f => row(f, S.custom.includes(f))).join('') + `<li class="subhead"><span class="eyebrow">Packs · Open Food Facts</span></li>` + packs.map(f => row(f)).join('');
   if (q) return searchFoods(q).map(f => row(f, S.custom.includes(f))).join('')
     || `<li class="empty"><div class="grow"><span class="nm">Nothing called “${esc(q)}”</span><span class="sub">Add it with its numbers, once, and it is yours from then on.</span><div class="rowb"><button class="ghost" data-act="cat" data-c="quick">Quick add</button><button class="ghost" data-act="cat" data-c="mine">Make it a food</button></div></div></li>`;
   if (cat === 'recent') return recentFoods().map(f => row(f)).join('') || '<li class="empty sub">Foods you log show up here, with the amounts you chose.</li>';
@@ -209,7 +212,7 @@ function addRows(meal) {
       <input id="k_c" type="number" inputmode="decimal" placeholder="Carbs g"><input id="k_ft" type="number" inputmode="decimal" placeholder="Fat g"></div>
       <button class="solid" data-act="quick" data-m="${meal}">Add</button></div></li>` + list.filter(e => e.m === meal && e.cat === 'quick').map(e => row(e)).join('');
   if (cat === 'mine') return S.custom.map(f => row(f, true)).join('') + `<li class="form"><div class="grow"><span class="nm">Add your own</span>
-      <span class="sub">Copy the pack's panel exactly as printed. Most Indian labels give values per 100 g: choose that and enter the serving size in grams, and the serving is worked out for you.</span>
+      ${CUSTOM.bc ? `<span class="sub"><b>Barcode ${esc(CUSTOM.bc)}</b>: the scanner will know this pack once it is saved.</span>` : ''}<span class="sub">Copy the pack's panel exactly as printed. Most Indian labels give values per 100 g: choose that and enter the serving size in grams, and the serving is worked out for you.</span>
       ${seg('cbasis', [['serving', 'Per serving'], ['100', 'Per 100 g / ml']], CUSTOM.basis, 'tight')}
       <div class="fgrid"><input id="c_n" placeholder="Name" class="span2"><input id="c_u" placeholder="Serving, e.g. 1 bar"><input id="c_g" type="number" inputmode="decimal" placeholder="Serving g / ml">
       <input id="c_k" type="number" inputmode="decimal" placeholder="kcal"><input id="c_p" type="number" inputmode="decimal" placeholder="Protein g">
@@ -235,7 +238,7 @@ function vAdd(meal) {
   const counts = { recent: recentFoods().length, thali: S.plates.length + THALI.length, mine: S.custom.length };
   const when = day === todayKey() ? 'today' : dateLabel(day, { weekday: 'short', day: 'numeric', month: 'short' });
   return `${masthead(`Add to ${mealName(meal).toLowerCase()}`, `Food · ${when}`, { before: `<button class="nav" data-act="close" aria-label="Back">${ic('back')}</button>` })}
-    <div class="addhead">${seg('addmeal', MEALS, meal, 'tight')}<div class="searchbar">${ic('search', 'class="mag"')}<input id="q" type="search" placeholder="Search: misal, pizza, roti, anda, chaas" value="${esc(query)}" autocomplete="off" enterkeyhint="search" aria-label="Search foods"><button class="clr" data-act="qclear" aria-label="Clear the search" ${query ? '' : 'hidden'}>×</button></div>
+    <div class="addhead">${seg('addmeal', MEALS, meal, 'tight')}<div class="searchbar">${ic('search', 'class="mag"')}<input id="q" type="search" placeholder="Search: misal, pizza, roti, anda, chaas" value="${esc(query)}" autocomplete="off" enterkeyhint="search" aria-label="Search foods"><button class="clr" data-act="qclear" aria-label="Clear the search" ${query ? '' : 'hidden'}>×</button><button class="scanbtn" data-act="scango" data-m="${meal}" data-k="${day}" aria-label="Scan a barcode">${ic('scan')}</button></div>
     <div class="chips" id="chips">${CATS.map(([c, l]) => `<button class="${c === cat && !query ? 'on' : ''}" data-act="cat" data-c="${c}">${l}${counts[c] ? `<i class="cnt">${counts[c]}</i>` : ''}</button>`).join('')}</div>
     </div><p class="hint">Tap to add one · hold, or swipe right, for any amount</p>
     <ul class="foods" id="rows">${addRows(meal)}</ul>

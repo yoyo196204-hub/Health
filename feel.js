@@ -88,29 +88,7 @@ function sheetEntered() {
   if (sh && key !== popKey && motionOK()) sh.classList.add('enter');
   popKey = key;
 }
-// Drag the sheet down to dismiss it.
-(() => {
-  let y0 = null, sh = null, t0 = 0, dy = 0;
-  document.addEventListener('pointerdown', e => {
-    sh = e.target.closest('.sheet');
-    if (!sh || (!e.target.closest('.grab, .sheet > .eyebrow, .sheet > h1') && sh.scrollTop > 0)) { sh = null; return; }
-    if (e.target.closest('input, select, textarea, button')) { sh = null; return; }
-    y0 = e.clientY; t0 = performance.now(); dy = 0;
-  }, { passive: true });
-  document.addEventListener('pointermove', e => {
-    if (!sh || y0 == null) return;
-    dy = Math.max(0, e.clientY - y0);
-    if (dy > 4) { sh.style.transition = 'none'; sh.style.transform = `translateY(${dy}px)`; }
-  }, { passive: true });
-  const end = () => {
-    if (!sh || y0 == null) return;
-    const v = dy / Math.max(1, performance.now() - t0), s = sh;
-    s.style.transition = ''; y0 = null; sh = null;
-    if (dy > 110 || (dy > 40 && v > 0.6)) { s.style.transform = 'translateY(100%)'; buzz('tick'); setTimeout(() => (pop ? closePop() : goBack()), 160); }
-    else s.style.transform = '';
-  };
-  document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
-})();
+// Dragging a sheet down to dismiss it lives in motion.js, with the rest of the physics.
 
 addEventListener('keydown', e => { if (e.key === 'Escape') { if (pop) closePop(); else if (overlay) goBack(); } });
 
@@ -121,14 +99,14 @@ addEventListener('keydown', e => { if (e.key === 'Escape') { if (pop) closePop()
 // belong to the phone's own back gesture, or on anything that scrolls sideways itself.
 (() => {
   let st = null;
-  const NOGO = 'input, textarea, select, .chips, .seg.scroll, .cards, .todo, .wave, .trace, .orb, .rfbars, .bx, .scrub, .sheet, #tabs, #fab';
+  const NOGO = 'input, textarea, select, [data-fling], .callout, .banner, .chips, .seg.scroll, .cards, .todo, .wave, .trace, .orb, .rfbars, .bx, .scrub, .sheet, #tabs, #fab';
   const pageOpen = () => overlay && ['add', 'set', 'lab', 'beats'].includes(overlay.type);
   document.addEventListener('touchstart', e => {
     st = null;
     if (e.touches.length !== 1) return;
     const t = e.touches[0], x = t.clientX, w = innerWidth;
-    const row = e.target.closest('[data-swipe]'), toastEl = e.target.closest('#toast.show'), food = e.target.closest('.foods li[data-press]');
-    if (toastEl) { st = { kind: 'toast', el: toastEl, x0: x, y0: t.clientY }; return; }
+    const row = e.target.closest('[data-swipe]'), food = e.target.closest('.foods li[data-press]');
+    if (e.target.closest('#toast')) return;   // the toast is flung in motion.js
     if (row && !e.target.closest('input, select, textarea')) { st = { kind: 'row', el: row, x0: x, y0: t.clientY, t0: performance.now() }; return; }
     if (food && x > 22 && !e.target.closest('button')) { st = { kind: 'amount', el: food, x0: x, y0: t.clientY, t0: performance.now() }; return; }
     if (x < 22 || x > w - 22 || pop || document.body.classList.contains('sheet-open') || e.target.closest(NOGO)) return;
@@ -177,7 +155,7 @@ addEventListener('keydown', e => { if (e.key === 'Escape') { if (pop) closePop()
       const now = Math.abs(d) > st.el.offsetWidth * (two ? 0.28 : 0.33);
       st.el.classList.toggle('armed', now);
       if (now !== !!st.armed) { st.armed = now; buzz('tick'); }
-    } else if (st.kind === 'toast') st.el.style.transform = `translate(calc(-50% + ${dx.toFixed(1)}px), 0)`;
+    }
   }, { passive: true });
   const end = () => {
     if (!st || !st.axis) { st = null; return; }
@@ -206,9 +184,6 @@ addEventListener('keydown', e => { if (e.key === 'Escape') { if (pop) closePop()
         buzz('swipe');
         setTimeout(() => { el.classList.remove('swiping'); const f = SWIPE[el.dataset.swipe]; if (f) f(el); else el.style.transform = el.style.opacity = ''; }, 200);
       } else { el.style.transform = ''; setTimeout(() => el.classList.remove('swiping'), 250); }
-    } else if (kind === 'toast') {
-      if (Math.abs(dx) > 60) { el.classList.remove('show'); toastFn = null; buzz('tick'); }
-      setTimeout(() => { el.style.transform = ''; }, 300);
     }
   };
   document.addEventListener('touchend', end); document.addEventListener('touchcancel', end);
@@ -291,7 +266,7 @@ const PTR_AT = 64;
   let y0 = null, x0 = 0, armed = false, active = false;
   const el = () => $('#ptr');
   const blocked = t => document.body.classList.contains('sheet-open') || document.body.classList.contains('adding') || document.body.classList.contains('setting')
-    || t.closest('input, textarea, select, .chips, .seg, .sheet, .wave, .trace, .cards, .todo, [data-swipe], .orb, .bx, .scrub');
+    || t.closest('input, textarea, select, [data-fling], .callout, .banner, #toast, .chips, .seg, .sheet, .wave, .trace, .cards, .todo, [data-swipe], .orb, .bx, .scrub');
   document.addEventListener('touchstart', e => {
     y0 = null;
     if (scrollY > 2 || e.touches.length > 1 || blocked(e.target) || REFRESH.on) return;

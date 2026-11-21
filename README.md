@@ -20,7 +20,7 @@ Amazfit and Polar H9 data that decides how hard each day should be.
   connects over the phone's own Bluetooth and is remembered. Haptics come from the phone's vibration engine (composed
   clicks where the phone supports them). Reminders for the morning check, the weekly waist and the evening food log
   arrive as notifications, only when the thing is still undone. A daily backup can go to a folder you choose. The app has
-  **no internet permission**, so nothing in it can leave the phone.
+  **no internet permission**, so nothing in it can leave the phone. The camera is used only by the pack scanner, on the phone.
 - **In Chrome** (`index.html`, served by GitHub Pages): the same screens, with the H9 over Web Bluetooth and
   Amazfit data from the Zepp export. "Move my data to the app" in You hands everything to the Android app
   in one step.
@@ -104,11 +104,14 @@ you log in openGym arrives with its name and the muscles it trains, from `opengy
 | A day in detail (tap a night, or Your day) | The watch's heart rate across 24 hours with sleep and workouts marked, the night stage by stage, and every number against your previous four weeks |
 | Beat by beat (from any morning check or Lab session) | The recording beat by beat: one finger reads each beat (time to the millisecond, RR, bpm, change from the last, and what correction it needed), a pinch zooms, the strip below moves the window; RMSSD, SDNN, pNN50, SD1/SD2, the Poincaré plot and the spectrum are worked out again for the stretch on screen |
 | Data checks (Me, and a line in Review when something needs a look) | About twenty fixed-rule checks across every dataset: food energy against its own macros, sleep stages against the night's total, watch resting and workout heart rate against the strap (Bland–Altman), saved RMSSD against its own beats, steps against distance, active against total energy, duplicate workouts, load typos, and how fresh the watch data is. Each gives its numbers and lists the records that failed |
+| Scan a pack (the log button, or the barcode button in Add food's search) | The camera reads the barcode; the pack is looked up on the phone in 16,000 packaged foods from Open Food Facts (every Indian product with a nutrition panel, and the most-scanned ones worldwide) and in your own foods. It shows the panel per 100 g, and three things that matter on a fixed budget: protein per 100 kcal, energy density, and the share of energy from sugars, with ultra-processing (NOVA 4) said plainly; then what one serving is of what is left today. Choose amount opens the usual amount sheet. A pack that is not in the list is entered once from its label with its barcode, and is known from then on. Packs also come up by name in the food search, under their own heading. Fling the card away to scan the next |
 | Adding food | A switch between the four meals at the top; search that understands Marathi, Hindi and English names (roti, chawal, anda, chaas, aloo, kombdi…) and forgives a typo; chips for Usual, Recent (exactly as you last logged it), Plates (yours first), Quick add, Mine, and every group from home food to Pune street food, pizza and Chinese, bakery and Irani café, and upvas. Tap adds one (the list keeps its order while you add, so nothing jumps from under your finger); hold any food, or swipe it right, for any amount: steppers, a ruler you drag (a light detent each quarter; a flick keeps it rolling), or by weight, into any meal. The bar at the bottom shows the meal and the day as you go |
 | A logged food (tap it) | Type any amount, step it, or drag its ruler, weigh it, change the meal, change its own numbers (it then becomes your own entry and the library food stays as it was), move or copy it to another day, or save it as your own food |
 | You (the face at the top of every tab) | Your numbers, and a page each for goal, training, profile, data sources, all your data (see, change or delete any record), backup and data, feel, and the evidence |
 
-Gestures: swipe sideways to change tab (on Food: to change day), swipe right on a page to go back, swipe a row left to delete it (with undo), hold or swipe right on a food for its amount, drag any ruler, hold a stepper to repeat, swipe a result card or a toast away, drag a sheet down or tap outside it to close. Heart, Train and Insights carry a section bar that stays at the top and follows your reading.
+Gestures: swipe sideways to change tab (on Food: to change day), swipe right on a page to go back, swipe a row left to delete it (with undo), hold or swipe right on a food for its amount, drag any ruler, hold a stepper to repeat, fling a banner, a callout, a result card or a toast away, fling the insight card on Today for the next one, drag a sheet down from anywhere on it (once its content is at the top) or tap outside it to close.
+
+Everything a finger moves is physical (`motion.js`): it follows the finger exactly, and on release it carries the finger's speed into a spring, so a flick travels and a slow drag settles back with a small overshoot. Every CSS transition uses the same springs (sampled into `linear()` easings). A sheet is a layer: as it rises the page sinks back under it, smaller, dimmer and rounded against black, and comes forward again as you pull the sheet down. Cards tip toward the finger when pressed, and the title of a tab drifts up slower than the page so the cards slide over it. Heart, Train and Insights carry a section bar that stays at the top and follows your reading.
 
 Haptics follow one vocabulary everywhere: a press under the finger, a tick when a choice changes, a light detent for each step of a ruler, a double pulse for something saved, a rising triple when protein reaches its target, and a firm double when the day passes its calorie target or a value is refused.
 
@@ -254,6 +257,7 @@ Plain JavaScript, no build step. Scripts load in this order:
 | `train.js` | Which session is next, the plan, progression, volume |
 | `native.js` | The bridge to the Android app; one merge path for every outside data source |
 | `feel.js` | Haptics, screen transitions, sheets, undo toasts, press and hold, the ruler, swipes, pull to refresh |
+| `motion.js` | The physics: springs, flick projection, rubber-banding; sheets as layers, fling to dismiss, the insight deck, pressing, scroll depth |
 | `ui.js` | Shared building blocks: rings, meters, icons, the chart (with interval bands) and the muscle map |
 | `styles.css`, `inter.woff2` | The design: graphite surfaces, one saffron accent, a colour per domain; Inter with optical sizing, bundled |
 | `h9.js` | The strap: connection, the beat timeline, live trace, morning HRV check, cardio with α1, heart-rate recovery, crash-safe drafts |
@@ -263,6 +267,8 @@ Plain JavaScript, no build step. Scripts load in this order:
 | `watch.js` | The Zepp export (the zip as emailed, or its CSV files): each file recognised by its columns, reduced to days, previewed, merged |
 | `opengym.js` | openGym: its backup and CSV coming in, the folder link, Health's plan as an openGym plan file with backups and the block |
 | `view-*.js` | One file per screen; `view-food.js` is the diary and everything about adding and changing food, `view-review.js` is Insights, `view-recovery.js` is Heart, `view-records.js` is all your data and a day in detail, `view-checks.js` the data checks |
+| `scan.js` | The pack scanner: camera, barcode reading, the offline lookup, what a pack says per 100 kcal |
+| `products.js`, `zxing.min.js` | Loaded only when the scanner or food search needs them: the Open Food Facts list (built by `test/build-products.py`) and the ZXing barcode reader |
 | `app.js` | State, routing, events, and the patching renderer |
 
 Exercise animations live in openGym. Tests: `node test/run.js` (the engine) and `node test/browser.js` (the screens in a real browser: that a finger scrolls every tab, fixed bars stay put, a Live session runs end to end; needs Playwright). Both run on GitHub before every build.
@@ -290,3 +296,7 @@ The typeface is [Inter](https://github.com/rsms/inter) by Rasmus Andersson, unde
 the 1,324 entries whose names and muscles come from ExerciseDB v1 by AscendAPI via
 [hasaneyldrm/exercises-dataset](https://github.com/hasaneyldrm/exercises-dataset) (MIT; the notice is in the file).
 No openGym code, descriptions, pictures or animations are copied into Health.
+
+Packaged foods in `products.js` come from [Open Food Facts](https://world.openfoodfacts.org), under the Open Database
+License (`licenses/OpenFoodFacts-ODbL.txt`). Barcodes are read with [ZXing for JavaScript](https://github.com/zxing-js/library),
+under the Apache License 2.0 (`licenses/zxing-js-Apache-2.0.txt`), where the browser has no barcode reader of its own.

@@ -46,6 +46,8 @@ function cleanFood(e, logged) {
   if (c != null && ft != null) Object.assign(f, { c, ft });
   const g = num(e.g, 1, 5000); if (g != null) f.g = g;
   if (FOOD_SRC.includes(e.src)) f.src = e.src;
+  // The pack's barcode, for a food saved from its label: the scanner finds it by this.
+  if (typeof e.bc === 'string' && /^\d{8,14}$/.test(e.bc)) f.bc = e.bc;
   if (!logged) return f;
   const q = num(e.q, 0.01, 50);
   if (q == null) return null;
