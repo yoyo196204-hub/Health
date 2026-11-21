@@ -14,7 +14,7 @@ function sandbox() {
   };
   ctx.self = ctx;
   vm.createContext(ctx);
-  for (const f of ['lib.js', 'hrv.js', 'data.js', 'exercises.js', 'opengym-ids.js', 'body-data.js', 'store.js', 'model.js', 'energy.js', 'insights.js', 'train.js'])
+  for (const f of ['lib.js', 'hrv.js', 'data.js', 'exercises.js', 'opengym-ids.js', 'body-data.js', 'store.js', 'model.js', 'energy.js', 'insights.js', 'train.js', 'markers.js'])
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
   // What native.js would define outside the app, then the openGym link, which uses it.
   ctx.window = ctx; ctx.location = { origin: 'https://x', pathname: '/' };
@@ -661,6 +661,52 @@ test('AES, as the zip reader runs it, matches the FIPS-197 test vectors for 128 
   const hex = h => Uint8Array.from(h.match(/../g).map(x => parseInt(x, 16))), out = (k, p) => Buffer.from(vm.runInContext(`ZIP_AES.block(ZIP_AES.expand(k), p)`, Object.assign(c, { k: hex(k), p: hex(p) }))).toString('hex');
   assert.strictEqual(out('000102030405060708090a0b0c0d0e0f', '00112233445566778899aabbccddeeff'), '69c4e0d86a7b0430d8cdb78070b4c55a');
   assert.strictEqual(out('000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f', '00112233445566778899aabbccddeeff'), '8ea2b7ca516745bfeafc49904b496089');
+});
+test('fitness: the HUNT equation, worked by hand, from four weeks of resting heart rate, waist and sessions', c => {
+  c.raw = seedV3(); run(c, 'S = sanitize(raw); memo.clear()');
+  const F = run(c, 'fitness()');
+  assert.ok(F.v != null, 'estimated');
+  const hand = 100.27 - 0.296 * F.age + 0.226 * F.P.pa - 0.369 * F.waist - 0.155 * F.rhr;
+  assert.ok(Math.abs(F.v - hand) < 1e-9, `${F.v} vs ${hand}`);
+  assert.ok(Math.abs(F.hi - F.v - 1.96 * 5.70) < 1e-9 && F.mets > 0);
+  assert.ok([0, 2.5, 1, 5].includes(F.P.f) && [1, 5, 10].includes(F.P.i) && [0.1, 0.38, 0.75, 1].includes(F.P.d), JSON.stringify(F.P));
+  for (const l of F.levers) assert.ok(l.dv > 0 && l.rr < 1 && l.rr > 0.5, JSON.stringify(l));
+  // A woman of the same build uses the women's equation, which runs lower.
+  run(c, "S.profile.sex = 'f'; memo.clear()");
+  assert.ok(run(c, 'fitness().v') < F.v);
+  // No resting heart rate at all: no estimate, and it says what it needs.
+  run(c, 'S.hrv = {}; S.rhr = {}; memo.clear()');
+  assert.deepStrictEqual([run(c, 'fitness().v'), run(c, 'fitness().need')], [null, 'rhr']);
+});
+test('steps against the Paluch curve: exact at each quartile, flat past the ends, never rising with more steps', c => {
+  assert.strictEqual(run(c, 'stepsHR(3553)'), 1); assert.strictEqual(run(c, 'stepsHR(5801)'), 0.60);
+  assert.strictEqual(run(c, 'stepsHR(10901)'), 0.47); assert.strictEqual(run(c, 'stepsHR(20000)'), 0.47); assert.strictEqual(run(c, 'stepsHR(500)'), 1);
+  let prev = 2; for (let st = 1000; st <= 15000; st += 250) { const h = run(c, `stepsHR(${st})`); assert.ok(h <= prev + 1e-12, `${st}`); prev = h; }
+});
+test('social jetlag: weekend nights planted two hours later are found as two hours; even weeks as none', c => {
+  run(c, `S = sanitize({}); for (let i = 0; i < 42; i++) { const k = shift(todayKey(), -i), wd = new Date(k + 'T12:00').getDay(); S.sleep[k] = 7.5;
+    S.sleepx[k] = { d: 80, l: 250, r: 100, w: 20, on: (wd === 0 || wd === 6) ? 60 : -60 }; } memo.clear()`);
+  const J = run(c, 'socialJetlag()');
+  assert.ok(Math.abs(J.v - 2) < 1e-9 && J.later, JSON.stringify(J));
+  run(c, `for (const k in S.sleepx) S.sleepx[k].on = -30; memo.clear()`);
+  assert.ok(run(c, 'socialJetlag().v') < 1e-9);
+});
+test('the slope interval: covers the true rate on noisy weigh-ins about 95% of the time, and narrows with more of them', c => {
+  let r = 11; const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647, gauss = () => Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd());
+  let hit = 0, w10 = 0, w40 = 0; const N = 300;
+  for (let t = 0; t < N; t++) {
+    const mk = n => Array.from({ length: n }, (_, i) => [i, 90 - 0.1 * i + 0.6 * gauss()]);
+    c.pts = mk(21); const a = run(c, 'theilSenCI(pts)'); if (a.lo <= -0.1 && a.hi >= -0.1) hit++;
+    w10 += a.hi - a.lo; c.pts = mk(60); const b = run(c, 'theilSenCI(pts)'); w40 += b.hi - b.lo;
+  }
+  assert.ok(hit / N > 0.9 && hit / N <= 1, `coverage ${hit / N}`);
+  assert.ok(w40 < w10 * 0.6, `width ${w10 / N} vs ${w40 / N}`);
+});
+test('the long game: every marker is graded from 0 to 2 or not yet read, on full data and on none', c => {
+  c.raw = seedV3(); run(c, 'S = sanitize(raw); memo.clear()');
+  for (const st of [run(c, 'markers().map(m => m.st)'), (run(c, 'S = sanitize({}); memo.clear()'), run(c, 'markers().map(m => m.st)'))])
+    for (const v of st) assert.ok(v === null || [0, 1, 2].includes(v), String(v));
+  assert.ok(run(c, 'markers().length') >= 3, 'the ones that need no history still show');
 });
 atest('a Zepp zip, unlocked: each kind is recognised by its columns, and the profile and workouts are left aside', async c => {
   const fx = zipBox(c), r = await zipKinds(c, fx('zepp-plain.zip'), null);

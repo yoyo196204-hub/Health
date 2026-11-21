@@ -104,8 +104,8 @@ function bodyCard() {
     ${wchart ? wchart + legend([['dot', 'weigh-ins'], ['line c-body', 'trend, scale noise filtered out']]) : para('Weigh in on two mornings and the trend line starts here.')}
     ${stats([[`${r1(M.W ?? T.wt)}<i>kg</i>`, M.rate != null ? `trend, ${sign(M.rate, 2)} kg a week` : 'trend'], [`${r1(bf.pct)}<i>%</i>`, bf.src === 'rfm' ? 'body fat, from waist' : 'body fat, from BMI'], [St ? `${sign(St.pct, 0)}<i>%</i>` : DASH, St ? `strength, ${plural(St.n, 'lift')}` : 'strength']])}
     ${para(`${read}. Since the start: ${sign(dW, 1)} kg, ${sign(dWaist, 1)} cm waist. ${why('waist', `Waist ÷ height ${(waist / p.h).toFixed(2)}${waist > cut ? `, ${r1(waist - cut)} cm above ${cut}` : ''}`)}`, read.includes('risk') ? 'flag' : 'sub')}
-    ${P.items.length ? `<table class="ahead">${P.items.map(i => trow(`${i.label} <i>${r1(i.togo)} kg to go</i>`, i.date ? `≈ ${dateLabel(i.date, { month: 'short', year: 'numeric' })}` : DASH)).join('')}</table>
-      ${para(`${P.rate != null && P.rate < -0.05 ? `At ${r1(-P.rate)} kg a week.` : 'Dates appear once the trend is falling.'} ${P.perKg ? `Your waist moves ${r1(P.perKg)} cm per kg.` : ''} ${why('project', 'How projected')}`)}` : ''}
+    ${P.items.length ? `<table class="ahead">${P.items.map(i => trow(`${i.label} <i>${r1(i.togo)} kg to go</i>`, i.date ? `≈ ${dateLabel(i.date, { month: 'short', year: 'numeric' })}<i class="ci">${i.early && (i.late || i.open) ? `${dateLabel(i.early, { month: 'short', year: '2-digit' })} – ${i.late ? dateLabel(i.late, { month: 'short', year: '2-digit' }) : 'later'}` : ''}</i>` : DASH)).join('')}</table>
+      ${para(`${P.rate != null && P.rate < -0.05 ? `At ${r1(-P.rate)} kg a week; the range under each date is the 95% interval of that rate over 21 days.` : 'Dates appear once the trend is falling.'} ${P.perKg ? `Your waist moves ${r1(P.perKg)} cm per kg.` : ''} ${why('project', 'How projected')}`)}` : ''}
     <div class="rowb tight"><button class="ghost" data-act="weigh" data-s="weights">${ic('body', 'width="17" height="17" style="fill:none;stroke:currentColor;stroke-width:1.9"')} Weigh in</button><button class="ghost" data-act="weigh" data-s="waist">${ic('tape', 'width="17" height="17" style="fill:none;stroke:currentColor;stroke-width:1.9"')} Waist</button></div>
     ${historyList('Every weigh-in', Object.keys(S.weights).sort().reverse().slice(0, 120).map(k => [k, `${kg(S.weights[k])} kg${S.manual.weights[k] ? '' : ' · from the watch or scale'}`]), 'weights')}
     ${historyList('Every waist reading', Object.keys(S.waist).sort().reverse().map(k => [k, `${kg(S.waist[k])} cm`]), 'waist')}</section>`;
@@ -144,13 +144,14 @@ function vReview() {
   const E = energy(), St = strength(), D = decisions(T, cells, E, St);
   return `${appbar('Insights', 'What your data says', `<button class="mini" data-act="shareweek" aria-label="Share this week">Share</button>`)}
     ${part(headCards)}
+    ${sec('Do next', D.length ? `<ul class="dec">${D.slice(0, 5).map(([w, sig, act, ev]) => `<li class="w${w}"><a href="#why-${ev}"><span class="sig">${sig}</span><span class="act">${act}</span></a></li>`).join('')}</ul>` : para('Nothing triggered. Hold the plan.'), { id: 'in-do' })}
+    ${part(checkBanner)}
     ${part(burnCard)}
     ${part(bodyCard)}
+    ${part(markersCard)}
     ${part(linksCard)}
     ${part(patternsCard)}
-    ${sec('The week', matrix(T, days, cells), { cls: 'first' })}
-    ${part(checkBanner)}
-    ${sec('What the data says to do', D.length ? `<ul class="dec">${D.slice(0, 5).map(([w, sig, act, ev]) => `<li class="w${w}"><a href="#why-${ev}"><span class="sig">${sig}</span><span class="act">${act}</span></a></li>`).join('')}</ul>` : para('Nothing triggered. Hold the plan.'))}`;
+    ${sec('The week', matrix(T, days, cells), { cls: 'first', id: 'in-week' })}`;
 }
 // Loaded: this file ran to the end.
 (self.LOADED ||= []).push('view-review.js');

@@ -83,6 +83,16 @@ function theilSen(pts) {
   const m = median(sl);
   return { m, b: median(pts.map(([x, y]) => y - m * x)) };
 }
+// Theil–Sen with its distribution-free 95% interval (Sen 1968): the pairwise slopes ranked, and the interval taken
+// C = 1.96·√(n(n−1)(2n+5)/18) ranks either side of the middle, as Kendall's S would bound it.
+function theilSenCI(pts, z = 1.96) {
+  const n = pts.length, sl = [];
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) { const dx = pts[j][0] - pts[i][0]; if (dx) sl.push((pts[j][1] - pts[i][1]) / dx); }
+  if (sl.length < 3) return null;
+  sl.sort((a, b) => a - b);
+  const N = sl.length, C = z * Math.sqrt(n * (n - 1) * (2 * n + 5) / 18);
+  return { m: median(sl), lo: sl[clamp(Math.floor((N - C) / 2), 0, N - 1)], hi: sl[clamp(Math.ceil((N + C) / 2), 0, N - 1)] };
+}
 // Agreement between two methods (Bland & Altman 1986): pairs are [test, reference].
 // bias = mean difference; 95% of single readings fall within bias ± 1.96 SD.
 function agreement(pairs) {

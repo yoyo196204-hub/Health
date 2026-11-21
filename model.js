@@ -82,6 +82,14 @@ function slope() {
     return theilSen(pts).m;
   });
 }
+// The same slope with its 95% interval, kg per day, for how sure a projected date is.
+function slopeCI() {
+  return cached('slopeCI', () => {
+    const from = shift(todayKey(), -21);
+    const pts = Object.keys(S.weights).filter(k => k >= from).map(k => [Date.parse(k + 'T12:00') / DAY, S.weights[k]]);
+    return pts.length >= 6 ? theilSenCI(pts) : null;
+  });
+}
 // A weigh-in far from the trend is usually a typo or a heavy meal; ask before trusting it.
 function weighCheck(k, v) {
   const t = trendOn(shift(k, -1));
@@ -342,8 +350,11 @@ function projection() {
     if (perKg && waistNow > cut) goals.push([`Waist ${cut} cm`, T.wt - (waistNow - cut) / perKg]);
     for (const b of [25, 23]) if (T.bmi > b) goals.push([`BMI ${b}`, b * h2]);
     const items = goals.filter(g => g[1] < T.wt).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([label, kg]) => {
-      const weeks = rate != null && rate < -0.05 ? (T.wt - kg) / -rate : null;
-      return { label, kg, togo: T.wt - kg, weeks, date: weeks != null && weeks < 260 ? shift(todayKey(), Math.round(weeks * 7)) : null };
+      const weeks = rate != null && rate < -0.05 ? (T.wt - kg) / -rate : null, CI = slopeCI();
+      // The range: the faster and slower ends of the slope's interval. A slow end that is not falling has no date.
+      const wFast = CI && CI.lo < -0.05 / 7 ? (T.wt - kg) / (-CI.lo * 7) : null, wSlow = CI && CI.hi < -0.05 / 7 ? (T.wt - kg) / (-CI.hi * 7) : null;
+      const at = w => w != null && w < 260 ? shift(todayKey(), Math.round(w * 7)) : null;
+      return { label, kg, togo: T.wt - kg, weeks, date: at(weeks), early: weeks != null ? at(wFast) : null, late: weeks != null ? at(wSlow) : null, open: weeks != null && wSlow == null };
     });
     return { perKg, n: pts.length, rate, waistNow, cut, items };
   });

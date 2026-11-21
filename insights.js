@@ -228,6 +228,9 @@ function headline() {
     const Q = sri();
     if (Q.v != null && Q.v < 74) out.push({ dom: 'sleep', t: `Sleep regularity ${Math.round(Q.v)}`, s: `Below the typical 74–86. Regularity predicted survival more strongly than sleep length in 61,000 adults.`, href: '#recovery' });
     if (P.protein && P.protein.pct < 50) out.push({ dom: 'food', t: `${P.protein.hit} of ${P.protein.tot} main meals reached ${T.perMeal} g protein`, s: 'Spreading protein across meals (about 0.4 g/kg each) supports muscle better than one large serving.', href: '#food' });
+    // The long game's biggest lever (markers.js), when there is one worth naming.
+    const B = self.bestLever ? bestLever() : null;
+    if (B) out.push({ dom: 'heart', t: B.t, s: B.s, href: '#review' });
     return out;
   });
 }

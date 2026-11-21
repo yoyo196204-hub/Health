@@ -92,11 +92,11 @@ you log in openGym arrives with its name and the muscles it trains, from `opengy
 
 | Tab | What it is for |
 | --- | --- |
-| Today | Three rings: recovery (0–100, in its green/yellow/red zone), calories left, and last night's sleep; what is due today as a row of one-tap actions (weigh in, the morning check, the next meal); Fuel: eaten against the target, protein, carbs, fat and fibre, each meal one tap from adding, and one concrete suggestion; the one thing your data most wants you to know; weight trend and steps; last night with its stages, heart rate asleep and regularity; the next openGym session |
+| Today | Three rings: recovery (0–100, in its green/yellow/red zone), calories left, and last night's sleep; what is due today as a row of one-tap actions (weigh in, the morning check, the next meal); the one thing your data most wants you to know; Fuel: eaten against the target, protein, carbs, fat and fibre, the four meals as tiles (kcal and protein in each, the one due now lit, one tap to add), and one concrete suggestion; weight trend and steps; last night with its stages, heart rate asleep and regularity; the next openGym session |
 | Food | The diary. The week as a strip of rings (green within 10% of target, red over it, saffron under); swipe across the page for the day before or after. What is left as a ring, with eaten, target and the burn the model has learned; the four macros; a suggestion. Each meal as a card: tap an entry to change it, hold it, or swipe it left to remove it (with undo); an empty meal offers "same as yesterday" and your usual foods, one tap each. Then where the day's protein and energy went, meal by meal, and the week as bars against the target |
 | Heart | Recovery as one number, with each part it is made of (HRV, resting heart rate, sleep, breathing) drawn against your own normal;  the H9 morning check (1–5 minutes, lying or sitting) with live beats, skin contact and signal quality, and a result with its tachogram, Poincaré plot and every measure; the strap Lab; night by night, each opening a day in detail; HRV against your normal range, read with morning heart rate; resting and sleeping heart rate; sleep; the watch's overnight HRV and breathing rate against their own baselines; watch-vs-strap agreement |
 | Train | The next openGym session with today's recovery guidance; the shoulder check; sessions with their sets and watch heart rate; strength per lift; the muscle map; cardio with the H9 (live trace, zones, α1) and the aerobic threshold it gives |
-| Insights | The headlines from your data; your energy: the burn learned from your scale and log, its 95% interval over time against what you ate, and what this week's balance means in kilograms; the body: weigh-ins with the filtered trend, body fat from your waist, strength, and where the trend leads; what moves what: each link in your own data with its effect in real units, its interval drawn around zero, and how to test it; how you eat across the week (logging, consistency, weekdays against weekends, protein at each meal); the week as a matrix and what it asks you to do |
+| Insights | The headlines from your data; what the data says to do next; your energy: the burn learned from your scale and log, its 95% interval over time against what you ate, and what this week's balance means in kilograms; the body: weigh-ins with the filtered trend, body fat from your waist, strength, and where the trend leads, each date with its 95% range; the long game: fitness, steps, resting heart rate, waist ÷ height, sleep length and regularity, social jetlag, strength and active minutes, each read against the cohort studies, with the one change worth the most named first; what moves what: each link in your own data with its effect in real units, its interval drawn around zero, and how to test it; how you eat across the week (logging, consistency, weekdays against weekends, protein at each meal); the week as a matrix and what it asks you to do |
 | The log button (every tab) | Everything you might log, from anywhere: each meal (the one due now first), quick kcal, plates, search, your own foods, weight, waist, the morning check, breathing, a spot check, cardio, a Live session |
 | Weigh in / waist | A big number set with steppers, a ruler you drag, or the keyboard; it starts at your trend, says how far from it you are, and asks before keeping a reading that looks like a typo |
 | Automation (Android app) | The remembered strap connects by itself when the app opens with it on your chest, and before 11 with no check yet that day the morning check starts by itself; both can be turned off under the morning check. On a day without a morning check the watch's night stands in for it in the verdict, and the verdict says what it rests on |
@@ -156,6 +156,20 @@ between tabs reuses what was already worked out from the data; anything that cha
   sleep and breathing): green 67–99, yellow 34–66, red 1–33. Where the day sits in its zone comes from how far each signal
   is from your own normal, in standard deviations, weighted by its evidence: HRV 45%, sleep 25%, resting heart rate 20%,
   breathing in sleep 10%. Every part is shown beside the number.
+- **The long game** (`markers.js`): eight markers that large cohorts tie to how long people live, all from data the app
+  already has. **Fitness** is VO2peak from the HUNT non-exercise model (Nes 2011; men 100.27 − 0.296·age + 0.226·PA −
+  0.369·waist − 0.155·resting HR, women 74.736 − 0.247·age + 0.198·PA − 0.259·waist − 0.114·resting HR; SEE 5.7 and 5.1),
+  with the activity index built from your own last four weeks of sessions (how often, median length, how hard by heart
+  rate) instead of a questionnaire. Each MET higher went with 13% lower all-cause mortality across 33 cohorts (Kodama
+  2009); a change is only called beyond 3.6 ml/kg/min, the model's error for change (Peterman 2020). What would move it
+  (resting HR 5 bpm lower, waist 5 cm smaller, more sessions) is shown in ml/kg/min and cohort risk. **Steps**: the
+  4-week median on the Paluch 2022 curve (quartile medians 3,553 / 5,801 / 7,842 / 10,901 at HR 1 / 0.60 / 0.55 / 0.47,
+  straight lines between, never extrapolated). **Resting heart rate**: 9% per 10 bpm (Zhang 2016, 46 cohorts).
+  **Waist ÷ height** against 0.5. **Sleep**: 7–9 h (Cappuccio 2010; Watson 2015). **Strength**: minutes a week against
+  the 30–60 where Momma 2022 found the most benefit. **Social jetlag**: mid-sleep on Saturday and Sunday mornings
+  against workdays over six weeks (Wittmann 2006; Roenneberg 2012), also shown with sleep on Heart.
+- **Goal dates**: each projected date carries the 95% range of the 21-day Theil–Sen rate (Sen 1968's distribution-free
+  interval); a slow end that is not falling says "later" rather than inventing a date.
 - **Sleep regularity**: the Sleep Regularity Index (Phillips 2017), minute by minute from each night's onset and wake
   time over consecutive nights: the chance of being in the same state 24 hours apart, from −100 to 100. Shown against the
   UK Biobank median of 81, where regularity predicted mortality more strongly than sleep length (Windred 2024).
@@ -254,12 +268,13 @@ Plain JavaScript, no build step. Scripts load in this order:
 | `model.js` | Nutrition, weight, heart, HRV, sleep and activity conclusions |
 | `energy.js` | The burn learned from scale and log (Kalman filter), body fat, the energy in a kilogram of change |
 | `insights.js` | Links in your own data, the Sleep Regularity Index, the recovery number, eating patterns, the day's headline |
+| `markers.js` | The long game: fitness from the HUNT model, steps, resting heart rate, waist ÷ height, sleep, social jetlag, strength and active minutes against the cohort evidence, and the biggest lever |
 | `train.js` | Which session is next, the plan, progression, volume |
 | `native.js` | The bridge to the Android app; one merge path for every outside data source |
 | `feel.js` | Haptics, screen transitions, sheets, undo toasts, press and hold, the ruler, swipes, pull to refresh |
 | `motion.js` | The physics: springs, flick projection, rubber-banding; sheets as layers, fling to dismiss, the insight deck, pressing, scroll depth |
 | `ui.js` | Shared building blocks: rings, meters, icons, the chart (with interval bands) and the muscle map |
-| `styles.css`, `inter.woff2` | The design: graphite surfaces, one saffron accent, a colour per domain; Inter with optical sizing, bundled |
+| `styles.css`, `inter.woff2` | The design: graphite surfaces lit from above (a lighter top edge, a hairline rim, a grounding shadow), raised controls in sunken tracks, a floating glass tab bar whose indicator takes each tab's colour, one saffron accent and a colour per domain glowing faintly from its cards; Inter with optical sizing, bundled |
 | `h9.js` | The strap: connection, the beat timeline, live trace, morning HRV check, cardio with α1, heart-rate recovery, crash-safe drafts |
 | `beats.js` | The beat explorer |
 | `lab.js` | The Lab: breathing pacer, resonance finder, orthostatic test, spot check, Live sessions and the beat export |
