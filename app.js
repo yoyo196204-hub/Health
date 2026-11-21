@@ -120,6 +120,7 @@ function render() {
   $$('#tabs a').forEach(a => a.classList.toggle('on', !overlay && a.hash === '#' + tab));
   $('#tabs').style.setProperty('--i', Math.max(0, TABS.indexOf(tab)));
   $('#tabs').style.setProperty('--on', TABS.includes(tab) ? 1 : 0);
+  $('#tabs').style.setProperty('--tc', { today: 'var(--accent)', food: 'var(--fuel)', recovery: 'var(--heart)', training: 'var(--move)', review: 'var(--sleep)' }[tab] || 'var(--accent)');
   document.documentElement.classList.toggle('still', !motionOK());
   jumpbar(); sheetEntered(); settle(); liveKick(); labKick(); bxKick();
 }

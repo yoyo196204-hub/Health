@@ -22,9 +22,11 @@ function vMe() {
       trow(why('spread', 'Protein per main meal'), `${T.perMeal} g`),
       trow(why('fibre', 'Fibre'), `${T.fibre} g`),
       trow(why('steps', 'Steps'), fmt(T.stepGoal)),
-      trow(why('kcal', `Daily burn, ${Math.round(T.trust * 100)}% from your data`), `${fmt(T.tdee)} kcal`),
+      trow(why('burn', T.trust ? `Daily burn the target uses, ${Math.round(T.trust * 100)}% from your data` : 'Daily burn, from the formula'), `${fmt(T.tdee)} kcal`),
+      ...(T.measured != null && Math.abs(T.measured - T.tdee) >= 25 ? [trow(why('burn', 'Measured from your scale and log'), `${fmt(T.measured)} kcal`, 'muted')] : []),
       trow(why('zones', 'Heart-rate zones'), `${H.zones[0]} / ${H.zones[1]} / ${H.zones[2]}`),
-      trow(why('waist', 'BMI, Indian cut-offs'), `${r1(T.bmi)}, ${cls}`)]) + (T.locked ? para(`Targets hold until ${dateLabel(T.next, { weekday: 'long', day: 'numeric', month: 'short' })}. ${why('lock', 'Why')}`) : ''))}
+      trow(why('waist', 'BMI, Indian cut-offs'), `${r1(T.bmi)}, ${cls}`)]) +
+      (T.measured != null && Math.abs(T.measured - T.tdee) >= 25 ? para(`The measured burn is ${fmt(Math.abs(T.measured - T.formula))} kcal ${T.measured < T.formula ? 'below' : 'above'} the formula's ${fmt(T.formula)}. The target never moves more than 25% from the formula on data alone: a gap that large is more often food missing from the log than an unusual metabolism (self-reported intake runs 10–45% under doubly labelled water).`) : '') + (T.locked ? para(`Targets hold until ${dateLabel(T.next, { weekday: 'long', day: 'numeric', month: 'short' })}. ${why('lock', 'Why')}`) : ''))}
     <nav class="group" aria-label="Settings">
       ${navrow('#set-goal', 'Goal and targets', `${PACE[S.settings.pace][0]}${PACE[S.settings.pace][1] ? ` · ${PACE[S.settings.pace][1]}% a week` : ''} · protein ${S.settings.protein === 'high' ? 'higher' : 'standard'}`, ICON.goal)}
       ${navrow('#set-train', 'Training', `${esc(P.short)} · ${p.equip === 'home' ? 'home' : 'gym'}${p.shoulder ? ' · shoulder care' : ''}${ogPlanStale() ? ' · plan changed: send it to openGym' : ''}`, ICON.lift)}
