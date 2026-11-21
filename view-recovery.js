@@ -15,27 +15,22 @@ function basis(R, short) {
   const am = new Date().getHours() < 11;
   return `Based on ${[strap, watch].filter(Boolean).join(' and ')}.${s.strap ? '' : s.night ? ` No morning check today, so the watch stands in: it can advise care, and a strap reading is what settles it.${am ? ' There is still time for one.' : ''}` : ''}${s.night ? '' : ' No night from the watch yet: open Zepp so it syncs.'}`;
 }
-function verdictCard() {
-  const R = readiness(), [head, sub] = VERDICT[R.level];
-  return `<section class="verdict lv-${R.level}"><div class="eyebrow">Today</div><h2>${head}</h2><p class="sub">${sub}</p>
-    ${signals(R)}
-    ${R.why.length ? `<ul class="reasons">${R.why.map(([, t, ev]) => `<li><a href="#why-${ev}">${t}</a></li>`).join('')}</ul>` : ''}${basis(R) ? `<p class="sub small">${basis(R)}</p>` : ''}</section>`;
-}
-// The four inputs the verdict weighs, each against your own normal, so the verdict can be checked at a glance.
-// st: 0 normal, 1 worth noting, 2 counts against today, null not enough data. The thresholds are readiness()'s own.
-function signals(R) {
-  const k = todayKey(), V = R.V, T = R.R, B = R.BR, sl = S.sleep[k];
-  const cell = (href, label, v, unit, note, st) => `<button class="sgn s${st ?? 'n'}" data-act="jump" data-to="${href}"><span class="sub">${label}</span><b class="num">${v}<i>${v === DASH ? '' : unit}</i></b><span class="sub">${note}</span></button>`;
-  return `<div class="signals">${[
-    V.state ? cell('rc-hrv', 'HRV, 7 days', Math.round(V.roll), ' ms', `${V.state === 'normal' ? 'inside' : V.state === 'low' ? 'below' : 'above'} ${Math.round(V.lo)}–${Math.round(V.hi)}`, V.state === 'low' ? 2 : 0)
-      : cell('rc-hrv', 'HRV, 7 days', DASH, '', V.lo ? `${3 - V.week} more checks this week` : `range after ${V.need ?? 7} more`, null),
-    T.delta != null ? cell('rc-rhr', 'Resting HR', Math.round(T.now), ' bpm', `${sign(T.delta, 1)} vs 3 weeks`, T.delta >= 5 ? 2 : T.delta >= 3 ? 1 : 0)
-      : cell('rc-rhr', 'Resting HR', T.now ? Math.round(T.now) : DASH, ' bpm', 'baseline building', null),
-    sl != null ? cell('rc-sleep', 'Sleep, last night', r1(sl), ' h', sl < 6 ? 'under 6 h' : sl < 7 ? 'under 7 h' : '7 h or more', sl < 6 ? 1 : 0)
-      : cell('rc-sleep', 'Sleep, last night', DASH, '', 'not synced yet', null),
-    B.now != null && B.base != null ? cell('rc-night', 'Breathing, asleep', r1(B.now), '/min', `usual ${r1(B.base)}`, B.now - B.base >= Math.max(1, 2 * B.sd) ? 1 : 0)
-      : cell('rc-night', 'Breathing, asleep', B.now != null ? r1(B.now) : DASH, '/min', B.now != null ? `usual after ${B.need} more nights` : 'no reading', null),
-  ].join('')}</div>`;
+// Recovery as one number, in its zone, with every part it is made of: each part against your own normal, the dot
+// left of centre when it counts against today. Tap a part for its section.
+function recoveryHero() {
+  const RS = recoveryScore(), R = RS.R, [head, sub] = VERDICT[R.level], [zw, zc] = ZONE[R.level];
+  const sec = { hrv: 'rc-hrv', whrv: 'rc-night', rhr: 'rc-rhr', sleep: 'rc-sleep', br: 'rc-night' };
+  const parts = RS.parts.map(p => {
+    const z = clamp(p.z, -2.5, 2.5), c = z <= -1 ? 'var(--bad)' : z <= -0.5 ? 'var(--mid)' : 'var(--good)';
+    return `<button class="part rowbtn" data-act="jump" data-to="${sec[p.id]}"><span class="pl">${p.label}<i>${esc(p.note)}</i></span><span class="zmeter" style="--c:${c}"><i style="left:${(50 + z * 20).toFixed(1)}%"></i></span><b>${p.val}</b></button>`;
+  }).join('');
+  const missing = [!RS.parts.some(p => p.id === 'hrv' || p.id === 'whrv') && 'HRV', !RS.parts.some(p => p.id === 'sleep') && 'sleep', !RS.parts.some(p => p.id === 'rhr') && 'resting heart rate'].filter(Boolean);
+  return `<section class="card rhero lv-${R.level}" style="--c:${zc}">
+    <div class="rh-top">${ring('rec', RS.score != null ? RS.score / 100 : 0, { c: zc, size: 132, stroke: 10, glow: RS.score != null, inner: RS.score != null ? `<b class="num">${RS.score}<small>%</small></b><span>recovery</span>` : `<b>${DASH}</b><span>learning</span>` })}
+      <div><span class="zone">${RS.score != null ? zw : R.level === 'unknown' ? 'Calibrating' : zw}</span><h2>${head}</h2><p class="sub">${sub}</p></div></div>
+    ${parts ? `<div class="parts">${parts}</div>` : ''}
+    ${R.why.length ? `<ul class="reasons">${R.why.map(([, t, ev]) => `<li><a href="#why-${ev}">${t}</a></li>`).join('')}</ul>` : ''}
+    <p class="sub small" style="margin:10px 0 0">${basis(R) || ''}${missing.length && R.level !== 'unknown' ? ` Not in today's number: ${missing.join(', ')}.` : ''} ${why('score', 'How the number is made')}</p></section>`;
 }
 function hrvSection() {
   const V = hrvState(), days = range(30), dots = {}, line = {};
@@ -83,8 +78,9 @@ function sleepSection() {
     return `<li><button class="rowbtn" data-act="dayx" data-k="${k}"><span class="grow"><span class="nm">${dateLabel(k, { weekday: 'short', day: 'numeric', month: 'short' })} · ${S.sleep[k] != null ? `${r1(S.sleep[k])} h` : DASH}${V.word && V.word !== 'usual' ? ` <span class="vw ${V.z < 0 ? 'bad' : 'good'}">${V.word}</span>` : ''}</span>
       ${x ? miniStages(x) : ''}<span class="sub">${[x?.on != null ? `${hm(x.on)}–${hm(x.off ?? x.on + (x.bed || x.d + x.l + x.r + x.w))}` : '', x?.hr ? `sleeping ${Math.round(x.hr)} bpm` : '', x?.lo ? `low ${x.lo}` : '', S.wx[k]?.br ? `breathing ${r1(S.wx[k].br)}` : ''].filter(Boolean).join(' · ')}</span></span><span class="chev">›</span></button></li>`;
   }).join('');
-  return sec('Sleep, 14 nights', `${stats([[L.avg != null ? r1(L.avg) : DASH, 'h a night'], [spread, `min timing spread${L.mid != null ? `, midpoint ${hm(L.mid)}` : ''}`], [L.eff != null ? Math.round(L.eff) + '%' : DASH, 'asleep while in bed']])}
-    ${c}${para(L.midSd != null ? (L.midSd <= 30 ? 'Regular timing.' : L.midSd <= 60 ? 'Timing moderately irregular.' : 'Timing irregular. A fixed wake time on off days is the lever.') + ` ${why('regular', 'Why timing matters')}` : `Bars under 6 h are marked. ${why('sleep', 'Why sleep matters here')}`)}${st}
+  const Q = sri(), gauge = Q.v != null ? `<h3>Sleep regularity ${why('sri', 'what it is')}</h3><div class="srigauge"><i style="left:${clamp((Q.v + 20) / 120 * 100, 2, 98).toFixed(1)}%"></i><span class="pop" style="left:${((81 + 20) / 120 * 100).toFixed(1)}%">UK Biobank median 81</span></div><p class="sub">Your index over ${Q.n} pairs of nights: <b>${Math.round(Q.v)}</b>, ${{ high: 'more regular than most adults', typical: 'in the typical range (74–86)', low: 'less regular than most', verylow: 'among the least regular fifth' }[Q.band]}. The same lights-out and wake time every day, days off included, moves it most.</p>` : '';
+  return sec('Sleep, 14 nights', `${stats([[L.avg != null ? r1(L.avg) : DASH, 'h a night'], [Q.v != null ? Math.round(Q.v) : spread, Q.v != null ? 'regularity index (0–100)' : `min timing spread${L.mid != null ? `, midpoint ${hm(L.mid)}` : ''}`], [L.eff != null ? Math.round(L.eff) + '%' : DASH, 'asleep while in bed']])}
+    ${c}${gauge}${para(L.midSd != null ? (L.midSd <= 30 ? 'Regular timing.' : L.midSd <= 60 ? 'Timing moderately irregular.' : 'Timing irregular. A fixed wake time on off days is the lever.') + ` ${why('regular', 'Why timing matters')}` : `Bars under 6 h are marked. ${why('sleep', 'Why sleep matters here')}`)}${st}
     ${nights ? `<h3>Night by night</h3><p class="sub small">Tap a night for its heart rate across the day, the stages hour by hour, and each number against your usual.</p><ul class="list nights">${nights}</ul>` : ''}`, { why: ['sleep', 'Sleep and fat loss'], id: 'rc-sleep' });
 }
 // What the Bip measures while you sleep, each against its own normal: overnight HRV, breathing rate, and for interest
@@ -115,8 +111,8 @@ function devicesSection() {
 }
 function vRecovery() {
   const H = hrProfile();
-  return `${masthead('Recovery', `Resting ${H.rest} · max ${H.max} bpm${H.maxSrc === 'seen' ? ' (seen)' : ''}`)}
-    ${verdictCard()}
+  return `${appbar('Heart', `Recovery · resting ${H.rest} · max ${H.max} bpm`, NATIVE ? syncPill() : '')}
+    ${part(recoveryHero)}
     ${sec('Morning check', strapBlock('morning') + strapMsg(), { why: ['hrv', 'Why mornings'] })}
     ${part(hrvSection)}${part(rhrSection)}${part(sleepSection)}${part(nightSection)}
     ${sec('Strap lab', `<p class="sub">More from the strap: breathing that trains the heart-rate reflex, your own resonance rate, how you handle standing up, and a full reading any time.</p>${labTiles()}`, { why: ['breathe', 'The evidence'] })}

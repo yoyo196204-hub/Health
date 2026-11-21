@@ -8,12 +8,27 @@ const DAY = 864e5;
 // ---------- dates (keys are local YYYY-MM-DD) ----------
 function dk(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 function todayKey() { return dk(new Date()); }
-function shift(key, n) { const d = new Date(key + 'T12:00'); d.setDate(d.getDate() + n); return dk(d); }
+// Day arithmetic runs thousands of times a render, so results are remembered (a bounded table, cleared when full).
+const SHIFTS = new Map();
+function shift(key, n) {
+  const c = key + n; let v = SHIFTS.get(c);
+  if (v === undefined) { const d = new Date(key + 'T12:00'); d.setDate(d.getDate() + n); v = dk(d); if (SHIFTS.size > 20000) SHIFTS.clear(); SHIFTS.set(c, v); }
+  return v;
+}
 // The n days ending on `end`, oldest first.
 function range(n, end = todayKey()) { return Array.from({ length: n }, (_, i) => shift(end, i - n + 1)); }
 function gapDays(a, b) { return Math.round((Date.parse(b + 'T12:00') - Date.parse(a + 'T12:00')) / DAY); }
-function dateLabel(k, o = { day: 'numeric', month: 'short' }) { return new Date(k + 'T12:00').toLocaleDateString('en-IN', o); }
-function weekday(k) { return new Date(k + 'T12:00').toLocaleDateString('en-IN', { weekday: 'narrow' }); }
+// Dates in words, with one formatter per style made once: formatting dates is the slowest thing a screen does.
+const DTF = new Map(), LABELS = new Map();
+function dateLabel(k, o = { day: 'numeric', month: 'short' }) {
+  const ok = JSON.stringify(o), c = k + ok; let v = LABELS.get(c);
+  if (v === undefined) {
+    let f = DTF.get(ok); if (!f) { f = new Intl.DateTimeFormat('en-IN', o); DTF.set(ok, f); }
+    v = f.format(new Date(k + 'T12:00')); if (LABELS.size > 5000) LABELS.clear(); LABELS.set(c, v);
+  }
+  return v;
+}
+function weekday(k) { return dateLabel(k, { weekday: 'narrow' }); }
 function ago(ms) {
   const m = Math.round((Date.now() - ms) / 6e4);
   return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
@@ -22,7 +37,8 @@ function ago(ms) {
 // ---------- formatting ----------
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function r1(x) { return Math.round(x * 10) / 10; }
-function fmt(n) { return Math.round(n).toLocaleString('en-IN'); }
+const NUMF = new Intl.NumberFormat('en-IN');
+function fmt(n) { return NUMF.format(Math.round(n)); }
 function sign(v, d = 0) { const s = Math.abs(v).toFixed(d); return (+s === 0 ? '±' : v > 0 ? '+' : '−') + s; }
 function clamp(x, lo, hi) { return Math.min(hi, Math.max(lo, x)); }
 function plural(n, one, many = one + 's') { return `${n} ${n === 1 ? one : many}`; }

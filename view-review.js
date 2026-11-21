@@ -48,16 +48,7 @@ function decisions(T, cells, E, St) {
   if (A.who < 75 && A.n < 3) out.push([1, `${Math.round(A.who)} active minutes this week`, 'Two brisk 25-minute walks with the strap would double it.', 'zones']);
   return out.sort((a, b) => b[0] - a[0]);
 }
-// A correlation read honestly: the 95% interval from Fisher's z, and a word only when the interval leaves out zero.
-// Strength words follow Cohen (0.1 small, 0.3 medium, 0.5 large). Within one person, days are not independent, so
-// even a clear link here is a lead to test, not a cause.
-function rRead(l) {
-  if (l.n < 14) return { txt: `<b>${l.n} of 14 days</b>`, cls: 'lk muted' };
-  if (l.r == null) return { txt: `<b>too little variation</b><span class="sub">one side barely changed · n ${l.n}</span>`, cls: 'lk muted' };
-  const z = Math.atanh(Math.max(-0.999, Math.min(0.999, l.r))), se = 1 / Math.sqrt(l.n - 3), lo = Math.tanh(z - 1.96 * se), hi = Math.tanh(z + 1.96 * se);
-  const clear = lo > 0 || hi < 0, a = Math.abs(l.r), size = a >= 0.5 ? 'strong' : a >= 0.3 ? 'moderate' : 'weak';
-  return { txt: `<b>${clear ? `${size} ${l.r > 0 ? 'positive' : 'negative'} link` : 'no clear link'}</b><span class="sub">r ${sign(l.r, 2)} (95% ${sign(lo, 2)} to ${sign(hi, 2)}) · n ${l.n}</span>`, cls: clear ? 'lk' : 'lk muted' };
-}
+// The week as text, for sharing with a coach or a doctor.
 function shareWeek(T, cells, E) {
   const avg = key => { const v = cells.map(c => c[key]).filter(c => c && c.x != null); return v.length ? mean(v.map(c => c.x)) : null; };
   const A = activityWeek(), L = sleepStats(7), R = rhrTrend(), wk = T.slope == null ? null : T.slope * 7;
@@ -66,41 +57,100 @@ function shareWeek(T, cells, E) {
     `Calories ${avg('kcal') ? fmt(avg('kcal')) : '–'} of ${fmt(T.kcal)} · protein ${avg('protein') ? Math.round(avg('protein')) : '–'} of ${T.protein} g · fibre ${avg('fibre') ? Math.round(avg('fibre')) : '–'} g`,
     `Steps ${avg('steps') ? fmt(avg('steps')) : '–'} a day · active minutes ${Math.round(A.who)} · strength days ${A.strengthDays}`,
     `Sleep ${L.avg != null ? r1(L.avg) + ' h' : '–'} · resting HR ${R.now ? Math.round(R.now) : '–'} bpm`];
-  if (E.implied != null) lines.push(`Burn implied by intake and weight: ${fmt(E.implied)} kcal/day`);
+  if (E.implied != null) lines.push(`Burn learned from intake and weight: ${fmt(E.implied)} ± ${fmt(1.96 * E.sd)} kcal/day`);
   return lines.join('\n');
 }
-function vReview() {
-  const T = targets(), p = S.profile, days = range(7), cells = days.map(k => dayCells(k, T));
-  const E = energy(), St = strength(), D = decisions(T, cells, E, St), Lk = links(), P = projection();
-  const wk = T.slope == null ? null : T.slope * 7, waist = P.waistNow, cut = P.cut;
-  const dW = T.wt - p.w0, dWaist = waist - p.waist0, hasWaist = Object.keys(S.waist).length > 0;
+// ---------- Insights ----------
+// What the data says, most useful first: the headlines, the burn your body has shown, the body itself, what moves
+// what in your own data, how you eat across the week, then the week as a matrix and what it asks you to do.
+function headCards() {
+  const H = headline();
+  if (!H.length) return '';
+  const col = { food: 'var(--fuel)', heart: 'var(--heart)', sleep: 'var(--sleep)', body: 'var(--body)', move: 'var(--move)' };
+  return `<div class="heads">${H.slice(0, 4).map(h => `<div class="card head"><span class="ico" style="--c:${col[h.dom] || 'var(--accent)'}">${ic('spark')}</span><span><b>${esc(h.t)}</b><span class="sub">${h.s}</span></span></div>`).join('')}</div>`;
+}
+// The burn the model has learned, its interval over time, and what it means this week.
+function burnCard() {
+  const T = targets(), M = T.model, E = energy();
+  if (M.E == null) return sec('Your energy', para('Weigh in on a few mornings and log some complete days: your own burn is learned from both, and the interval narrows week by week.'), { why: ['burn', 'How'] });
+  const hist = M.hist.slice(-90), days = hist.map(h => h.k), line = {}, ci = {}, bars = {};
+  for (const h of hist) { line[h.k] = h.E; ci[h.k] = [h.E - 1.96 * h.sdE, h.E + 1.96 * h.sdE]; const t = S.food[h.k] && isComplete(h.k) ? totals(h.k).k : null; if (t != null) bars[h.k] = { v: t, cls: 'dim' }; }
+  const c = days.length >= 7 ? chart({ days, line, ci, bars, goal: T.kcal, c: 'var(--fuel)', fy: v => fmt(v), h: 170, now: true }) : '';
+  const conf = { calibrating: 'Learning', rough: 'Rough', good: 'Good', tight: 'Tight' }[M.conf];
+  const wk = M.week, fatWk = wk ? wk.bal * 7 / M.rho : null;
+  return `<section class="card" id="in-burn">${cardHead('Your energy', 'bolt', 'var(--fuel)', why('burn', 'how'))}
+    <div class="burnkpi"><span class="kpi"><b class="num">${fmt(M.E)}<i>kcal a day</i></b><span class="sub">you burn, ±${fmt(1.96 * M.sd)} (95%)</span></span><span class="confbadge ${M.conf}">${conf}</span></div>
+    ${c}${c ? legend([['line c-fuel', 'your burn, learned'], ['band c-fuel', '95% interval'], ['bar c-fuel', 'complete days eaten'], ['goal', 'target']]) : ''}
+    ${stats([[fmt(M.formula), 'textbook burn'], [`${sign(M.gap)}<i>%</i>`, 'yours vs textbook'], [fmt(M.rho), 'kcal in 1 kg of change']])}
+    ${wk ? para(`Last 7 days: ${fmt(wk.intake)} kcal a day on ${plural(wk.n, 'complete day')}, a ${wk.bal < 0 ? 'deficit' : 'surplus'} of <b>${fmt(Math.abs(wk.bal))}</b> kcal a day: about ${r1(Math.abs(fatWk))} kg a week of body ${wk.bal < 0 ? 'lost' : 'gained'}, ${Math.round(M.fatShare * 100)}% of it fat.`) : ''}
+    ${para(burnWords(M) + (E.watch ? ` The watch puts it at ${fmt(E.watch)}; watch calorie estimates are not used (${why('devices', 'why')}).` : ''), 'sub small')}
+    <details class="inner"><summary>The ledger, 21 days</summary>${table([
+      trow(`Eaten, ${plural(E.n, 'complete day')}`, E.intake == null ? DASH : `${fmt(E.intake)} kcal`),
+      trow(`Weight trend${M.rate == null ? '' : `, ${sign(M.rate, 2)} kg a week`}`, M.rate == null ? DASH : `${sign(M.rate / 7 * M.rho, 0)} kcal`),
+      trow('Burn, learned', `${fmt(M.E)} kcal`),
+      trow('Burn by formula', `${fmt(T.formula)} kcal`),
+      trow(`Target, ${Math.round(T.trust * 100)}% from your data`, `${fmt(T.kcal)} kcal`, 'strong')])}</details></section>`;
+}
+// The body: the scale's readings and the filter's trend through them, what has changed, and where the trend leads.
+function bodyCard() {
+  const T = targets(), M = T.model, p = S.profile, St = strength(), P = projection();
+  const waist = P.waistNow, cut = P.cut, dW = (M.W ?? T.wt) - p.w0, dWaist = waist - p.waist0, hasWaist = Object.keys(S.waist).length > 0;
   const read = dW > -0.5 ? 'Too early to read' : !St || !hasWaist ? 'Needs a waist measurement and two sessions per lift to read'
     : St.pct >= -2 && dWaist < 0 ? 'Consistent with fat loss, muscle held' : St.pct < -5 ? 'Weight is falling with strength: muscle at risk' : 'Mixed signals; give it two more weeks';
-  const ser = series().slice(-120), wdays = ser.length >= 2 ? range(gapDays(ser[0].k, todayKey()) + 1) : [];
-  const wchart = ser.length >= 2 ? chart({ days: wdays, dots: Object.fromEntries(ser.map(s => [s.k, s.w])), line: Object.fromEntries(ser.map(s => [s.k, s.t])) }) : '';
-  const bf = Object.keys(S.wx).sort().reverse().find(k => S.wx[k].bf);
-  return `${masthead('Review', 'Last 7 days · tap any label for its evidence', { after: `<button class="mini" data-act="shareweek" aria-label="Share this week">Share</button>` })}
-    <section class="block first">${matrix(T, days, cells)}</section>
+  const hist = M.hist || [], days = hist.slice(-120).map(h => h.k);
+  const wchart = days.length >= 7 ? chart({ days, dots: Object.fromEntries(days.filter(k => S.weights[k] != null).map(k => [k, S.weights[k]])), line: Object.fromEntries(hist.slice(-120).map(h => [h.k, h.W])), c: 'var(--body)', now: true }) : '';
+  const bf = bodyFat();
+  return `<section class="card" id="in-body">${cardHead('Body', 'body', 'var(--body)', why('comp', 'how to read it'))}
+    ${wchart ? wchart + legend([['dot', 'weigh-ins'], ['line c-body', 'trend, scale noise filtered out']]) : para('Weigh in on two mornings and the trend line starts here.')}
+    ${stats([[`${r1(M.W ?? T.wt)}<i>kg</i>`, M.rate != null ? `trend, ${sign(M.rate, 2)} kg a week` : 'trend'], [`${r1(bf.pct)}<i>%</i>`, bf.src === 'rfm' ? 'body fat, from waist' : 'body fat, from BMI'], [St ? `${sign(St.pct, 0)}<i>%</i>` : DASH, St ? `strength, ${plural(St.n, 'lift')}` : 'strength']])}
+    ${para(`${read}. Since the start: ${sign(dW, 1)} kg, ${sign(dWaist, 1)} cm waist. ${why('waist', `Waist ÷ height ${(waist / p.h).toFixed(2)}${waist > cut ? `, ${r1(waist - cut)} cm above ${cut}` : ''}`)}`, read.includes('risk') ? 'flag' : 'sub')}
+    ${P.items.length ? `<table class="ahead">${P.items.map(i => trow(`${i.label} <i>${r1(i.togo)} kg to go</i>`, i.date ? `≈ ${dateLabel(i.date, { month: 'short', year: 'numeric' })}` : DASH)).join('')}</table>
+      ${para(`${P.rate != null && P.rate < -0.05 ? `At ${r1(-P.rate)} kg a week.` : 'Dates appear once the trend is falling.'} ${P.perKg ? `Your waist moves ${r1(P.perKg)} cm per kg.` : ''} ${why('project', 'How projected')}`)}` : ''}
+    <div class="rowb tight"><button class="ghost" data-act="weigh" data-s="weights">${ic('body', 'width="17" height="17" style="fill:none;stroke:currentColor;stroke-width:1.9"')} Weigh in</button><button class="ghost" data-act="weigh" data-s="waist">${ic('tape', 'width="17" height="17" style="fill:none;stroke:currentColor;stroke-width:1.9"')} Waist</button></div>
+    ${historyList('Every weigh-in', Object.keys(S.weights).sort().reverse().slice(0, 120).map(k => [k, `${kg(S.weights[k])} kg${S.manual.weights[k] ? '' : ' · from the watch or scale'}`]), 'weights')}
+    ${historyList('Every waist reading', Object.keys(S.waist).sort().reverse().map(k => [k, `${kg(S.waist[k])} cm`]), 'waist')}</section>`;
+}
+// What moves what: each pair with its effect, its 95% interval drawn around zero, and how to test it.
+function linksCard() {
+  const L = allLinks(), shown = L.filter(l => ['clear', 'hint', 'none'].includes(l.status)), wait = L.filter(l => l.status === 'need');
+  const col = { clear: 'var(--good)', hint: 'var(--mid)', none: 'var(--soft)' };
+  const rows = shown.sort((a, b) => ({ clear: 0, hint: 1, none: 2 }[a.status] - { clear: 0, hint: 1, none: 2 }[b.status])).map(l => {
+    const m = Math.max(Math.abs(l.elo), Math.abs(l.ehi), 1e-6) * 1.12, x = v => (50 + v / m * 50).toFixed(1);
+    const lab = l.status === 'clear' ? (l.agrees ? 'Clear' : 'Clear · unexpected') : l.status === 'hint' ? 'Hint' : 'No link yet';
+    return `<div class="lrow"><div class="lt"><b>${l.x} → ${l.y}<span class="lst ${l.status === 'clear' && !l.agrees ? 'odd' : l.status}">${lab}</span></b><span class="sub">${l.status === 'none' ? `No clear effect across ${l.n} days` : `<b>${effText(l)}</b> per ${l.xu}, ${l.n} days`}</span></div>
+      <div class="forest" style="--c:${col[l.status]}" aria-hidden="true"><i class="zero"></i><i class="cib" style="left:${x(l.elo)}%;width:${(x(l.ehi) - x(l.elo)).toFixed(1)}%"></i><i class="pt" style="left:${x(l.eff)}%"></i></div>
+      ${l.status !== 'none' ? `<span class="ltest">${l.test}</span>` : ''}</div>`;
+  }).join('');
+  return `<section class="card" id="in-links">${cardHead('What moves what', 'insight', 'var(--sleep)', why('links', 'read with care'))}
+    <p class="sub small" style="margin:4px 0 2px">Your own day-to-day data, trends removed. The bar is the 95% interval: clear of the centre line means the link is real for you.</p>
+    ${rows ? `<div class="lrows">${rows}</div>` : para('Nothing to read yet: links need 14 days with both halves of a pair.')}
+    ${wait.length ? `<div class="lneed">${wait.map(l => `<span>${l.x} → ${l.y}: ${l.need} more days</span>`).join('')}</div>` : ''}</section>`;
+}
+// How you eat across the week: logging, consistency, the weekday profile, weekends, protein spread.
+function patternsCard() {
+  const P = intakePatterns(), T = targets();
+  if (P.full < 3) return '';
+  const top = Math.max(T.kcal * 1.2, ...P.byWd.filter(v => v != null)), wl = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  const bars = `<div class="wdbars">${P.byWd.map((v, i) => `<div class="${i >= 5 ? 'we' : ''}"><i style="height:${v != null ? Math.max(3, v / top * 70).toFixed(1) : 0}px;animation-delay:${i * 40}ms"></i><b>${v != null ? (v / 1000).toFixed(1) + 'k' : ''}</b><span>${wl[i]}</span></div>`).join('')}</div>`;
+  const W = P.weekend;
+  return `<section class="card" id="in-patterns">${cardHead('How you eat', 'food', 'var(--fuel)', why('logging', 'why logging matters'))}
+    ${stats([[`${P.logged}<i>/ ${P.days}</i>`, 'days logged, 4 weeks'], [`${P.on}<i>/ ${P.full}</i>`, 'complete days within 10% of target'], [P.sd != null ? `±${fmt(P.sd)}` : DASH, 'kcal day to day']])}
+    <h3>By day of the week, 8 weeks</h3>${bars}
+    ${W ? para(W.lo > 100 ? `Weekends run <b>${fmt(W.d)}</b> kcal higher than weekdays (95% interval ${fmt(W.lo)} to ${fmt(W.hi)}): about ${fmt(W.d * 2 / 7)} kcal a day of the week's deficit.` : W.hi < -100 ? `Weekends run ${fmt(-W.d)} kcal lower than weekdays.` : `Weekends and weekdays are alike (difference ${sign(W.d, 0)} kcal, interval ${fmt(W.lo)} to ${fmt(W.hi)}).`) : ''}
+    ${P.protein ? para(`Protein reached ${T.perMeal} g at <b>${P.protein.hit} of ${P.protein.tot}</b> main meals in two weeks${P.pAvg != null ? `; ${Math.round(P.pAvg)} g a day on average against ${T.protein}` : ''}.`) : ''}</section>`;
+}
+function vReview() {
+  const T = targets(), days = range(7), cells = days.map(k => dayCells(k, T));
+  const E = energy(), St = strength(), D = decisions(T, cells, E, St);
+  return `${appbar('Insights', 'What your data says', `<button class="mini" data-act="shareweek" aria-label="Share this week">Share</button>`)}
+    ${part(headCards)}
+    ${part(burnCard)}
+    ${part(bodyCard)}
+    ${part(linksCard)}
+    ${part(patternsCard)}
+    ${sec('The week', matrix(T, days, cells), { cls: 'first' })}
     ${part(checkBanner)}
-    ${sec('What the data says to do', D.length ? `<ul class="dec">${D.slice(0, 5).map(([w, sig, act, ev]) => `<li class="w${w}"><a href="#why-${ev}"><span class="sig">${sig}</span><span class="act">${act}</span></a></li>`).join('')}</ul>` : para('Nothing triggered. Hold the plan.'))}
-    ${sec('Energy ledger', table([
-      trow(`Eaten, ${plural(E.n, 'complete day')}`, E.intake == null ? DASH : `${fmt(E.intake)} kcal`),
-      trow(`Weight trend${wk == null ? '' : `, ${sign(wk, 2)} kg a week`}`, E.delta == null ? DASH : `${sign(E.delta, 0)} kcal`),
-      trow('Burn your data implies', E.implied == null ? DASH : `${fmt(E.implied)} kcal`),
-      trow('Burn by formula', `${fmt(T.formula)} kcal`),
-      trow('Difference', E.gap == null ? DASH : `${sign(E.gap, 0)}%`),
-      E.watch ? trow(`Watch's estimate ${why('devices', 'not used')}`, `${fmt(E.watch)} kcal`, 'muted') : '',
-      trow(`Target, ${Math.round(T.trust * 100)}% from your data`, `${fmt(T.kcal)} kcal`, 'strong')]) +
-      (E.implied == null ? para(`Needs 7 complete days (${E.n} so far) and 6 weigh-ins across 2 weeks.`, 'sub gap') : ''), { why: ['balance', '21 days'] })}
-    ${sec('Body', `${wchart || para('Weigh in on two mornings and the trend line starts here.')}
-      ${stats([[sign(dW, 1), `kg since ${p.w0}`], [sign(dWaist, 1), `cm waist since ${p.waist0}`], [St ? sign(St.pct, 0) + '%' : DASH, St ? `strength, ${plural(St.n, 'lift')}` : 'strength']])}
-      ${para(`${read}. ${why('waist', `Waist ÷ height ${(waist / p.h).toFixed(2)}${waist > cut ? `, ${r1(waist - cut)} cm above ${cut}` : ''}`)}${bf ? ` Scale body fat ${r1(S.wx[bf].bf)}% (${dateLabel(bf)}), ${why('comp', 'read with care')}.` : ''}`, read.includes('risk') ? 'flag' : 'sub')}
-      ${P.items.length ? `<table class="ahead">${P.items.map(i => trow(`${i.label} <i>${r1(i.togo)} kg to go</i>`, i.date ? `≈ ${dateLabel(i.date, { month: 'short', year: 'numeric' })}` : DASH)).join('')}</table>
-        ${para(`${P.rate != null && P.rate < -0.05 ? `At ${r1(-P.rate)} kg a week.` : 'Dates appear once the trend is falling.'} ${P.perKg ? `Your waist moves ${r1(P.perKg)} cm per kg.` : ''} ${why('project', 'How projected')}`)}` : ''}
-      ${historyList('Every weigh-in', Object.keys(S.weights).sort().reverse().slice(0, 120).map(k => [k, `${kg(S.weights[k])} kg${S.manual.weights[k] ? '' : ' · from the watch or scale'}`]), 'weights')}
-      ${historyList('Every waist reading', Object.keys(S.waist).sort().reverse().map(k => [k, `${kg(S.waist[k])} cm`]), 'waist')}
-      <label class="line">Waist this week, at the navel<span class="f"><input type="number" inputmode="decimal" step="0.5" data-log="waist" value="${S.waist[day] ?? ''}" placeholder="${waist}"><i>cm</i></span></label>`, { why: ['comp', 'How to read it'] })}
-    ${sec('Links in your own data', table(Lk.map(l => { const q = rRead(l); return trow(l.label, `<span class="${q.cls}">${q.txt}</span>`); })) + para('A link is named only when its 95% interval leaves out zero. Days follow one another, so read a link as something to test on yourself, not a cause.'), { why: ['links', 'Read with care'] })}`;
+    ${sec('What the data says to do', D.length ? `<ul class="dec">${D.slice(0, 5).map(([w, sig, act, ev]) => `<li class="w${w}"><a href="#why-${ev}"><span class="sig">${sig}</span><span class="act">${act}</span></a></li>`).join('')}</ul>` : para('Nothing triggered. Hold the plan.'))}`;
 }
 // Loaded: this file ran to the end.
 (self.LOADED ||= []).push('view-review.js');

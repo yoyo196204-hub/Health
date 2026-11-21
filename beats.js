@@ -39,7 +39,7 @@ function bxClock(s) { const m = Math.floor(s / 60), r = s - m * 60; return `${m}
 // ---------- the page ----------
 function vBeats(key) {
   if (BX.key !== key) { const D = bxData(key); Object.assign(BX, { key, D, v0: 0, v1: D ? D.dur : 0, cur: -1, spec: null, specFor: '' }); }
-  const D = BX.D, back = '<button class="nav" data-act="close" aria-label="Back">‹</button>';
+  const D = BX.D, back = `<button class="nav" data-act="close" aria-label="Back">${ic('back')}</button>`;
   if (!D) return `${masthead('Beat by beat', '', { before: back })}${para('No beats were kept with this reading. Morning checks and Lab sessions recorded with the H9 keep theirs.')}`;
   const K = D.C.kinds, fixedN = Object.values(K).reduce((a, b) => a + b, 0);
   const at = new Date(D.when), stamp = `${dateLabel(dk(at), { weekday: 'short', day: 'numeric', month: 'short' })} · ${hm(at.getHours() * 60 + at.getMinutes())}`;

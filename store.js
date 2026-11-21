@@ -49,6 +49,7 @@ function cleanFood(e, logged) {
   if (!logged) return f;
   const q = num(e.q, 0.01, 50);
   if (q == null) return null;
+  const t = num(e.t, 1e12, 1e13); if (t != null) f.t = Math.round(t);
   return Object.assign(f, { q, m: MEALS.some(m => m[0] === e.m) ? e.m : 'lunch' });
 }
 function cleanPlate(x) {
@@ -315,7 +316,7 @@ function load() {
       const bak = readKey(KEY + '.bak');
       if (bak) { recovered = 'bak'; loadNote = 'Saved data was unreadable. Restored the automatic backup from the day before.'; return bak; }
     } catch (e) { /* the backup is damaged too */ }
-    if (main === null) loadNote = 'Saved data was unreadable and has been set aside. Import your last backup from Me › Backup & data.';
+    if (main === null) loadNote = 'Saved data was unreadable and has been set aside. Import your last backup from You (the face at the top) › Backup and data.';
   } catch (e) { loadNote = 'This browser is blocking storage. Nothing you enter will be kept.'; }
   return sanitize({});
 }
@@ -324,7 +325,7 @@ function save() {
   memo.clear();   // cached figures depend on the data
   let text;
   try { text = JSON.stringify(S); localStorage.setItem(KEY, text); saveFailed = false; }
-  catch (e) { if (!saveFailed) toast('Storage is full or blocked. Export a backup from Me now.', 5000); saveFailed = true; }
+  catch (e) { if (!saveFailed) toast('Storage is full or blocked. Export a backup from You › Backup and data now.', 5000); saveFailed = true; }
   // Inside the app, a second copy in private storage, written a moment after the last change.
   if (typeof mirrorWrite === 'function' && text) { clearTimeout(mirrorTimer); mirrorTimer = setTimeout(() => mirrorWrite(text), 1200); }
 }

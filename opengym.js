@@ -397,7 +397,7 @@ function vOpenGym(P) {
     ${para('A day already logged in Health keeps Health’s version. A copy of everything is kept first, so this can be undone.')}
     <div class="rowb"><button class="solid" data-act="ogok" ${g.added + g.updated + g.removed + g.weights + g.cardio ? '' : 'disabled'}>Add to Health</button><button class="ghost" data-act="importno">Cancel</button></div></aside>`;
 }
-// Me › Data sources: openGym's workouts coming in.
+// You › Data sources: openGym's workouts coming in.
 function ogSourcesBlock() {
   const last = S.meta.og?.at ? `Last read ${ago(S.meta.og.at)}${S.meta.og.file ? ` from <b>${esc(S.meta.og.file)}</b>` : ''}.` : 'Nothing read yet.';
   const byHand = `<ol class="sub steps"><li>In openGym: Settings › Data &amp; backup › <b>Export backup</b>, or <b>Export as CSV</b> for the workouts.</li><li>Tap below and pick that file.</li></ol>
@@ -416,7 +416,7 @@ function ogSourcesBlock() {
     <ol class="sub steps"><li>In openGym: Settings › Integrations › <b>Health Connect</b> › turn on <b>Workouts</b>, <b>Heart rate from your watch</b> and <b>Weigh-ins from other apps</b>.</li><li>In Zepp: Profile › Health Connect › allow heart rate, so openGym and Health both get it.</li></ol>`;
   return `${link}${hc}<details class="inner"><summary>Or bring in a file by hand</summary>${byHand}</details>`;
 }
-// Me › Training: Health's plan going out.
+// You › Training: Health's plan going out.
 function ogPlanBlock() {
   const P = prog(), p = S.profile, retired = new Set(Object.keys(P.days).flatMap(d => sessionPlan(shift(todayKey(), 1), d).retired)).size;
   const sent = S.meta.ogplan, stale = ogPlanStale(), plan = ogPlan();
@@ -430,7 +430,7 @@ function ogPlanBlock() {
       <li>Turn on <b>Use this weekly schedule</b>, then <b>Add to my plan</b>. The routines are named “(Health)”.</li>
       <li>To train in rotation with the effort target: <b>Plan</b> › menu › <b>Programmes</b> › <b>${esc(plan.programmes[0].name)}</b> › <b>Start programme</b>.</li>
       <li>Sending a newer version later? Delete the old “(Health)” routines and the old block in openGym first, so there are not two of each.</li></ol>
-    ${para(`Then in Me › Data sources link openGym both ways, and what you lift comes back by itself. ${why('block', 'Why the block is set up this way')}`)}`;
+    ${para(`Then in You › Data sources link openGym both ways, and what you lift comes back by itself. ${why('block', 'Why the block is set up this way')}`)}`;
 }
 function ogAct(a, el) {
   switch (a) {

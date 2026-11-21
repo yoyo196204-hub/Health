@@ -1,6 +1,6 @@
 'use strict';
-// State, routing and events. Screens are in view-*.js; the maths in model.js and train.js; storage in store.js;
-// haptics, motion and sheets in feel.js.
+// State, routing and events. Screens are in view-*.js; the maths in model.js, energy.js, insights.js and train.js;
+// storage in store.js; haptics, motion, gestures and sheets in feel.js.
 
 // Every script ends by adding itself to LOADED. If any is missing, the files on this phone are from two
 // different versions (an update that arrived halfway, or a file that failed to load). Starting anyway would
@@ -10,11 +10,11 @@
   const missing = want.filter(f => f !== 'app.js' && !(self.LOADED || []).includes(f));
   if (!missing.length) return;
   document.body.className = '';
-  document.getElementById('view').innerHTML = '<div style="max-width:30rem;margin:18vh auto 0;padding:0 20px;font:16px/1.5 system-ui,sans-serif;color:#1f1a14;text-align:center">' +
-    '<h1 style="font:600 26px Georgia,serif;margin:0 0 10px">Health didn’t load completely</h1>' +
-    '<p style="color:#6f6557">An update arrived halfway, so some files on this phone are from the old version. Your data is safe; nothing has been changed.</p>' +
-    '<button id="reboot" style="font:600 16px system-ui,sans-serif;border:0;border-radius:999px;padding:14px 26px;background:#1f1a14;color:#f5efe3;margin-top:10px">Reload</button>' +
-    '<p style="color:#6f6557;font-size:13px;margin-top:18px">Not loaded: ' + missing.join(', ') + '</p></div>';
+  document.getElementById('view').innerHTML = '<div style="max-width:30rem;margin:18vh auto 0;padding:0 20px;font:16px/1.5 system-ui,sans-serif;text-align:center">' +
+    '<h1 style="font:700 26px system-ui,sans-serif;margin:0 0 10px">Health didn’t load completely</h1>' +
+    '<p style="opacity:.7">An update arrived halfway, so some files on this phone are from the old version. Your data is safe; nothing has been changed.</p>' +
+    '<button id="reboot" style="font:600 16px system-ui,sans-serif;border:0;border-radius:999px;padding:14px 26px;background:#ffad3b;color:#1d1302;margin-top:10px">Reload</button>' +
+    '<p style="opacity:.6;font-size:13px;margin-top:18px">Not loaded: ' + missing.join(', ') + '</p></div>';
   document.getElementById('reboot').onclick = () => {
     const go = () => location.replace(location.pathname + '?r=' + Date.now() + location.hash);
     (self.caches ? caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k)))) : Promise.resolve()).then(go, go);
@@ -26,37 +26,100 @@ let S = load();
 let tab = 'today', overlay = null, pending = null, day = todayKey(), lastToday = day;
 let cat = 'usual', query = '', installEvt = null, softQueued = false;
 
-const VIEWS = { today: vToday, recovery: vRecovery, training: vTraining, review: vReview, me: vMe };
-const TABS = Object.keys(VIEWS);
-const ALIAS = { heart: 'recovery', trend: 'review', train: 'training' };
+// The five tabs, in the order a swipe moves through them. Me is reached from the face at the top of every tab.
+const VIEWS = { today: vToday, food: vFood, recovery: vRecovery, training: vTraining, review: vReview, me: vMe };
+const TABS = ['today', 'food', 'recovery', 'training', 'review'];
+const ALIAS = { heart: 'recovery', trend: 'review', insights: 'review', train: 'training', diary: 'food' };
 const POPS = { fedit: p => vFoodEdit(p.i), portion: p => vPortion(p), cedit: p => vCustomEdit(p), plate: p => vPlateSave(p), exinfo: p => vExInfo(p.id), cardioadd: () => vCardioAdd(), cardioinfo: p => vCardioInfo(p), sess: p => vSession(p),
-  hrvinfo: p => vHrvInfo(p), labinfo: p => vLabInfo(p), recedit: p => vRecEdit(p), dayx: p => vDayDetail(p) };
+  hrvinfo: p => vHrvInfo(p), labinfo: p => vLabInfo(p), recedit: p => vRecEdit(p), dayx: p => vDayDetail(p), log: p => vLog(p), weigh: p => vWeigh(p) };
 const PAGES = ['add', 'why', 'set', 'lab', 'beats'];
 const scrollMem = {};
 const BUILD = (document.querySelector('script[src^="app.js"]')?.getAttribute('src').split('v=')[1]) || 'dev';
 
+// ---------- drawing the screen ----------
+// A re-render on the same screen is applied as a patch (morph): only what changed is touched, so a ring eases to its
+// new length, a number counts to its new value, the keyboard and the scroll stay where they are, and nothing
+// flickers. A new screen is drawn fresh.
+function sameNode(a, b) {
+  if (a.nodeType !== b.nodeType) return false;
+  if (a.nodeType !== 1) return true;
+  if (a.tagName !== b.tagName) return false;
+  for (const k of ['id', 'data-k', 'data-i', 'data-id', 'data-key']) { const x = a.getAttribute(k), y = b.getAttribute(k); if (x != null && y != null && x !== y) return false; }
+  return true;
+}
+const keyed = n => n.nodeType === 1 && (n.id || n.hasAttribute('data-i') || n.hasAttribute('data-k') || n.hasAttribute('data-id'));
+function morphAttrs(a, b) {
+  const focused = a === document.activeElement;
+  for (const { name } of [...a.attributes]) if (!b.hasAttribute(name) && !(name === 'open' && a.tagName === 'DETAILS')) a.removeAttribute(name);
+  for (const { name, value } of [...b.attributes]) if (a.getAttribute(name) !== value) a.setAttribute(name, value);
+  if (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') {
+    if (!focused && a.type !== 'file') { const v = b.getAttribute('value') ?? ''; if (a.type === 'checkbox' || a.type === 'radio') a.checked = b.hasAttribute('checked'); else if (a.value !== v) a.value = v; }
+  } else if (a.tagName === 'SELECT' && !focused) a.value = [...b.options].find(o => o.hasAttribute('selected'))?.value ?? a.value;
+}
+function morphKids(a, b) {
+  let ac = a.firstChild, bc = b.firstChild;
+  while (bc) {
+    const next = bc.nextSibling;
+    if (!ac) { a.appendChild(bc); bc = next; continue; }
+    if (sameNode(ac, bc)) { morphNode(ac, bc); ac = ac.nextSibling; bc = next; continue; }
+    // Look ahead a little for this node (a row removed above it), otherwise put the new one in.
+    let m = ac.nextSibling, hops = 0;
+    while (m && hops < 4 && !(keyed(bc) && sameNode(m, bc))) { m = m.nextSibling; hops++; }
+    if (m && hops < 4 && keyed(bc)) { while (ac !== m) { const n = ac.nextSibling; a.removeChild(ac); ac = n; } morphNode(ac, bc); ac = ac.nextSibling; }
+    else a.insertBefore(bc, ac);
+    bc = next;
+  }
+  while (ac) { const n = ac.nextSibling; a.removeChild(ac); ac = n; }
+}
+function morphNode(a, b) {
+  if (a.nodeType === 3 || a.nodeType === 8) { if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue; return; }
+  morphAttrs(a, b);
+  // A canvas keeps what is drawn on it; the screen that owns it redraws it.
+  if (a.tagName === 'CANVAS' || a.hasAttribute('data-keep')) return;
+  morphKids(a, b);
+}
+function paint(el, html, fresh) {
+  if (fresh || !el.firstChild) { el.innerHTML = html; return; }
+  const t = document.createElement('template');
+  t.innerHTML = html;
+  morphKids(el, t.content);
+}
+let screenKey = '';
+
+// Moving between screens or opening a sheet changes nothing in the data, so what was worked out from it is kept:
+// the learned burn, the links and the patterns are not worked out again just to show another tab. Anything that
+// changes the data goes through save(), which clears it; so does a new day.
+let viewOnly = false, memoDay = todayKey();
+function renderView() { viewOnly = true; render(); }
 // A failure in one screen must never blank the app or touch stored data.
 function render() {
-  memo.clear(); softQueued = false;
+  if (!viewOnly || memoDay !== todayKey()) memo.clear();
+  viewOnly = false; memoDay = todayKey(); softQueued = false;
   settleTargets();
   // An evidence sheet opened from a page keeps that page underneath it.
   const base = overlay?.type === 'why' ? overlay.under : overlay;
   const adding = base?.type === 'add' && MEALS.some(m => m[0] === base.key), setting = base?.type === 'set' || base?.type === 'lab' || base?.type === 'beats';
+  const key = base ? `${base.type}-${base.key}` : tab + (tab === 'food' ? day : '');
   try {
-    const banner = (loadNote ? `<p class="flag banner">${loadNote} <button class="link" data-act="dismissnote">OK</button></p>` : '') + (saveFailed ? '<p class="flag banner">Storage is full or blocked: changes are not being kept. Export a backup from Me › Backup and data.</p>' : '');
-    $('#view').innerHTML = banner + (adding ? vAdd(base.key) : base?.type === 'lab' ? vLab(base.key) : base?.type === 'beats' ? vBeats(base.key) : setting ? vSet(base.key) : VIEWS[tab]());
-    $('#sheet').innerHTML = pending ? (pending.type === 'halftone' ? vHalftone(pending) : pending.type === 'opengym' ? vOpenGym(pending) : vImport(pending)) : pop && POPS[pop.kind] ? part(POPS[pop.kind], pop) : overlay?.type === 'why' ? vWhy(overlay.key) : '';
+    const banner = (loadNote ? `<p class="flag banner">${loadNote} <button class="link" data-act="dismissnote">OK</button></p>` : '') + (saveFailed ? '<p class="flag banner">Storage is full or blocked: changes are not being kept. Export a backup from You › Backup and data.</p>' : '');
+    $('#view > .jumpbar')?.remove();
+    paint($('#view'), banner + (adding ? vAdd(base.key) : base?.type === 'lab' ? vLab(base.key) : base?.type === 'beats' ? vBeats(base.key) : setting ? vSet(base.key) : VIEWS[tab]()), key !== screenKey);
+    paint($('#sheet'), pending ? (pending.type === 'halftone' ? vHalftone(pending) : pending.type === 'opengym' ? vOpenGym(pending) : vImport(pending)) : pop && POPS[pop.kind] ? part(POPS[pop.kind], pop) : overlay?.type === 'why' ? vWhy(overlay.key) : '', !$('#sheet .sheet'));
+    screenKey = key;
   } catch (err) {
     console.error(err);
+    screenKey = '';
     $('#sheet').innerHTML = '';
     $('#view').innerHTML = `${masthead('This screen failed', 'Your data is untouched')}${para(esc(err.message))}
       <div class="rowb"><button class="solid" data-act="export">Export backup</button><a class="ghost link" href="#today">Go to Today</a></div>`;
   }
   document.body.classList.toggle('adding', adding);
   document.body.classList.toggle('setting', setting);
-  document.body.classList.toggle('sheet-open', !!$('#sheet').innerHTML);
-  $$('#tabs a').forEach(a => a.classList.toggle('on', a.hash === '#' + tab));
-  $('#tabs').style.setProperty('--i', TABS.indexOf(tab));
+  document.body.classList.toggle('sheet-open', !!$('#sheet').innerHTML.trim());
+  document.body.classList.toggle('noFab', tab === 'me' && !overlay);
+  $$('#tabs a').forEach(a => a.classList.toggle('on', !overlay && a.hash === '#' + tab));
+  $('#tabs').style.setProperty('--i', Math.max(0, TABS.indexOf(tab)));
+  $('#tabs').style.setProperty('--on', TABS.includes(tab) ? 1 : 0);
   document.documentElement.classList.toggle('still', !motionOK());
   jumpbar(); sheetEntered(); settle(); liveKick(); labKick(); bxKick();
 }
@@ -67,7 +130,12 @@ function renderSoft() {
 }
 document.addEventListener('focusout', () => setTimeout(() => { if (softQueued && !document.activeElement?.matches?.('input, select, textarea')) render(); }, 250));
 
+// Screen changes animate, and the browser may finish an older one after a newer one has started (Done, then a tab,
+// in quick succession). Each change is numbered, and only the latest is ever applied: the screen always matches
+// the address.
+let routeSeq = 0;
 function route() {
+  const seq = ++routeSeq;
   let [a, b] = (location.hash.slice(1) || 'today').split('-');
   a = ALIAS[a] || a;
   const was = overlay, wasTab = tab;
@@ -75,23 +143,31 @@ function route() {
   if (PAGES.includes(a)) next = { type: a, key: b };
   else if (VIEWS[a]) nextTab = a;
   if (next?.type === 'why' && was) next.under = was.type === 'why' ? was.under : was;
-  if (next?.type === 'add' && was?.type !== 'add') { query = ''; cat = 'usual'; }
+  if (next?.type === 'add' && was?.type !== 'add') { query = ''; cat = addNext && addNext !== 'find' ? addNext : 'usual'; ADDORDER.meal = null; }
   const page = o => o && (o.type === 'add' || o.type === 'set' || o.type === 'lab' || o.type === 'beats');
   let dir = null, top = false;
   if (next?.type === 'why' || was?.type === 'why') dir = null;
+  else if (page(next) && was?.type === 'add' && next.type === 'add') { dir = null; }
   else if (page(next) && !(page(was) && was.key === next.key)) { dir = 'push'; top = true; if (!page(was)) scrollMem[wasTab] = scrollY; }
   else if (!page(next) && page(was)) dir = 'pop';
-  else if (!next && !was && nextTab !== wasTab) { dir = TABS.indexOf(nextTab) > TABS.indexOf(wasTab) ? 'fwd' : 'back'; top = true; buzz('tick'); }
+  else if (!next && !was && nextTab !== wasTab) {
+    if (nextTab === 'me') { dir = 'push'; scrollMem[wasTab] = scrollY; top = true; }
+    else if (wasTab === 'me') dir = 'pop';
+    else { dir = TABS.indexOf(nextTab) > TABS.indexOf(wasTab) ? 'fwd' : 'back'; top = true; buzz('tick'); }
+  }
   const go = () => {
+    if (seq !== routeSeq) return;
     overlay = next; tab = nextTab; pop = null;
-    render();
+    renderView();
     if (top) scrollTo(0, 0);
     else if (dir === 'pop') scrollTo(0, scrollMem[tab] || 0);
+    if (addNext === 'find' && overlay?.type === 'add') setTimeout(() => $('#q')?.focus(), 60);
+    addNext = null;
   };
   dir ? transition(dir, go) : go();
 }
 function goBack() { if (history.length > 1) history.back(); else location.hash = tab; }
-function refreshAdd() { const m = overlay.key; $('#rows').innerHTML = addRows(m); $('#foot').innerHTML = addFoot(m); settle(); }
+function refreshAdd() { const m = overlay.key; paint($('#rows'), addRows(m)); $('#foot').innerHTML = addFoot(m); settle(); }
 // The app may stay open past midnight: the view moves on with the date if you were looking at today.
 function rollDay() { const t = todayKey(); if (t !== lastToday) { if (day === lastToday) day = t; lastToday = t; return true; } return false; }
 function applyTheme() {
@@ -99,15 +175,19 @@ function applyTheme() {
   if (t === 'system') delete root.dataset.theme; else root.dataset.theme = t;
   const dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   nat('setTheme', dark);
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m => { if (t !== 'system') m.setAttribute('content', dark ? '#08090b' : '#f4f5f7'); });
 }
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
 
 const ACT = {
   close: () => goBack(),
+  meback: () => { if (history.length > 1) history.back(); else location.hash = 'today'; },
   popclose: () => closePop(),
   dismissnote: () => { loadNote = ''; render(); },
   q: el => {
-    bump(el.dataset.m, pickFood(el.dataset.id), +el.dataset.d);
+    const m = el.dataset.m, f = pickFood(el.dataset.id), d = +el.dataset.d, was = (S.food[day] || []).some(x => x.m === m && x.id === f?.id);
+    bump(m, f, d);
+    if (overlay?.type !== 'add' && f && d > 0 && !was) toast(`${f.n} · ${mealName(m).toLowerCase()}`, 3500, { label: 'Undo', fn: () => { bump(m, f, -d); render(); } });
     return overlay?.type === 'add' ? refreshAdd() : render();
   },
   thali: el => { const [name, parts] = THALI[+el.dataset.i]; for (const [id, n] of parts) bump(el.dataset.m, food(id), n); buzz('ok'); toast(`${name} added`); refreshAdd(); },
@@ -142,7 +222,11 @@ const ACT = {
     if (pop?.kind === 'cedit') closePop(); else refreshAdd();
     undoable(`${f.n} removed from your foods`, () => { S.custom.splice(i, 0, f); for (const m in fr) if (fr[m]) S.freq[m][f.id] = fr[m]; });
   },
-  copy: el => { for (const x of S.food[shift(day, -1)].filter(x => x.m === el.dataset.m)) (S.food[day] ||= []).push({ ...x }); save(); buzz('ok'); render(); },
+  copy: el => {
+    const items = S.food[shift(day, -1)].filter(x => x.m === el.dataset.m), added = items.map(x => ({ ...x }));
+    (S.food[day] ||= []).push(...added); save(); buzz('ok'); render();
+    toast(`${plural(added.length, 'food')} copied from yesterday`, 5000, { label: 'Undo', fn: () => { const L = S.food[day] || []; for (const x of added) { const j = L.indexOf(x); if (j >= 0) L.splice(j, 1); } if (!L.length) delete S.food[day]; save(); render(); } });
+  },
   day: el => { const d = +el.dataset.d; transition(d < 0 ? 'back' : 'fwd', () => { day = shift(day, d); if (day > todayKey()) day = todayKey(); buzz('tick'); render(); }); },
   today: () => transition('fwd', () => { day = todayKey(); buzz('tick'); render(); }),
   full: () => { S.full[day] = !isComplete(day); save(); buzz('tick'); render(); },
@@ -185,6 +269,8 @@ const ACT = {
   jump: el => { const t = document.getElementById(el.dataset.to); if (t) { buzz('tick'); t.scrollIntoView({ block: 'start', behavior: motionOK() ? 'smooth' : 'auto' }); } },
   bkpick: () => { S.meta.welcomed = true; save(); nat('backupPick'); },
   shareweek: () => { const T = targets(); shareText('Health · week', shareWeek(T, range(7).map(k => dayCells(k, T)), energy())); },
+  // The log button: everything you might log, from anywhere.
+  log: () => { if (pop?.kind === 'log') return closePop(); openPop({ kind: 'log' }); },
 };
 
 SWIPE.rmread = el => ACT.rmread(el);
@@ -195,7 +281,9 @@ document.addEventListener('click', e => {
   if (el.dataset.repeat && e.isTrusted && repeated === el.dataset.repeat) { repeated = ''; return; }
   const a = el.dataset.act;
   if (ACT[a]) return ACT[a](el);
-  if (trainAct(a, el) || foodAct(a, el) || setAct(a, el) || ogAct(a, el) || labAct(a, el) || recAct(a, el) || bxAct(a, el) || checkAct(a, el)) return;
+  const ta = todayAct(a, el);
+  if (ta === 'nav') { e.preventDefault(); return; }
+  if (ta || trainAct(a, el) || foodAct(a, el) || setAct(a, el) || ogAct(a, el) || labAct(a, el) || recAct(a, el) || bxAct(a, el) || checkAct(a, el)) return;
   if (a.startsWith('hr')) return hrAct(a, el);
   if (a.startsWith('w')) return watchAct(a);
 });
@@ -218,10 +306,11 @@ function customCheck() {
 document.addEventListener('input', e => {
   if (e.target.id === 'fg') { foodAct('fg', e.target); return; }
   if (['fqin', 'pqin', 'pg'].includes(e.target.id)) { foodAct(e.target.id, e.target); return; }
+  if (e.target.id === 'wgin') { todayAct('wgin', e.target); return; }
   if (/^c_/.test(e.target.id)) { customCheck(); return; }
   if (e.target.id !== 'q') return;
   query = e.target.value;
-  $('#rows').innerHTML = addRows(overlay.key);
+  paint($('#rows'), addRows(overlay.key));
   const clr = $('.searchbar .clr'); if (clr) clr.hidden = !query;
   $$('#chips button').forEach(b => b.classList.toggle('on', !query && b.dataset.c === cat));
 });
@@ -240,7 +329,6 @@ document.addEventListener('change', e => {
       buzz('warn');
       toast(`${sign(off, 1)} kg from your trend. A typo?`, 7000, { label: 'Undo', fn: () => { if (prev == null) setManual(stream, day, null); else { S[stream][day] = prev; if (!prevMan) delete S.manual[stream][day]; } save(); render(); } });
     } else if (v != null) buzz('ok');
-    // A check-in on Today is done once it has a value: redraw when you leave the field, so it drops off the list.
     if (el.closest('.ci, label.due') && v != null) softQueued = true;
   }
   else if (el.dataset.lift) logLift(el);
@@ -281,6 +369,8 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) { remindPlan(); return flushMirror(); }
   if (!NATIVE && rollDay()) render();
 });
+// The log button shrinks a little while you scroll down a long page, and comes back when you stop.
+addEventListener('scroll', () => { document.body.classList.add('scrolled'); clearTimeout(ACT.scrollT); ACT.scrollT = setTimeout(() => document.body.classList.remove('scrolled'), 220); }, { passive: true });
 
 applyTheme();
 if (backfillMacros()) save();

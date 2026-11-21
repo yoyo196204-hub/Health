@@ -14,7 +14,7 @@ function vMe() {
   const standalone = NATIVE || matchMedia('(display-mode: standalone)').matches;
   const bk = !NATIVE ? (S.meta.exported ? `Last export ${dateLabel(S.meta.exported)}` : 'Never exported') : BACKUP.folder ? `Daily to ${esc(BACKUP.folder)}${S.meta.backup ? `, last ${dateLabel(S.meta.backup)}` : ''}` : 'No backup folder yet';
   const stale = NATIVE && BACKUP.folder && S.meta.backup && gapDays(S.meta.backup, todayKey()) >= 3;
-  return `${masthead('Me', `${Math.floor(ageYears())} years · ${p.h} cm · ${r1(T.wt)} kg`)}
+  return `${masthead('You', `${Math.floor(ageYears())} years · ${p.h} cm · ${r1(T.wt)} kg`, { before: `<button class="nav" data-act="meback" aria-label="Back">${ic('back')}</button>` })}
     ${stale ? `<p class="flag banner">The daily backup has not been written since ${dateLabel(S.meta.backup)}. Open Backup and data and choose the folder again.</p>` : ''}
     ${sec('Your numbers', table([
       trow(why('kcal', 'Calories'), `${fmt(T.kcal)} kcal`, 'strong'),
@@ -25,7 +25,7 @@ function vMe() {
       trow(why('kcal', `Daily burn, ${Math.round(T.trust * 100)}% from your data`), `${fmt(T.tdee)} kcal`),
       trow(why('zones', 'Heart-rate zones'), `${H.zones[0]} / ${H.zones[1]} / ${H.zones[2]}`),
       trow(why('waist', 'BMI, Indian cut-offs'), `${r1(T.bmi)}, ${cls}`)]) + (T.locked ? para(`Targets hold until ${dateLabel(T.next, { weekday: 'long', day: 'numeric', month: 'short' })}. ${why('lock', 'Why')}`) : ''))}
-    <nav class="group">
+    <nav class="group" aria-label="Settings">
       ${navrow('#set-goal', 'Goal and targets', `${PACE[S.settings.pace][0]}${PACE[S.settings.pace][1] ? ` · ${PACE[S.settings.pace][1]}% a week` : ''} · protein ${S.settings.protein === 'high' ? 'higher' : 'standard'}`, ICON.goal)}
       ${navrow('#set-train', 'Training', `${esc(P.short)} · ${p.equip === 'home' ? 'home' : 'gym'}${p.shoulder ? ' · shoulder care' : ''}${ogPlanStale() ? ' · plan changed: send it to openGym' : ''}`, ICON.lift)}
       ${navrow('#set-profile', 'Profile', `${p.sex === 'm' ? 'Male' : 'Female'} · ${p.h} cm · started at ${p.w0} kg`, ICON.person)}
@@ -43,7 +43,7 @@ function vMe() {
 function vSet(key) {
   const P = SETPAGES[key];
   if (!P) return vMe();
-  return `${masthead(P[0], 'Me', { before: '<button class="nav" data-act="close" aria-label="Back">‹</button>' })}<div class="setpage">${part(P[1])}</div>`;
+  return `${masthead(P[0], 'You', { before: `<button class="nav" data-act="close" aria-label="Back">${ic('back')}</button>` })}<div class="setpage">${part(P[1])}</div>`;
 }
 
 // ---------- goal ----------
