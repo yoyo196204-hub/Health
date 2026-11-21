@@ -254,7 +254,8 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await drag(60, y, 330, y + 6);
     assert.strictEqual(await page.evaluate(() => day), await page.evaluate(() => shift(todayKey(), -1)));
     await page.evaluate(() => { location.hash = 'food'; });
-    const first = await page.evaluate(() => document.querySelector('.ds:not([disabled])').dataset.k);
+    const first = await page.evaluate(() => document.querySelector('.ds:not([disabled])')?.dataset.k);
+    assert.ok(first, 'the week strip offers a day: ' + await page.evaluate(() => JSON.stringify({ tab, day, overlay, hash: location.hash, view: document.getElementById('view').innerText.slice(0, 200), ds: [...document.querySelectorAll('.ds')].map(b => b.dataset.k + (b.disabled ? '×' : '')) })));
     await page.tap('.ds:not([disabled])'); await page.waitForTimeout(500);
     assert.strictEqual(await page.evaluate(() => day), first);
     await page.evaluate(() => { day = todayKey(); render(); });

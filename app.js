@@ -130,7 +130,12 @@ function renderSoft() {
 }
 document.addEventListener('focusout', () => setTimeout(() => { if (softQueued && !document.activeElement?.matches?.('input, select, textarea')) render(); }, 250));
 
+// Screen changes animate, and the browser may finish an older one after a newer one has started (Done, then a tab,
+// in quick succession). Each change is numbered, and only the latest is ever applied: the screen always matches
+// the address.
+let routeSeq = 0;
 function route() {
+  const seq = ++routeSeq;
   let [a, b] = (location.hash.slice(1) || 'today').split('-');
   a = ALIAS[a] || a;
   const was = overlay, wasTab = tab;
@@ -151,6 +156,7 @@ function route() {
     else { dir = TABS.indexOf(nextTab) > TABS.indexOf(wasTab) ? 'fwd' : 'back'; top = true; buzz('tick'); }
   }
   const go = () => {
+    if (seq !== routeSeq) return;
     overlay = next; tab = nextTab; pop = null;
     renderView();
     if (top) scrollTo(0, 0);

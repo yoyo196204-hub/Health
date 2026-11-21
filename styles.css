@@ -53,10 +53,10 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 /* The root keeps its default overflow: the page itself is what scrolls. Overflow on html (even overflow-x: clip)
    hands scrolling to body, and the page then cannot be scrolled by touch at all. test/run.js fails if it comes back. */
-html { background: var(--bg); overscroll-behavior-y: none; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+html { background: var(--bg); overscroll-behavior: none; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 main { overflow-x: clip; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--sans); font-optical-sizing: auto; font-feature-settings: 'cv11', 'ss03';
-  -webkit-font-smoothing: antialiased; padding-bottom: calc(var(--tabh) + 28px + env(safe-area-inset-bottom)); overflow-x: hidden; overscroll-behavior-y: none; }
+  -webkit-font-smoothing: antialiased; padding-bottom: calc(var(--tabh) + 28px + env(safe-area-inset-bottom)); overflow-x: hidden; overscroll-behavior: none; }
 main { max-width: 620px; margin: 0 auto; padding: calc(10px + env(safe-area-inset-top)) var(--gut) 8px; }
 h1 { font: 700 28px/1.1 var(--sans); letter-spacing: -.025em; margin: 0; }
 h2 { font: 650 17px/1.25 var(--sans); letter-spacing: -.012em; margin: 0; }
