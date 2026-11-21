@@ -35,7 +35,7 @@ function dated(o, fn, max = 4000) {
   if (obj(o)) for (const k of Object.keys(o).sort().slice(-max)) if (DATE.test(k)) { const v = fn(o[k], k); if (v != null) r[k] = v; }
   return r;
 }
-const FOOD_SRC = ['recipe', 'label', 'brand', 'derived', 'ifct', 'usda', 'mine'];
+const FOOD_SRC = ['recipe', 'label', 'brand', 'derived', 'ifct', 'usda', 'mine', 'on'];
 function cleanFood(e, logged) {
   if (!obj(e)) return null;
   const k = num(e.k, 0, 5000), id = str(e.id, 40), n = str(e.n, 80).trim();
@@ -46,6 +46,8 @@ function cleanFood(e, logged) {
   if (c != null && ft != null) Object.assign(f, { c, ft });
   const g = num(e.g, 1, 5000); if (g != null) f.g = g;
   if (FOOD_SRC.includes(e.src)) f.src = e.src;
+  // The pack's barcode, for a food saved from its label: the scanner finds it by this.
+  if (typeof e.bc === 'string' && /^\d{8,14}$/.test(e.bc)) f.bc = e.bc;
   if (!logged) return f;
   const q = num(e.q, 0.01, 50);
   if (q == null) return null;

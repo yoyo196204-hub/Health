@@ -121,8 +121,11 @@ function fuelCard() {
 function insightCard() {
   const H = headline();
   if (!H.length) return '';
-  const h = H[new Date().getDate() % H.length], c = { food: 'var(--fuel)', heart: 'var(--heart)', sleep: 'var(--sleep)', body: 'var(--body)', move: 'var(--move)', train: 'var(--move)' }[h.dom] || 'var(--accent)';
-  return `<a class="card tap insight" href="${h.href}"><span class="ico" style="--c:${c}">${ic('spark')}</span><span><span class="eyebrow">From your data</span><b>${esc(h.t)}</b><span class="sub">${h.s}</span></span><span class="chev">›</span></a>`;
+  // A deck: today's starts where the date puts it, and a fling brings up the next (motion.js).
+  const start = new Date().getDate() % H.length, i = (start + (deckI ?? 0)) % H.length, h = H[i];
+  const c = { food: 'var(--fuel)', heart: 'var(--heart)', sleep: 'var(--sleep)', body: 'var(--body)', move: 'var(--move)', train: 'var(--move)' }[h.dom] || 'var(--accent)';
+  const many = H.length > 1;
+  return `<a class="card tap insight ${many ? 'deck' : ''} ${deckI ? 'enter' : ''}" href="${h.href}" ${many ? 'data-fling="deck"' : ''} data-k="ins${i}"><span class="ico" style="--c:${c}">${ic('spark')}</span><span><span class="eyebrow">From your data${many ? ` · ${(i - start + H.length) % H.length + 1} of ${H.length}` : ''}</span><b>${esc(h.t)}</b><span class="sub">${h.s}</span></span><span class="chev">›</span>${many ? `<span class="deckdots">${H.map((_, j) => `<i class="${j === i ? 'on' : ''}"></i>`).join('')}</span>` : ''}</a>`;
 }
 // The body and movement side by side: the weight trend with its rate, and today's steps against the goal.
 function bodyMove() {
@@ -179,7 +182,7 @@ function vLog() {
   const strap = S.meta.h9 || Object.keys(S.hrv).length;
   return `${sheetTop(`Log · ${when}`, 'What happened?', 'log')}
     <div class="eyebrow qlabel">Food</div>
-    <div class="qgrid">${meals}${tile('bolt', 'var(--fuel)', 'Quick kcal', 'a meal out', `data-act="addto" data-m="${m}" data-k="${k}" data-c="quick"`)}${tile('copy', 'var(--fuel)', 'Plates', `${S.plates.length + THALI.length}`, `data-act="addto" data-m="${m}" data-k="${k}" data-c="thali"`)}${tile('search', 'var(--fuel)', 'Search', 'any food', `data-act="addto" data-m="${m}" data-k="${k}" data-c="find"`)}${tile('food', 'var(--fuel)', 'My foods', `${S.custom.length}`, `data-act="addto" data-m="${m}" data-k="${k}" data-c="mine"`)}</div>
+    <div class="qgrid">${meals}${tile('bolt', 'var(--fuel)', 'Quick kcal', 'a meal out', `data-act="addto" data-m="${m}" data-k="${k}" data-c="quick"`)}${tile('copy', 'var(--fuel)', 'Plates', `${S.plates.length + THALI.length}`, `data-act="addto" data-m="${m}" data-k="${k}" data-c="thali"`)}${tile('search', 'var(--fuel)', 'Search', 'any food', `data-act="addto" data-m="${m}" data-k="${k}" data-c="find"`)}${tile('scan', 'var(--fuel)', 'Scan', 'a pack', `data-act="scango" data-m="${m}" data-k="${k}"`)}</div>
     <div class="eyebrow qlabel">Body and heart</div>
     <div class="qgrid">${tile('body', 'var(--body)', 'Weight', S.weights[todayKey()] != null ? `${kg(S.weights[todayKey()])} kg` : '', 'data-act="weigh" data-s="weights"')}${tile('tape', 'var(--body)', 'Waist', '', 'data-act="weigh" data-s="waist"')}${tile('heart', 'var(--heart)', strap ? 'Morning check' : 'Strap', S.hrv[todayKey()] ? 'done' : '', 'href="#recovery" data-act="popnav"')}${tile('breathe', 'var(--pro)', 'Breathe', '', 'href="#lab-breathe" data-act="popnav"')}${tile('pulse', 'var(--heart)', 'Spot check', '', 'href="#lab-spot" data-act="popnav"')}${tile('move', 'var(--move)', 'Cardio', '', 'data-act="cardioadd"')}${tile('insight', 'var(--heart)', 'Live', '', 'href="#lab-live" data-act="popnav"')}${tile('sleep', 'var(--sleep)', 'Your day', '', `data-act="dayx" data-k="${todayKey()}"`)}</div></aside>`;
 }

@@ -24,7 +24,7 @@ for (const f of FOODS) FOODIDX.set(f[0], { id: f[0], n: f[1], u: f[2], k: f[3], 
 for (const f of PANEL_FOODS) FOODIDX.set(f.id, f);
 // "100 g", "50 g dry", "1 glass (250 ml)": the grams written in the unit itself.
 function unitGrams(u) { const m = /(\d+(?:\.\d+)?)\s*(g|ml)\b/.exec(u || ''); return m ? +m[1] : null; }
-function food(id) { return FOODIDX.get(id) || S.custom.find(x => x.id === id); }
+function food(id) { return FOODIDX.get(id) || S.custom.find(x => x.id === id) || offFood(id) || wholeFood(id); }
 function allFoods() { return [...FOODIDX.values()].concat(S.custom); }
 // Energy that the macros themselves account for: 4 kcal/g protein and carbs, 9 fat, 2 fibre (FAO). A panel or an
 // entry that disagrees with its own macros by more than about a fifth has a typo somewhere.

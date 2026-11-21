@@ -317,6 +317,93 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await page.tap('#toast button'); await page.waitForTimeout(400);
     assert.deepStrictEqual(await page.evaluate(() => [Object.keys(S.steps).length, Object.keys(S.ex).length]), before, 'and undo takes them out');
   });
+  await test('a sheet is dragged down from its middle, the page sinking behind it until it goes', async () => {
+    await go('today'); await page.evaluate(() => scrollTo(0, 0));
+    await page.tap('#fab'); await page.waitForTimeout(700);
+    const st = await page.evaluate(() => ({ lift: +getComputedStyle(document.body).getPropertyValue('--lift'), sc: getComputedStyle(document.getElementById('view')).transform }));
+    assert.strictEqual(st.lift, 1, 'an open sheet lifts fully');
+    assert.notStrictEqual(st.sc, 'none', 'the page behind recedes');
+    const r = await page.evaluate(() => { const q = document.querySelector('.sheet .qgrid').getBoundingClientRect(); return [q.left + q.width / 2, q.top + 40]; });
+    // A slow drag that stops short springs back.
+    await drag(r[0], r[1], r[0], r[1] + 60);
+    assert.ok(await page.evaluate(() => pop?.kind === 'log'), 'a short drag keeps it open');
+    // A flick down from the middle of the sheet closes it.
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: r[0], y: r[1] }] });
+    for (let i = 1; i <= 6; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: r[0], y: r[1] + i * 40 }] }); await page.waitForTimeout(12); }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await page.waitForTimeout(1400);
+    assert.deepStrictEqual(await page.evaluate(() => [pop, document.body.classList.contains('sheet-open'), +getComputedStyle(document.body).getPropertyValue('--lift')]), [null, false, 0]);
+  });
+  await test('the insight card is a deck: a fling brings the next', async () => {
+    await go('today'); await page.evaluate(() => scrollTo(0, 0));
+    const has = await page.evaluate(() => !!document.querySelector('.insight.deck'));
+    if (!has) return;   // one insight only: nothing to fling to
+    const before = await page.evaluate(() => document.querySelector('.insight b').textContent);
+    await page.evaluate(() => document.querySelector('.insight').scrollIntoView({ block: 'center' })); await page.waitForTimeout(200);
+    const r = await page.evaluate(() => { const q = document.querySelector('.insight').getBoundingClientRect(); return [q.left + q.width / 2, q.top + q.height / 2]; });
+    await drag(r[0], r[1], r[0] - 260, r[1] + 4);
+    await page.waitForTimeout(600);
+    assert.notStrictEqual(await page.evaluate(() => document.querySelector('.insight b').textContent), before);
+    assert.strictEqual(await page.evaluate(() => tab), 'today', 'the fling is the card’s, not a tab swipe');
+  });
+  await test('a toast is flung away', async () => {
+    await page.evaluate(() => toast('Testing', 8000));
+    await page.waitForTimeout(300);
+    const r = await page.evaluate(() => { const q = document.getElementById('toast').getBoundingClientRect(); return [q.left + q.width / 2, q.top + q.height / 2]; });
+    await drag(r[0], r[1], r[0] + 200, r[1]);
+    await page.waitForTimeout(500);
+    assert.strictEqual(await page.evaluate(() => document.getElementById('toast').classList.contains('show')), false);
+  });
+  await test('the scanner: a drawn barcode is read, found offline, judged, and logged; an unknown pack is learned', async () => {
+    await go('today'); await page.evaluate(() => { day = todayKey(); });
+    await page.evaluate(() => navTo(`scan-lunch`)); await page.waitForTimeout(900);
+    assert.strictEqual(await page.evaluate(() => overlay?.type), 'scan');
+    // An EAN-13 drawn the way a pack prints it, read by the same decoder the camera frames go through.
+    const code = await page.evaluate(async () => {
+      const L = ['0001101', '0011001', '0010011', '0111101', '0100011', '0110001', '0101111', '0111011', '0110111', '0001011'];
+      const G = L.map(x => x.split('').map(b => b === '1' ? '0' : '1').reverse().join('')), R = L.map(x => x.split('').map(b => b === '1' ? '0' : '1').join(''));
+      const P = ['LLLLLL', 'LLGLGG', 'LLGGLG', 'LLGGGL', 'LGLLGG', 'LGGLLG', 'LGGGLL', 'LGLGLG', 'LGLGGL', 'LGGLGL'];
+      const c = '8901262010023', d = c.split('').map(Number);
+      let bits = '101'; for (let i = 1; i <= 6; i++) bits += (P[d[0]][i - 1] === 'L' ? L : G)[d[i]]; bits += '01010'; for (let i = 7; i <= 12; i++) bits += R[d[i]]; bits += '101';
+      const cv = document.createElement('canvas'); cv.width = 1280; cv.height = 720;
+      const x = cv.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 1280, 720); x.fillStyle = '#000';
+      const m = 8, x0 = (1280 - bits.length * m) / 2; [...bits].forEach((b, i) => { if (b === '1') x.fillRect(x0 + i * m, 220, m, 280); });
+      await scanDecoder();
+      return scanFrame(cv, 1280, 720);
+    });
+    assert.strictEqual(code, '8901262010023', 'the barcode is read');
+    await page.evaluate(c => scanFound(c), code); await page.waitForTimeout(700);
+    const card = await page.evaluate(() => ({ n: SCAN.hit?.n, v: document.querySelectorAll('.pv li').length, h: document.querySelector('.scard h2')?.textContent }));
+    assert.ok(/butter/i.test(card.h), `found: ${card.h}`);
+    assert.ok(card.v >= 2, 'the pack is judged per 100 kcal');
+    await page.tap('[data-act="scanadd"]'); await page.waitForTimeout(600);
+    assert.strictEqual(await page.evaluate(() => pop?.kind), 'portion');
+    await page.tap('[data-act="padd"]'); await page.waitForTimeout(600);
+    const e = await page.evaluate(() => (S.food[todayKey()] || []).find(x => x.id === 'b8901262010023'));
+    assert.ok(e && e.k > 0 && e.c != null && e.ft != null && e.g, 'logged with its panel, carbs and fat');
+    // Not in the list: its label is entered once, and the next scan finds it.
+    await page.evaluate(() => scanFound('4006381333931')); await page.waitForTimeout(500);
+    assert.ok(await page.evaluate(() => SCAN.miss === '4006381333931' || !!SCAN.hit));
+    if (await page.evaluate(() => !!SCAN.miss)) {
+      await page.tap('[data-act="scanlabel"]'); await page.waitForTimeout(900);
+      assert.deepStrictEqual(await page.evaluate(() => [overlay?.type, cat, CUSTOM.bc]), ['add', 'mine', '4006381333931']);
+      await page.fill('#c_n', 'Test bar'); await page.fill('#c_g', '40'); await page.fill('#c_k', '400'); await page.fill('#c_p', '20'); await page.fill('#c_c', '40'); await page.fill('#c_ft', '16');
+      await page.tap('[data-act="custom"]'); await page.waitForTimeout(400);
+      assert.strictEqual(await page.evaluate(() => lookupCode('4006381333931')?.n), 'Test bar');
+    }
+    // Packs come up by name in the search too.
+    await go('add-snack'); await page.waitForTimeout(400);
+    await page.fill('#q', 'haldiram bhujia'); await page.waitForTimeout(500);
+    assert.ok(await page.evaluate(() => document.querySelectorAll('#rows li[data-id^="b"]').length) > 0, 'Haldiram packs found by name');
+    // Whole foods from OpenNutrition come up too, and log with their numbers.
+    await page.fill('#q', 'quinoa'); await page.waitForTimeout(500);
+    const wid = await page.evaluate(() => document.querySelector('#rows li[data-id^="n"]')?.dataset.id);
+    assert.ok(wid, 'quinoa found in OpenNutrition');
+    await page.tap(`#rows li[data-id="${wid}"] .grow`); await page.waitForTimeout(300);
+    const w = await page.evaluate(id => (S.food[todayKey()] || []).find(x => x.id === id), wid);
+    assert.ok(w && w.k > 0 && w.c != null && w.src === 'on', JSON.stringify(w));
+    await go('today');
+  });
   await test('no errors were thrown on any screen', async () => assert.deepStrictEqual(errors, []));
 
   console.log(`\n${passed} passed, ${failed} failed`);
