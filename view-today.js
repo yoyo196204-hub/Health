@@ -80,7 +80,7 @@ function trio() {
   const slp = ring('t-sleep', sl != null ? sl / need : 0, { c: 'var(--sleep)', size: 104, stroke: 9, glow: sl != null,
     inner: sl != null ? `<b class="num">${Math.floor(sl)}:${String(Math.round((sl % 1) * 60)).padStart(2, '0')}</b><span>hours</span>` : `<b>${DASH}</b><span>no night</span>` });
   const sleepWord = sl == null ? 'Not synced' : sl >= need - 0.25 ? 'Enough' : sl >= need - 1 ? 'A little short' : 'Short';
-  return `<section class="card trio">
+  return `<section class="card trio" style="--tint:${zc}">
     <a class="tri" href="#recovery" style="--c:${zc}">${rec}<span class="tl">Recovery</span><span class="ts">${RS.score != null ? zw : RS.level === 'unknown' ? 'Calibrating' : zw}</span></a>
     <a class="tri" href="#food" data-act="gotoday" style="--c:var(--fuel)">${fuel}<span class="tl">kcal</span><span class="ts" style="color:var(--soft)">${fmt(t.k)} of ${fmt(T.kcal)}</span></a>
     <a class="tri" href="#recovery" style="--c:var(--sleep)">${slp}<span class="tl">Sleep</span><span class="ts">${sleepWord}</span></a></section>`;
@@ -104,15 +104,17 @@ function fuelCard() {
   const k = todayKey(), T = targets(), t = totals(k), left = T.kcal - t.k;
   const carbRef = Math.max(50, (T.kcal - 4 * T.protein - 0.3 * T.kcal) / 4), fatRef = 0.3 * T.kcal / 9;
   const mac = (label, c, v, of, unit, ref) => `<div class="mac" style="--c:${c}"><span class="ml">${label}</span><b class="num">${Math.round(v)}<i>${of ? ` / ${of}` : ''} ${unit}</i></b>${meter2(v / (ref || of), c)}</div>`;
+  // The four meals as tiles: what each holds in kcal and protein, the one due now marked, one tap to add to it.
+  const due = nextMeal();
   const rows = MEALS.map(([m, l]) => {
-    const mt = totals(k, m), names = (S.food[k] || []).filter(e => e.m === m).map(e => e.n.replace(/ \(.*| \/.*/, '')).slice(0, 3).join(', ');
-    return `<div class="mrow ${mt.n ? 'has' : ''}"><span class="mi">${ic(MEAL_IC[m])}</span><a class="grow" href="#food" data-act="gotoday" style="text-decoration:none"><span class="nm">${l}</span><span class="sub">${mt.n ? esc(names) : 'Nothing yet'}</span></a>${mt.n ? `<span class="kc">${fmt(mt.k)}</span>` : ''}<button class="addbtn" data-act="addto" data-m="${m}" aria-label="Add to ${l}">${ic('plus')}</button></div>`;
+    const mt = totals(k, m);
+    return `<button class="mtile ${mt.n ? 'has' : ''} ${m === due && !mt.n ? 'due' : ''}" data-act="addto" data-m="${m}" aria-label="Add to ${l}"><span class="mi">${ic(MEAL_IC[m])}</span><span class="ml">${l}</span>${mt.n ? `<b class="num">${fmt(mt.k)}</b><span class="msub">${Math.round(mt.p)} g protein</span>` : `<b class="add">${ic('plus')}</b><span class="msub">${m === due ? 'due now' : 'empty'}</span>`}</button>`;
   }).join('');
   return `<section class="card" id="fuel">${cardHead('Fuel', 'food', 'var(--fuel)', '<a class="more-link" href="#food" data-act="gotoday">Diary ›</a>')}
     <div class="eatline"><b class="num">${fmt(t.k)}</b><i>of ${fmt(T.kcal)} kcal</i><span class="grow ${left < 0 ? 'over' : ''}">${fmt(Math.abs(left))} ${left < 0 ? 'over' : 'left'}</span></div>
     ${meter2(t.k / T.kcal, left < 0 ? 'var(--bad)' : 'var(--fuel)', null, true)}
     <div class="macs">${mac('Protein', 'var(--pro)', t.p, T.protein, 'g')}${mac('Carbs', 'var(--carb)', t.c, null, 'g', carbRef)}${mac('Fat', 'var(--fat)', t.ft, null, 'g', fatRef)}${mac('Fibre', 'var(--fibre)', t.fb, T.fibre, 'g')}</div>
-    <div class="mrows">${rows}</div>
+    <div class="mtiles">${rows}</div>
     <p class="coach">${coach(T, t, k)}</p></section>`;
 }
 // The one thing your data says that is most worth knowing today.
@@ -163,7 +165,7 @@ function vToday() {
   const h = new Date().getHours(), greet = h < 5 ? 'Late night' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   return `${appbar(greet, dateLabel(todayKey(), { weekday: 'long', day: 'numeric', month: 'long' }), syncPill())}
     ${welcome()}${needsSyncLine() ? syncLine() : ''}
-    ${part(trio)}${part(todoStrip)}${part(fuelCard)}${part(insightCard)}${part(bodyMove)}${part(nightCard)}${part(trainCard)}
+    ${part(trio)}${part(todoStrip)}${part(insightCard)}${part(fuelCard)}${part(bodyMove)}${part(nightCard)}${part(trainCard)}
     ${S.profile.shoulder ? `<label class="card check" style="padding:12px 16px"><input type="checkbox" data-act="prehab" ${S.prehab[todayKey()] ? 'checked' : ''}><span>Shoulder routine: stretch and band work</span></label>` : ''}`;
 }
 
