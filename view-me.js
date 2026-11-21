@@ -131,10 +131,13 @@ function sourcesSection() {
   }
   const strap = S.meta.h9 && NATIVE ? `${para(`${esc(S.meta.h9.name)} is remembered and reconnects with one tap${HR.battery != null ? `; battery ${HR.battery}%` : ''}.`)}<button class="ghost" data-act="hrforget">Forget this strap</button>`
     : para(`Connect from Train or Recovery. ${NATIVE ? 'The app remembers it after the first time.' : ''}`);
-  const zepp = watchPreview ? watchPreviewBlock() : `<details class="inner"><summary>Import a Zepp export instead</summary><ol class="sub steps"><li>Zepp › Profile › Settings › Account › Export data. Pick activity, sleep and heart rate.</li><li>Zepp emails a zip with a password. Unzip it in your Files app.</li><li>Tap below and select the CSV files together.</li></ol>
-      <button class="ghost" data-act="wpick">Choose Zepp files</button></details>`;
+  // Zepp's export: the zip as it arrives (password and all), or the CSV files from inside it. In the app, Health
+  // Connect covers the recent weeks; this is for the history before them.
+  const zepp = watchPreview ? watchPreviewBlock() : WZIP.busy || WZIP.need || WZIP.err ? watchZipBlock() : `<details class="inner" ${NATIVE ? '' : 'open'}><summary>${NATIVE ? 'Bring in your older Zepp history' : 'Import a Zepp export'}</summary><ol class="sub steps"><li>Zepp › Profile › Settings › Account › Export data. Choose everything, or at least activity, sleep, heart rate and body.</li><li>Zepp emails a zip and shows its password. Download the zip; there is no need to unzip it.</li><li>Tap below and pick the zip. The password is asked for here, and everything is read on this phone.</li></ol>
+      ${NATIVE ? para('Health Connect only reaches back as far as Zepp has been writing to it, and this app reads at most 120 days of it. The export fills in everything before: longer baselines for resting heart rate and sleep, and more days for the links in your data.') : ''}
+      <button class="ghost" data-act="wpick">Choose the Zepp zip or its CSV files</button></details>`;
   return `<h3>Health Connect ${NATIVE ? '' : '<span class="src">in the app</span>'}</h3>${hc}<h3>openGym</h3>${part(ogSourcesBlock)}<h3>Polar H9</h3>${strap}<h3>Amazfit files</h3>${zepp}
-    <input type="file" id="wfile" accept=".csv,text/csv,text/comma-separated-values" multiple hidden>`;
+    <input type="file" id="wfile" accept=".zip,.csv,application/zip,application/x-zip-compressed,text/csv,text/comma-separated-values" multiple hidden>`;
 }
 
 // ---------- backup and data ----------

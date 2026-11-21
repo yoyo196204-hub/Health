@@ -27,6 +27,8 @@ function sandbox() {
 // Results are copied out of the sandbox, so arrays compare equal to plain ones.
 const run = (ctx, code) => { const v = vm.runInContext(code, ctx); return v && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v; };
 let passed = 0, failed = 0;
+const later = [];
+function atest(name, fn) { later.push([name, fn]); }
 function test(name, fn) {
   try { fn(sandbox()); passed++; console.log('  ok  ', name); }
   catch (e) { failed++; console.log('  FAIL', name, '\n       ', e.message); }
@@ -642,6 +644,63 @@ test('recovery number sits inside the zone the verdict chose', c => {
   assert.ok(R.parts.length >= 1);
 });
 
+// ---- the Zepp export as it arrives: a zip, locked or not ----
+// Fixtures in test/fixtures: one synthetic Zepp-style export (500 days of activity and sleep, 3 days of heart rate,
+// weekly scale readings, a user profile and a workout list), packed plain, with the traditional PKWARE lock (and
+// trailing data descriptors), and with WinZip AES-256. Password: Zepp-4821.
+function zipBox(c) {
+  Object.assign(c, { TextEncoder, TextDecoder, TextDecoderStream, Blob, DecompressionStream, crypto: globalThis.crypto, Uint8Array, DataView, Promise, BigInt });
+  c.document.addEventListener = () => {};
+  c.countDays = days => { const n = { steps: 0, sleep: 0, hr: 0 }; for (const d of Object.values(days)) { if (d.st != null) n.steps++; if (d.sl) n.sleep++; if (d.rp != null) n.hr++; } return n; };
+  for (const f of ['zip.js', 'watch.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), c, { filename: f });
+  return f => new Uint8Array(fs.readFileSync(path.join(__dirname, 'fixtures', f)));
+}
+const zipKinds = async (c, u8, pw) => { c.u8 = u8; c.pw = pw; const r = await vm.runInContext('zipParse(u8, pw).then(({ found, other }) => ({ g: watchGroup(found).map(x => [x.kind, Object.keys(x.P.days).length]), other: other.length, sample: watchGroup(found) }))', c); return JSON.parse(JSON.stringify(r)); };
+test('AES, as the zip reader runs it, matches the FIPS-197 test vectors for 128 and 256-bit keys', c => {
+  zipBox(c);
+  const hex = h => Uint8Array.from(h.match(/../g).map(x => parseInt(x, 16))), out = (k, p) => Buffer.from(vm.runInContext(`ZIP_AES.block(ZIP_AES.expand(k), p)`, Object.assign(c, { k: hex(k), p: hex(p) }))).toString('hex');
+  assert.strictEqual(out('000102030405060708090a0b0c0d0e0f', '00112233445566778899aabbccddeeff'), '69c4e0d86a7b0430d8cdb78070b4c55a');
+  assert.strictEqual(out('000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f', '00112233445566778899aabbccddeeff'), '8ea2b7ca516745bfeafc49904b496089');
+});
+atest('a Zepp zip, unlocked: each kind is recognised by its columns, and the profile and workouts are left aside', async c => {
+  const fx = zipBox(c), r = await zipKinds(c, fx('zepp-plain.zip'), null);
+  assert.deepStrictEqual(Object.fromEntries(r.g), { steps: 500, sleep: 500, 'heart rate': 3, weight: 72 });
+  assert.strictEqual(r.other, 2, 'the user profile and the workout list are not mistaken for data');
+  const sl = r.sample.find(x => x.kind === 'sleep').P.days['2026-11-20'].sl, st = r.sample.find(x => x.kind === 'steps').P.days;
+  assert.ok(sl.d > 0 && sl.l > 0 && sl.r > 0 && sl.on < 0 && sl.bed > 300, JSON.stringify(sl));
+  assert.ok(Object.values(st).every(d => d.st >= 3000), 'the byte-order mark on the first file does not lose its first column');
+  const w = r.sample.find(x => x.kind === 'weight').P.days;
+  assert.ok(Object.values(w).every(d => d.wt > 90 && d.bf > 25), 'weight and body fat from the scale');
+});
+atest('a Zepp zip with the traditional lock: the right password opens it, a wrong one is said to be wrong', async c => {
+  const fx = zipBox(c), u8 = fx('zepp-zipcrypto.zip');
+  assert.ok(JSON.parse(JSON.stringify(vm.runInContext('zipEntries(u8)', Object.assign(c, { u8 })))).filter(e => /csv$/.test(e.name)).every(e => e.encrypted && e.flags & 8), 'locked, with trailing sizes');
+  await assert.rejects(zipKinds(c, u8, 'zepp-4821'), e => e.code === 'password');
+  const r = await zipKinds(c, u8, 'Zepp-4821');
+  assert.deepStrictEqual(Object.fromEntries(r.g), { steps: 500, sleep: 500, 'heart rate': 3, weight: 72 });
+});
+atest('a Zepp zip with AES-256: the right password opens it, a wrong one is said to be wrong', async c => {
+  const fx = zipBox(c), u8 = fx('zepp-aes.zip');
+  assert.ok(JSON.parse(JSON.stringify(vm.runInContext('zipEntries(u8)', Object.assign(c, { u8 })))).some(e => e.method === 99 && e.aes?.strength === 3), 'AES-256');
+  await assert.rejects(zipKinds(c, u8, 'Zepp-4822'), e => e.code === 'password');
+  const plain = await zipKinds(c, fx('zepp-plain.zip'), null), r = await zipKinds(c, u8, 'Zepp-4821');
+  assert.deepStrictEqual(r.sample, plain.sample, 'exactly the same as the unlocked export');
+});
+atest('importing 500 days goes in whole, keeps what you typed, and can be undone', async c => {
+  const fx = zipBox(c);
+  c.render = () => {}; c.buzz = () => {}; c.toast = () => {};
+  const k = '2026-06-04';
+  run(c, `S = sanitize({}); setManual('weights', '${k}', 88.8);`);
+  c.u8 = fx('zepp-plain.zip');
+  await vm.runInContext('zipParse(u8, null).then(({ found }) => { watchPreview = watchGroup(found); watchAct("wsave"); })', c);
+  const days = run(c, `({ steps: Object.keys(S.steps).length, sleep: Object.keys(S.sleepx).length, w: S.weights['${k}'], wn: Object.keys(S.weights).length, bf: Object.keys(S.wx).filter(d => S.wx[d].bf).length })`);
+  assert.ok(days.steps >= 499 && days.sleep >= 499, `all of it, not the first 400 days: ${JSON.stringify(days)}`);
+  assert.strictEqual(days.w, 88.8, 'a weight you typed is not overwritten by the scale');
+  assert.ok(days.wn >= 70 && days.bf >= 70);
+  run(c, 'restoreSnapshot()');
+  assert.strictEqual(run(c, 'Object.keys(S.steps).length'), 0, 'undo takes it all out again');
+});
+
 // ---- the web app as files: these guard against the failures that only show up on a phone ----
 const scripts = [...fs.readFileSync(path.join(root, 'index.html'), 'utf8').matchAll(/<script src="([a-z0-9-]+\.js)/g)].map(m => m[1]);
 test('a logged food keeps its carbs, fat and weight through saving and loading; unknown stays unknown', c => {
@@ -805,5 +864,11 @@ test('a script that fails to load is caught before the app starts', () => {
   assert.ok(t.indexOf('(function boot()') >= 0 && t.indexOf('(function boot()') < t.indexOf('let S = load()'));
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+(async () => {
+  for (const [name, fn] of later) {
+    try { await fn(sandbox()); passed++; console.log('  ok  ', name); }
+    catch (e) { failed++; console.log('  FAIL', name, '\n       ', e.message); }
+  }
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed ? 1 : 0);
+})();
