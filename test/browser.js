@@ -283,6 +283,24 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     assert.match(await page.textContent('#toast'), /Protein target reached/);
     await page.evaluate(() => { delete S.food[todayKey()]; save(); render(); });
   });
+  await test('a Zepp export zip, password-locked, comes in from the phone: wrong password said, right one previewed and imported', async () => {
+    await go('set-sources');
+    await page.setInputFiles('#wfile', path.join(__dirname, 'fixtures', 'zepp-aes.zip'));
+    await page.waitForSelector('#wzippw', { timeout: 8000 });
+    await page.fill('#wzippw', 'not it'); await page.tap('[data-act="wunlock"]');
+    await page.waitForFunction(() => /did not open it/.test(document.body.textContent), null, { timeout: 8000 });
+    await page.fill('#wzippw', 'Zepp-4821'); await page.press('#wzippw', 'Enter');
+    await page.waitForSelector('[data-act="wsave"]', { timeout: 15000 });
+    const prev = await page.evaluate(() => watchPreview.map(f => [f.kind, f.kind ? Object.keys(f.P.days).length : f.name]));
+    assert.deepStrictEqual(prev.filter(x => x[0]).map(x => x.join(':')).sort(), ['heart rate:3', 'sleep:500', 'steps:500', 'weight:72']);
+    await shot('zepp-preview');
+    const before = await page.evaluate(() => Object.keys(S.sleepx).length);
+    await page.tap('[data-act="wsave"]'); await page.waitForTimeout(500);
+    assert.ok(await page.evaluate(() => Object.keys(S.sleepx).length) >= Math.max(before, 499), 'the nights are in');
+    assert.match(await page.textContent('#toast'), /Imported \d+ days/);
+    await page.tap('#toast button'); await page.waitForTimeout(400);
+    assert.strictEqual(await page.evaluate(() => Object.keys(S.sleepx).length), before, 'and undo takes them out');
+  });
   await test('no errors were thrown on any screen', async () => assert.deepStrictEqual(errors, []));
 
   console.log(`\n${passed} passed, ${failed} failed`);

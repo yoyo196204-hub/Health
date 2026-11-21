@@ -22,7 +22,7 @@ Amazfit and Polar H9 data that decides how hard each day should be.
   arrive as notifications, only when the thing is still undone. A daily backup can go to a folder you choose. The app has
   **no internet permission**, so nothing in it can leave the phone.
 - **In Chrome** (`index.html`, served by GitHub Pages): the same screens, with the H9 over Web Bluetooth and
-  Amazfit data from a Zepp CSV export. "Move my data to the app" in Me hands everything to the Android app
+  Amazfit data from the Zepp export. "Move my data to the app" in You hands everything to the Android app
   in one step.
 
 ## Installing and updating, from the phone
@@ -179,6 +179,24 @@ between tabs reuses what was already worked out from the data; anything that cha
   swaps the exercise next time, pain twice takes it out of the plan until you bring it back.
 - **Volume**: one set counts 1 for the muscle an exercise is for and 0.5 for one it trains on the way.
 
+## Your Zepp history
+
+Health Connect brings the recent weeks from Zepp by itself, but only as far back as Zepp has been writing to it, and
+the app reads at most 120 days of it. Zepp's own export fills in everything before that: steps, every night with its
+stages and times, heart rate through the day (a resting estimate for each day), and a Zepp scale's weight and body fat.
+
+1. Zepp › Profile › Settings › Account › Export data. Zepp emails a zip and shows its password.
+2. In Health: You (the face at the top) › Data sources › Amazfit files › **Choose the Zepp zip or its CSV files**, and
+   pick the zip itself; there is no need to unzip it. The password is asked for in the app.
+3. Everything is read on the phone, file by file and line by line, so a large export does not run out of memory. Files
+   are recognised by their columns, so a renamed folder or a newer layout still works; workouts, minute-by-minute steps
+   and the profile are left aside.
+4. A preview shows what each kind covers. Import keeps a copy first (one tap undoes it), never overwrites what you typed,
+   and keeps anything you deleted deleted. Years of history go in whole.
+
+Both locks Zepp-style zips use are opened: the traditional PKWARE one and WinZip AES (checked with its password
+verifier and HMAC). Zip64 archives are read too.
+
 ## Your data
 
 - Saved on the phone, with a second private copy inside the app, yesterday's automatic backup, and the daily
@@ -219,7 +237,8 @@ Plain JavaScript, no build step. Scripts load in this order:
 | `h9.js` | The strap: connection, the beat timeline, live trace, morning HRV check, cardio with α1, heart-rate recovery, crash-safe drafts |
 | `beats.js` | The beat explorer |
 | `lab.js` | The Lab: breathing pacer, resonance finder, orthostatic test, spot check, Live sessions and the beat export |
-| `watch.js` | Zepp CSV import |
+| `zip.js` | Reading a zip on the phone: its table of contents, the PKWARE and WinZip AES locks, inflating with the browser's own DecompressionStream, line by line |
+| `watch.js` | The Zepp export (the zip as emailed, or its CSV files): each file recognised by its columns, reduced to days, previewed, merged |
 | `opengym.js` | openGym: its backup and CSV coming in, the folder link, Health's plan as an openGym plan file with backups and the block |
 | `view-*.js` | One file per screen; `view-food.js` is the diary and everything about adding and changing food, `view-review.js` is Insights, `view-recovery.js` is Heart, `view-records.js` is all your data and a day in detail, `view-checks.js` the data checks |
 | `app.js` | State, routing, events, and the patching renderer |
