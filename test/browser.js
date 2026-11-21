@@ -301,6 +301,22 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await page.tap('#toast button'); await page.waitForTimeout(400);
     assert.strictEqual(await page.evaluate(() => Object.keys(S.sleepx).length), before, 'and undo takes them out');
   });
+  await test('a Health Connect backup zip comes in the same way: what it holds is listed, imported, and undone', async () => {
+    await go('set-sources');
+    const before = await page.evaluate(() => [Object.keys(S.steps).length, Object.keys(S.ex).length]);
+    await page.setInputFiles('#wfile', path.join(__dirname, 'fixtures', 'hc-backup.zip'));
+    await page.waitForSelector('[data-act="wsave"]', { timeout: 15000 });
+    const text = await page.textContent('#view');
+    assert.match(text, /Health Connect backup · watch: Zepp/);
+    assert.match(text, /Steps120 days, 3 Mar 2026 to 30 Jun 2026/);
+    assert.match(text, /Workouts151/);
+    await shot('hc-preview');
+    await page.tap('[data-act="wsave"]'); await page.waitForTimeout(500);
+    assert.match(await page.textContent('#toast'), /Imported 120 days and \d+ workouts/);
+    assert.ok(await page.evaluate(() => S.sleepx['2026-06-30']?.nap === 40), 'the nights are in');
+    await page.tap('#toast button'); await page.waitForTimeout(400);
+    assert.deepStrictEqual(await page.evaluate(() => [Object.keys(S.steps).length, Object.keys(S.ex).length]), before, 'and undo takes them out');
+  });
   await test('no errors were thrown on any screen', async () => assert.deepStrictEqual(errors, []));
 
   console.log(`\n${passed} passed, ${failed} failed`);

@@ -140,6 +140,29 @@ async function zipAesOpen(data, e, pw) {
   return out;
 }
 
+// One file from the archive, whole: unlocked, inflated straight into a buffer of its stated size.
+async function zipBytes(u8, e, pw, progress = () => {}) {
+  let data = zipData(u8, e), method = e.method;
+  if (e.encrypted) {
+    if (!pw) throw zipErr('password', 'This zip needs its password.');
+    if (e.method === 99 && e.aes) { data = await zipAesOpen(data, e, pw); method = e.aes.method; }
+    else data = await zipCryptoOpen(data, e, pw);
+  }
+  if (method === 0) return data.slice();
+  if (method !== 8) throw zipErr('unsupported', `“${e.name}” is packed in a way this app cannot open (method ${method}).`);
+  const out = new Uint8Array(e.usize), rd = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader();
+  let at = 0, tick = 0;
+  try {
+    for (;;) {
+      const { value, done } = await rd.read();
+      if (done) break;
+      if (at + value.length > out.length) throw zipErr('corrupt', `“${e.name}” is larger than the zip says.`);
+      out.set(value, at); at += value.length;
+      if (at - tick > 8e6) { tick = at; progress(at / out.length); }
+    }
+  } catch (err) { throw err.code ? err : zipErr(e.encrypted ? 'password' : 'corrupt', e.encrypted ? 'Wrong password.' : `“${e.name}” is damaged inside the zip.`); }
+  return at === out.length ? out : out.subarray(0, at);
+}
 // One file from the archive, unlocked and inflated, line by line.
 async function zipLines(u8, e, pw, onLine) {
   let data = zipData(u8, e), method = e.method;

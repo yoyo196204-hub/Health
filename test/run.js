@@ -701,6 +701,105 @@ atest('importing 500 days goes in whole, keeps what you typed, and can be undone
   assert.strictEqual(run(c, 'Object.keys(S.steps).length'), 0, 'undo takes it all out again');
 });
 
+// ---- a Health Connect backup: the zip Android writes, with one SQLite database inside ----
+// Fixture: test/fixtures/hc-backup.zip, made by test/make-hc-fixture.py with Android's own table definitions and
+// 120 made-up days (a watch, a phone, a chest strap, openGym, and this app itself writing to Health Connect).
+function hcBox(c) {
+  const fx = zipBox(c);
+  for (const f of ['sqlite.js', 'hcbackup.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), c, { filename: f });
+  c.u8 = fx('hc-backup.zip');
+  // The fixture's days end on 30 June 2026: today is the day after, so the newest days count as recent.
+  run(c, "todayKey = () => '2026-07-01'");
+  return fx;
+}
+const hcRead = async c => JSON.parse(JSON.stringify(await vm.runInContext(`(async () => { const e = zipEntries(u8).find(e => /health_connect_export\\.db$/.test(e.name));
+  const raw = await zipBytes(u8, e, null); db = sqliteOpen(raw); db.raw = raw; return hcBackup(db); })()`, c)));
+atest('the database reader gives every row of every table, as SQLite itself does: long rows, computed columns, the rowid', async c => {
+  hcBox(c);
+  await hcRead(c);
+  const n = run(c, 'Object.fromEntries(Object.keys(db.tables).filter(t => !/^sqlite_/.test(t)).sort().map(t => [t, db.each(t, () => {})]))');
+  // The counts Python's sqlite3 gives for the same file.
+  assert.deepStrictEqual(n, { active_calories_burned_record_table: 240, application_info_table: 6, body_fat_record_table: 18, distance_record_table: 119,
+    exercise_session_record_table: 152, heart_rate_record_series_table: 16540, heart_rate_record_table: 61, heart_rate_variability_rmssd_record_table: 240,
+    oxygen_saturation_record_table: 60, respiratory_rate_record_table: 120, resting_heart_rate_record_table: 148, sleep_session_record_table: 161,
+    sleep_stages_table: 1080, steps_record_table: 597, total_calories_burned_record_table: 120, vo2_max_record_table: 8, weight_record_table: 36 });
+  assert.deepStrictEqual(run(c, '(() => { let a = 0, b = 0; db.each("heart_rate_record_series_table", r => { a += r.beats_per_minute; b += r.epoch_millis % 1000003; }); return [a, b]; })()'), [1625770, 8311788447], 'every value, not only every row');
+  const icon = run(c, '(() => { let x; db.each("application_info_table", r => { if (r.row_id === 1) x = [r.app_icon.length, Array.from(r.app_icon.subarray(8989, 8999), b => b.toString(16).padStart(2, "0")).join("").toUpperCase()]; }); return x; })()');
+  assert.deepStrictEqual(icon, [9000, 'CD3F07418378D0FDB226'], 'a 9000-byte value read across its overflow pages');
+  const last = run(c, '(() => { let x; db.each("steps_record_table", r => { x = r; }); return { id: x.row_id, s: x.start_time, n: x.count, local: x.local_date_time_start_time, off: x.end_zone_offset }; })()');
+  assert.deepStrictEqual(last, { id: 597, s: 1782799200000, n: 12000, local: null, off: 3600 }, 'the columns after a computed one are not shifted');
+  assert.throws(() => run(c, 'sqliteOpen(new TextEncoder().encode("SQLite format 2 and then some"))'), /not an SQLite database/);
+  // A database cut short (a download that stopped) is said to be damaged, not read as a shorter one.
+  assert.throws(() => run(c, 'sqliteOpen(db.raw.slice(0, 300000)).each("heart_rate_record_series_table", () => {})'), /damaged or cut short/);
+  assert.throws(() => run(c, '(() => { const b = new Uint8Array(db.raw.length); b.set(db.raw.subarray(0, 300000)); sqliteOpen(b).each("heart_rate_record_series_table", () => {}); })()'), /damaged or cut short/);
+});
+atest('a Health Connect backup becomes days exactly as the daily sync makes them', async c => {
+  hcBox(c);
+  const H = await hcRead(c), D = H.days;
+  assert.strictEqual(H.watch, 'Zepp');
+  assert.deepStrictEqual(H.apps, ['Android', 'Google Fit', 'Polar Flow', 'Zepp', 'openGym'], 'this app is not listed as a source of its own data');
+  assert.strictEqual(Object.keys(D).length, 120);
+  // Steps and distance: the watch's own count, not the phone's; the phone's only on a day the watch wrote none.
+  assert.strictEqual(D['2026-03-03'].st, 8500); assert.strictEqual(D['2026-03-03'].di, 6400);
+  assert.strictEqual(D['2026-03-13'].st, 12000); assert.strictEqual(D['2026-03-13'].di, undefined);
+  assert.deepStrictEqual([D['2026-04-12'].st, D['2026-04-13'].st], [8540 + 200, 8541 + 400], 'a walk across midnight is shared by time');
+  // Energy: the app with the whole day's figure, not the watch's workouts alone.
+  assert.deepStrictEqual([D['2026-03-03'].ak, D['2026-03-03'].tk], [600, 2400]);
+  // Sleep, filed under the morning: the watch's night, in stages, not the phone's longer guess; a nap beside it.
+  const sl = D['2026-03-03'].sl;
+  assert.deepStrictEqual([sl.d, sl.l, sl.r, sl.w, sl.bed, sl.nap, sl.seg.length], [90, 260, 90, 10, 450, 0, 9]);
+  assert.strictEqual((sl.off - sl.on + 1440) % 1440, 450, 'asleep at, awake at');
+  assert.deepStrictEqual(sl.seg.slice(0, 3), [[0, 30, 2], [30, 60, 3], [90, 60, 2]]);
+  assert.strictEqual(D['2026-06-30'].sl.nap, 40);
+  assert.deepStrictEqual([D['2026-06-30'].sl.hr, D['2026-06-30'].sl.lo], [52.7, 50], 'heart rate asleep and its low point, from the watch');
+  // Readings: the watch's alone where it wrote any, the phone's where it did not, an estimate from heart rate where none.
+  assert.strictEqual(D['2026-03-03'].rh, 55, 'the phone’s 70 the same day is not averaged in');
+  assert.strictEqual(D['2026-03-23'].rh, 70);
+  assert.deepStrictEqual([D['2026-03-24'].rh, D['2026-03-24'].rp], [undefined, 61]);
+  assert.deepStrictEqual([D['2026-03-03'].hv, D['2026-03-03'].o2, D['2026-03-03'].br], [65, 97, 14.5]);
+  // Weight in grams becomes kilograms, the morning's reading; VO2max is the day's latest.
+  assert.deepStrictEqual([D['2026-03-03'].wt, D['2026-03-03'].bf, D['2026-03-03'].vo], [80, 22.5, 46]);
+  // The 24-hour curve, for recent days only.
+  assert.strictEqual(D['2026-06-30'].hd.length, 288);
+  assert.ok(D['2026-06-30'].hd.filter(Boolean).length > 250);
+  assert.strictEqual(D['2026-05-01'].hd, undefined);
+  // Workouts: any app's but this one's; openGym's keep their routine's name; a kind with no name here keeps its title.
+  assert.strictEqual(H.ex.length, 151);
+  assert.ok(!H.ex.some(w => w.src === 'Personal' || w.k === 'Mine'));
+  assert.strictEqual(H.ex.find(w => w.src === 'Google Fit').k, 'Frisbee');
+  const og = H.ex.find(w => w.og);
+  assert.deepStrictEqual([og.k, og.ti, og.src], ['Strength training', 'Push day A', 'openGym']);
+  const walk = H.ex.filter(w => w.k === 'Walk').at(-1), secs = walk.h.reduce((a, [, s]) => a + s, 0);
+  assert.ok(walk.h.every(([b]) => b >= 110 && b < 130), 'the watch’s heart rate, not the strap’s 160 on a day the watch covered');
+  assert.ok(Math.abs(secs - 2700) <= 15, `seconds at each heart rate add up to the walk: ${secs}`);
+});
+atest('importing a Health Connect backup: what you typed, synced or deleted stays as it was, and undo takes it all out', async c => {
+  hcBox(c);
+  c.render = () => {}; c.buzz = () => {}; c.toast = (msg) => { c.said = msg; };
+  const H = await hcRead(c);
+  c.H = H;
+  const walk = H.ex.find(w => w.k === 'Walk' && new Date(w.s).toISOString().startsWith('2026-03-05'));
+  run(c, `S = sanitize({}); setManual('weights', '2026-03-03', 88.8);
+    S.ex['2026-03-04'] = [{ s: ${Date.parse('2026-03-04T07:00:00Z')}, e: ${Date.parse('2026-03-04T08:00:00Z')}, k: 'Run', src: 'Zepp', h: [] }];
+    S.gone.ex = { '${walk.s}': 1 };`);
+  const P = run(c, 'hcPreview(H)');
+  assert.deepStrictEqual(P.lines[0], ['Steps', '120 days, 3 Mar 2026 to 30 Jun 2026']);
+  assert.deepStrictEqual(P.lines.map(x => x[0]), ['Steps', 'Sleep', 'Heart rate', 'Overnight HRV', 'Breathing in sleep', 'Blood oxygen', 'Weight', 'Body fat', 'Workouts']);
+  run(c, 'watchPreview = [hcPreview(H)]; watchAct("wsave")');
+  const S = run(c, `({ steps: Object.keys(S.steps).length, sleep: Object.keys(S.sleepx).length, rhr: Object.keys(S.rhr).length, w: S.weights['2026-03-03'], w2: S.weights['2026-03-10'],
+    ex4: S.ex['2026-03-04'].map(w => w.k), ex5: S.ex['2026-03-05'] || null, ex1: S.ex['2026-03-07'].map(w => w.k).sort(), og: S.ex['2026-03-07'].find(w => w.og).ti, hrd: Object.keys(S.hrd).length })`);
+  assert.deepStrictEqual([S.steps, S.sleep, S.rhr], [120, 120, 120], 'the day with no resting figure has the estimate from heart rate');
+  assert.strictEqual(S.w, 88.8, 'a weight you typed is not overwritten');
+  assert.strictEqual(S.w2, 79.9, 'the backup’s weights are in');
+  assert.deepStrictEqual(S.ex4, ['Run'], 'a day’s workouts already here are not replaced');
+  assert.strictEqual(S.ex5, null, 'a workout you deleted does not come back');
+  assert.deepStrictEqual(S.ex1, ['Strength training', 'Walk']); assert.strictEqual(S.og, 'Push day A');
+  assert.ok(S.hrd >= 30, `24-hour curves for the recent days: ${S.hrd}`);
+  assert.match(c.said, /^Imported 120 days and 149 workouts$/, 'all but the deleted one and the day that had its own');
+  run(c, 'restoreSnapshot()');
+  assert.deepStrictEqual(run(c, '[Object.keys(S.steps).length, Object.keys(S.ex).length, S.weights["2026-03-03"]]'), [0, 1, 88.8], 'undo takes it all out again');
+});
+
 // ---- the web app as files: these guard against the failures that only show up on a phone ----
 const scripts = [...fs.readFileSync(path.join(root, 'index.html'), 'utf8').matchAll(/<script src="([a-z0-9-]+\.js)/g)].map(m => m[1]);
 test('a logged food keeps its carbs, fat and weight through saving and loading; unknown stays unknown', c => {

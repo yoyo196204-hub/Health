@@ -129,6 +129,18 @@ async function watchRead(files) {
   watchPreview = found;
   render();
 }
+// What a Health Connect backup holds, for the preview: one line per kind, with how many days and from when to when.
+const HCB_STEP = { steps_record_table: 'steps', distance_record_table: 'distance', active_calories_burned_record_table: 'active energy', total_calories_burned_record_table: 'total energy',
+  sleep_stages_table: 'sleep stages', sleep_session_record_table: 'nights', resting_heart_rate_record_table: 'resting heart rate', heart_rate_variability_rmssd_record_table: 'overnight HRV',
+  oxygen_saturation_record_table: 'blood oxygen', respiratory_rate_record_table: 'breathing rate', weight_record_table: 'weight', body_fat_record_table: 'body fat', vo2_max_record_table: 'VO2max',
+  exercise_session_record_table: 'workouts', heart_rate_record_table: 'heart rate', heart_rate_record_series_table: 'heart rate' };
+function hcPreview(H) {
+  const ks = Object.keys(H.days).sort(), span = f => { const k = ks.filter(d => f(H.days[d])); return k.length ? `${k.length} days, ${dateLabel(k[0], { day: 'numeric', month: 'short', year: 'numeric' })} to ${dateLabel(k[k.length - 1], { day: 'numeric', month: 'short', year: 'numeric' })}` : null; };
+  const lines = [['Steps', span(d => d.st != null)], ['Sleep', span(d => d.sl)], ['Heart rate', span(d => d.rh != null || d.rp != null)], ['Overnight HRV', span(d => d.hv != null)],
+    ['Breathing in sleep', span(d => d.br != null)], ['Blood oxygen', span(d => d.o2 != null)], ['Weight', span(d => d.wt != null)], ['Body fat', span(d => d.bf != null)],
+    ['Workouts', H.ex.length ? `${H.ex.length}` : null]].filter(x => x[1]);
+  return { name: `Health Connect backup${H.watch ? ` · watch: ${H.watch}` : ''}`, kind: 'Health Connect backup', P: { days: H.days }, ex: H.ex, lines, apps: H.apps };
+}
 // Every CSV in an export, read and recognised: what it found, and what it left aside.
 async function zipParse(u8, pw, progress = () => {}) {
   const all = zipEntries(u8).filter(e => !e.dir && /\.csv$/i.test(e.name));
@@ -152,7 +164,19 @@ async function zipImport(file, pw = null) {
   watchPreview = null; render();
   try {
     if (file.size > 600e6) throw zipErr('big', 'That file is over 600 MB: export a shorter period from Zepp.');
-    const u8 = new Uint8Array(await file.arrayBuffer());
+    let u8 = new Uint8Array(await file.arrayBuffer());
+    const dbe = zipEntries(u8).find(e => /(^|\/)health_connect_export\.db$/i.test(e.name));
+    if (dbe) {
+      if (dbe.encrypted && !pw) { Object.assign(WZIP, { busy: false, need: true }); return render(); }
+      WZIP.msg = 'Unpacking the Health Connect backup…'; wzipPaint();
+      let bytes = await zipBytes(u8, dbe, pw ? new TextEncoder().encode(pw) : null, f => { WZIP.msg = `Unpacking the Health Connect backup · ${Math.round(f * 100)}%`; wzipPaint(); });
+      u8 = null;
+      const H = await hcBackup(sqliteOpen(bytes), name => { WZIP.msg = `Reading ${HCB_STEP[name] || 'the backup'}…`; wzipPaint(); });
+      bytes = null;
+      watchPreview = [hcPreview(H)];
+      Object.assign(WZIP, { file: null, busy: false, msg: '' }); buzz('ok');
+      return render();
+    }
     if (zipEntries(u8).some(e => e.encrypted && /\.csv$/i.test(e.name)) && !pw) { Object.assign(WZIP, { busy: false, need: true }); return render(); }
     const { found, other } = await zipParse(u8, pw, (name, pct) => { WZIP.msg = `Reading ${name} · ${pct}%`; wzipPaint(); });
     watchPreview = watchGroup(found);
@@ -181,16 +205,26 @@ function watchAct(a) {
     for (const f of watchPreview) if (f.kind) for (const [k, d] of Object.entries(f.P.days)) Object.assign(days[k] ||= {}, d);
     // One sync takes at most 400 days, so years of history go in as several, oldest first.
     const keys = Object.keys(days).sort(), got = { days: 0 };
-    snapshot('Before importing Zepp history');
+    snapshot(watchPreview.some(f => f.lines) ? 'Before importing a Health Connect backup' : 'Before importing Zepp history');
     for (let i = 0; i < keys.length; i += 400) got.days += mergeSync({ days: Object.fromEntries(keys.slice(i, i + 400).map(k => [k, days[k]])) }).days;
     if (keys.length && (!S.meta.watch || keys[keys.length - 1] > S.meta.watch)) S.meta.watch = keys[keys.length - 1];
+    let wk = 0;
+    for (const f of watchPreview) if (f.ex?.length) {
+      const by = {};
+      for (const w of f.ex) { const c = cleanEx(w); if (c && !S.gone.ex?.[String(c.s)]) (by[dk(new Date(c.s))] ||= []).push(c); }
+      for (const [k, list] of Object.entries(by)) if (!S.ex[k] && k <= todayKey()) { S.ex[k] = list.slice(0, 20); wk += list.length; }
+    }
     watchPreview = null; save(); buzz('done');
-    toast(`Imported ${plural(got.days, 'day')}`, 7000, { label: 'Undo', fn: () => { restoreSnapshot(); render(); toast('Import undone'); } });
+    toast(`Imported ${plural(got.days, 'day')}${wk ? ` and ${plural(wk, 'workout')}` : ''}`, 7000, { label: 'Undo', fn: () => { restoreSnapshot(); render(); toast('Import undone'); } });
     return render();
   }
 }
 function watchPreviewBlock() {
   const span = d => { const k = Object.keys(d).sort(); return k.length ? `${k.length} days, ${dateLabel(k[0], { day: 'numeric', month: 'short', year: 'numeric' })} to ${dateLabel(k[k.length - 1], { day: 'numeric', month: 'short', year: 'numeric' })}` : 'no usable rows'; };
+  const hc = watchPreview.find(f => f.lines);
+  if (hc) return `<p class="sub">${esc(hc.name)}. Written by ${hc.apps.map(esc).join(', ')}.</p><ul class="list">${hc.lines.map(([k, v]) => `<li><span class="grow"><span class="nm">${k}</span><span class="sub">${v}</span></span></li>`).join('')}</ul>
+    <p class="sub">Where the watch and another app both wrote the same kind of data, the watch's figures are used, exactly as the daily sync does. Days you typed in yourself are kept as they are, workouts already here are not replaced, and a copy is kept first so the import can be undone.</p>
+    <div class="rowb"><button class="solid" data-act="wsave">Import</button><button class="ghost" data-act="wcancel">Cancel</button></div>`;
   return `<ul class="list">${watchPreview.map(f => `<li><span class="grow"><span class="nm">${f.kind ? f.kind.replace(/^./, c => c.toUpperCase()) : esc(f.name)}</span><span class="sub">${f.kind ? `${span(f.P.days)} · ${esc(f.name)}` : `not used${f.note ? ', ' + esc(f.note) : ''}`}</span></span></li>`).join('')}</ul>
     <p class="sub">Days you typed in yourself are kept as they are, and a copy is kept first so the import can be undone.</p>
     <div class="rowb">${watchPreview.some(f => f.kind) ? '<button class="solid" data-act="wsave">Import</button>' : ''}<button class="ghost" data-act="wcancel">Cancel</button></div>`;

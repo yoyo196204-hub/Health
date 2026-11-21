@@ -179,14 +179,14 @@ between tabs reuses what was already worked out from the data; anything that cha
   swaps the exercise next time, pain twice takes it out of the plan until you bring it back.
 - **Volume**: one set counts 1 for the muscle an exercise is for and 0.5 for one it trains on the way.
 
-## Your Zepp history
+## Your older history (Zepp export or Health Connect backup)
 
 Health Connect brings the recent weeks from Zepp by itself, but only as far back as Zepp has been writing to it, and
 the app reads at most 120 days of it. Zepp's own export fills in everything before that: steps, every night with its
 stages and times, heart rate through the day (a resting estimate for each day), and a Zepp scale's weight and body fat.
 
 1. Zepp › Profile › Settings › Account › Export data. Zepp emails a zip and shows its password.
-2. In Health: You (the face at the top) › Data sources › Amazfit files › **Choose the Zepp zip or its CSV files**, and
+2. In Health: You (the face at the top) › Data sources › History files › **Choose a Zepp or Health Connect zip**, and
    pick the zip itself; there is no need to unzip it. The password is asked for in the app.
 3. Everything is read on the phone, file by file and line by line, so a large export does not run out of memory. Files
    are recognised by their columns, so a renamed folder or a newer layout still works; workouts, minute-by-minute steps
@@ -196,6 +196,28 @@ stages and times, heart rate through the day (a resting estimate for each day), 
 
 Both locks Zepp-style zips use are opened: the traditional PKWARE one and WinZip AES (checked with its password
 verifier and HMAC). Zip64 archives are read too.
+
+### A Health Connect backup
+
+Android can write everything Health Connect holds to one file: Settings › Security and privacy › Health Connect ›
+Export (on some phones, Health Connect › Data and access › Export). The "Health Connect.zip" it saves, to Drive or the
+phone, has every app's records as far back as Health Connect has them, so it reaches past the sync's 120 days and
+also holds what Zepp never exported.
+
+- Pick it the same way as a Zepp zip. Inside is an SQLite database; the app reads it itself (sqlite.js, the file
+  format as sqlite.org documents it: pages, B-trees, overflow pages), with nothing installed and nothing uploaded.
+- The records become days by the same rules as the daily sync (HealthReader.kt), so an imported day and a synced day
+  agree: the watch app's figures where it wrote any, otherwise the fullest single app's (never two devices added
+  together); a record that crosses midnight is shared between the days by time; a night is filed under the morning it
+  ends, the watch's longest session is the main sleep, the rest naps; resting heart rate, overnight HRV, breathing rate
+  and blood oxygen are the day's average; weight is the morning's first; heart rate gives the rate asleep and its low
+  point, a resting estimate on days with no resting figure, the 24-hour curve for the last 45 days, and each workout's
+  seconds at each bpm. A chest strap's heart rate is dropped on days the watch covered.
+- Workouts from any app but this one come in, on days that have none yet; openGym's keep their routine's name.
+- The database is unpacked whole into memory (about 2.5 times the zip's size), so a very large backup needs a phone
+  with memory to spare (a 70 MB zip needs roughly 250 MB while it is read).
+- Tests: `python3 test/make-hc-fixture.py` writes `test/fixtures/hc-backup.zip`, 120 made-up days in Android's own
+  table layout; the engine tests check the reader against Python's sqlite3 row for row.
 
 ## Your data
 
