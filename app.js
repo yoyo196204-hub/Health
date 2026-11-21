@@ -101,7 +101,7 @@ function render() {
   const adding = base?.type === 'add' && MEALS.some(m => m[0] === base.key), setting = base?.type === 'set' || base?.type === 'lab' || base?.type === 'beats';
   const key = base ? `${base.type}-${base.key}` : tab + (tab === 'food' ? day : '');
   try {
-    const banner = (loadNote ? `<p class="flag banner">${loadNote} <button class="link" data-act="dismissnote">OK</button></p>` : '') + (saveFailed ? '<p class="flag banner">Storage is full or blocked: changes are not being kept. Export a backup from Me › Backup and data.</p>' : '');
+    const banner = (loadNote ? `<p class="flag banner">${loadNote} <button class="link" data-act="dismissnote">OK</button></p>` : '') + (saveFailed ? '<p class="flag banner">Storage is full or blocked: changes are not being kept. Export a backup from You › Backup and data.</p>' : '');
     $('#view > .jumpbar')?.remove();
     paint($('#view'), banner + (adding ? vAdd(base.key) : base?.type === 'lab' ? vLab(base.key) : base?.type === 'beats' ? vBeats(base.key) : setting ? vSet(base.key) : VIEWS[tab]()), key !== screenKey);
     paint($('#sheet'), pending ? (pending.type === 'halftone' ? vHalftone(pending) : pending.type === 'opengym' ? vOpenGym(pending) : vImport(pending)) : pop && POPS[pop.kind] ? part(POPS[pop.kind], pop) : overlay?.type === 'why' ? vWhy(overlay.key) : '', !$('#sheet .sheet'));

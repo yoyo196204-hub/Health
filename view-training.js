@@ -88,7 +88,7 @@ function sessionList() {
   const ks = liftDays(21);
   // openGym sessions Health Connect already has, whose sets have not arrived yet (openGym's backup comes later).
   const pending = range(7).filter(k => !S.lifts[k]).flatMap(k => sessions(k).filter(s => s.og).map(s => ({ k, s })));
-  if (!ks.length && !pending.length) return para(S.meta.og || OGF.folder ? 'No lifting in the last three weeks.' : 'Sessions you log in openGym appear here with every set. Link openGym in Me › Data sources.');
+  if (!ks.length && !pending.length) return para(S.meta.og || OGF.folder ? 'No lifting in the last three weeks.' : 'Sessions you log in openGym appear here with every set. Link openGym in You › Data sources.');
   return `<ul class="list">${pending.map(({ k, s }) => `<li><span class="grow"><span class="nm">${esc(s.kind)} ${src('watch')}</span><span class="sub">${dateLabel(k, { weekday: 'short', day: 'numeric', month: 'short' })} · ${dur(s.dur / 60)}${s.avg ? ` · avg ${Math.round(s.avg)} bpm` : ''} · sets arrive with openGym’s next backup</span></span></li>`).join('')}
     ${ks.map((k, i) => { const St = dayStats(k), L = S.lifts[k];
       return `${i === 4 ? `</ul><details class="inner hist"><summary>Earlier · ${ks.length - 4}</summary><ul class="list">` : ''}<li><button class="rowbtn" data-act="sessinfo" data-k="${k}"><span class="grow"><span class="nm">${esc(dayName(k))} ${L.src === 'og' ? '<span class="src s-og">openGym</span>' : ''}</span>

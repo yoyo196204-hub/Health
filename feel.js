@@ -404,7 +404,7 @@ function jumpbar() {
   const v = $('#view');
   if (!v || overlay || !['recovery', 'training', 'review'].includes(tab)) return;
   if (v.querySelector(':scope > .jumpbar')) v.querySelector(':scope > .jumpbar').remove();
-  const secs = [...v.querySelectorAll(':scope > section.block')].filter(x => x.querySelector(':scope > .mh > h2'));
+  const secs = [...v.querySelectorAll(':scope > section.block, :scope > section.card')].filter(x => x.querySelector(':scope > .mh > h2'));
   if (secs.length < 3) return;
   const byTitle = new Map(), owner = new Map();
   secs.forEach((x, i) => {

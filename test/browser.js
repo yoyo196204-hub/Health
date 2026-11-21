@@ -224,6 +224,64 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     assert.strictEqual(await page.evaluate(() => S.food[todayKey()].filter(x => x.m === 'dinner').length), 2, 'the plate went in with one tap');
     await page.evaluate(() => { const y = shift(todayKey(), -1); delete S.food[todayKey()]; if (S.food[y]) S.food[y] = S.food[y].filter(x => x.n !== 'Chapati, big'); S.plates = []; save(); });
   });
+  await test('the log button: a meal from anywhere, the amount by ruler, one back gesture home', async () => {
+    await go('recovery');
+    await page.tap('#fab'); await page.waitForTimeout(400);
+    assert.ok(await page.evaluate(() => document.querySelectorAll('.qgrid .qa').length) >= 12, 'every kind of log is offered');
+    await page.tap('.qgrid [data-m="dinner"]:not([data-c])'); await page.waitForTimeout(700);
+    assert.deepStrictEqual(await page.evaluate(() => [overlay?.type, overlay?.key, pop]), ['add', 'dinner', null]);
+    // Hold a food: its amount, then drag the ruler three quarters further.
+    await page.evaluate(() => PRESS.food(document.querySelector('#rows li[data-press]')));
+    await page.waitForTimeout(500);
+    const r = await page.evaluate(() => { const q = document.querySelector('.sheet .scrub').getBoundingClientRect(); return [q.left + q.width / 2, q.top + q.height / 2]; });
+    await page.mouse.move(r[0], r[1]); await page.mouse.down();
+    for (let i = 1; i <= 11; i++) { await page.mouse.move(r[0] - i * 6, r[1]); await page.waitForTimeout(16); }
+    await page.mouse.up(); await page.waitForTimeout(700);
+    assert.strictEqual(await page.evaluate(() => PORT.q), 1.75, 'dragging the ruler sets the amount');
+    assert.strictEqual(await page.evaluate(() => +document.getElementById('pqin').value), 1.75, 'and the field follows');
+    const id = await page.evaluate(() => pop.id);
+    await page.tap('[data-act="padd"]'); await page.waitForTimeout(400);
+    assert.strictEqual(await page.evaluate(id => S.food[todayKey()].find(e => e.id === id && e.m === 'dinner')?.q, id), 1.75);
+    assert.ok(await page.evaluate(id => S.food[todayKey()].find(e => e.id === id).t > 1e12, id), 'a log made on the day keeps its time');
+    await page.tap('.addfoot .solid'); await page.waitForTimeout(700);
+    assert.strictEqual(await page.evaluate(() => location.hash), '#recovery', 'Done goes back to where the log button was pressed');
+  });
+  await test('Food: a swipe across the page changes the day, never past today; the strip goes to any day', async () => {
+    await go('food'); await page.evaluate(() => { day = todayKey(); render(); scrollTo(0, 0); });
+    const y = await page.evaluate(() => { const r = document.querySelector('.fsum').getBoundingClientRect(); return Math.round(r.top + 40); });
+    await drag(330, y, 60, y + 6);
+    assert.strictEqual(await page.evaluate(() => day === todayKey()), true, 'no day after today');
+    await drag(60, y, 330, y + 6);
+    assert.strictEqual(await page.evaluate(() => day), await page.evaluate(() => shift(todayKey(), -1)));
+    await page.evaluate(() => { location.hash = 'food'; });
+    const first = await page.evaluate(() => document.querySelector('.ds:not([disabled])').dataset.k);
+    await page.tap('.ds:not([disabled])'); await page.waitForTimeout(500);
+    assert.strictEqual(await page.evaluate(() => day), first);
+    await page.evaluate(() => { day = todayKey(); render(); });
+  });
+  await test('weigh in: steppers, a reading kept, a typo caught and undone', async () => {
+    await go('today');
+    await page.evaluate(() => { delete S.weights[todayKey()]; save(); render(); });
+    await page.tap('.duo .card.tap'); await page.waitForTimeout(400);
+    const base = await page.evaluate(() => +document.getElementById('wgin').value);
+    await page.tap('[data-act="wg"][data-d="1"]'); await page.tap('[data-act="wg"][data-d="1"]');
+    await page.tap('[data-act="wgsave"]'); await page.waitForTimeout(400);
+    assert.strictEqual(await page.evaluate(() => S.weights[todayKey()]), Math.round((base + 0.2) * 10) / 10);
+    await page.tap('.duo .card.tap'); await page.waitForTimeout(400);
+    await page.fill('#wgin', String(base + 9)); await page.tap('[data-act="wgsave"]'); await page.waitForTimeout(400);
+    assert.match(await page.textContent('#toast'), /from your trend\. A typo\?/);
+    await page.tap('#toast button'); await page.waitForTimeout(300);
+    assert.strictEqual(await page.evaluate(() => S.weights[todayKey()]), Math.round((base + 0.2) * 10) / 10, 'undo puts the reading back');
+  });
+  await test('protein reaching its target is felt and said, once', async () => {
+    await go('food');
+    await page.evaluate(() => { day = todayKey(); delete S.food[todayKey()]; save(); render(); });
+    const T = await page.evaluate(() => targets().protein);
+    await page.evaluate(n => { const f = food('whey'); for (let i = 0; i < n; i++) bump('lunch', f, 1); }, Math.ceil(T / 24));
+    await page.waitForTimeout(100);
+    assert.match(await page.textContent('#toast'), /Protein target reached/);
+    await page.evaluate(() => { delete S.food[todayKey()]; save(); render(); });
+  });
   await test('no errors were thrown on any screen', async () => assert.deepStrictEqual(errors, []));
 
   console.log(`\n${passed} passed, ${failed} failed`);

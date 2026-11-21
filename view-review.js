@@ -48,16 +48,7 @@ function decisions(T, cells, E, St) {
   if (A.who < 75 && A.n < 3) out.push([1, `${Math.round(A.who)} active minutes this week`, 'Two brisk 25-minute walks with the strap would double it.', 'zones']);
   return out.sort((a, b) => b[0] - a[0]);
 }
-// A correlation read honestly: the 95% interval from Fisher's z, and a word only when the interval leaves out zero.
-// Strength words follow Cohen (0.1 small, 0.3 medium, 0.5 large). Within one person, days are not independent, so
-// even a clear link here is a lead to test, not a cause.
-function rRead(l) {
-  if (l.n < 14) return { txt: `<b>${l.n} of 14 days</b>`, cls: 'lk muted' };
-  if (l.r == null) return { txt: `<b>too little variation</b><span class="sub">one side barely changed · n ${l.n}</span>`, cls: 'lk muted' };
-  const z = Math.atanh(Math.max(-0.999, Math.min(0.999, l.r))), se = 1 / Math.sqrt(l.n - 3), lo = Math.tanh(z - 1.96 * se), hi = Math.tanh(z + 1.96 * se);
-  const clear = lo > 0 || hi < 0, a = Math.abs(l.r), size = a >= 0.5 ? 'strong' : a >= 0.3 ? 'moderate' : 'weak';
-  return { txt: `<b>${clear ? `${size} ${l.r > 0 ? 'positive' : 'negative'} link` : 'no clear link'}</b><span class="sub">r ${sign(l.r, 2)} (95% ${sign(lo, 2)} to ${sign(hi, 2)}) · n ${l.n}</span>`, cls: clear ? 'lk' : 'lk muted' };
-}
+// The week as text, for sharing with a coach or a doctor.
 function shareWeek(T, cells, E) {
   const avg = key => { const v = cells.map(c => c[key]).filter(c => c && c.x != null); return v.length ? mean(v.map(c => c.x)) : null; };
   const A = activityWeek(), L = sleepStats(7), R = rhrTrend(), wk = T.slope == null ? null : T.slope * 7;
@@ -66,7 +57,7 @@ function shareWeek(T, cells, E) {
     `Calories ${avg('kcal') ? fmt(avg('kcal')) : '–'} of ${fmt(T.kcal)} · protein ${avg('protein') ? Math.round(avg('protein')) : '–'} of ${T.protein} g · fibre ${avg('fibre') ? Math.round(avg('fibre')) : '–'} g`,
     `Steps ${avg('steps') ? fmt(avg('steps')) : '–'} a day · active minutes ${Math.round(A.who)} · strength days ${A.strengthDays}`,
     `Sleep ${L.avg != null ? r1(L.avg) + ' h' : '–'} · resting HR ${R.now ? Math.round(R.now) : '–'} bpm`];
-  if (E.implied != null) lines.push(`Burn implied by intake and weight: ${fmt(E.implied)} kcal/day`);
+  if (E.implied != null) lines.push(`Burn learned from intake and weight: ${fmt(E.implied)} ± ${fmt(1.96 * E.sd)} kcal/day`);
   return lines.join('\n');
 }
 // ---------- Insights ----------

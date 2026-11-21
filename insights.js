@@ -67,6 +67,13 @@ function assoc(X, Y) {
 const kcalOf = k => S.food[k] && isComplete(k) ? totals(k).k : null;
 const lnHrv = k => S.hrv[k] ? Math.log(S.hrv[k].rmssd) : null;
 const setsOn = k => S.lifts[k] ? Object.values(S.lifts[k].ex).reduce((a, x) => a + x.filter(s => s[1] > 0).length, 0) : (S.hrv[k] || S.sleep[k] != null ? 0 : null);
+// The clock time of the day's last logged food, in hours (after midnight counts as 24+), from logs made on the day.
+function lastMealHour(k) {
+  const ts = (S.food[k] || []).map(e => e.t).filter(Boolean);
+  if (ts.length < 2 || !isComplete(k)) return null;
+  const d = new Date(Math.max(...ts)), h = d.getHours() + d.getMinutes() / 60;
+  return dk(d) === k ? h : h + 24;
+}
 function onsetDev(k) {
   const on = S.sleepx[k]?.on;
   if (on == null) return null;
@@ -90,6 +97,8 @@ const LINKS = [
     test: 'Each gram of stored glycogen holds about three of water: a carb-heavy day shows on the scale and leaves again.' },
   { id: 'kcal-shr', dom: ['food', 'sleep'], x: 'Calories', y: 'heart rate asleep that night', per: 500, xu: '500 kcal', fx: kcalOf, fy: k => S.sleepx[shift(k, 1)]?.hr ?? null, unit: 'bpm', dp: 1, exp: 1, ev: 'rhr',
     test: 'Digesting a big meal keeps the heart working; try the largest meal earlier on a few days.' },
+  { id: 'late-shr', dom: ['food', 'sleep'], x: 'Last meal later', y: 'heart rate asleep that night', per: 1, xu: 'hour later', fx: lastMealHour, fy: k => S.sleepx[shift(k, 1)]?.hr ?? null, unit: 'bpm', dp: 1, exp: 1, ev: 'rhr',
+    test: 'Finish dinner three hours before bed on a few nights and compare the nights after.' },
   { id: 'st-sl', dom: ['move', 'sleep'], x: 'Steps', y: 'sleep that night', per: 2000, xu: '2,000 steps', fx: k => S.steps[k], fy: k => S.sleep[shift(k, 1)] ?? null, unit: 'min', scale: 60, dp: 0, exp: 1, ev: 'steps',
     test: 'Daytime activity helps sleep pressure build; a walk after dinner is an easy test.' },
   { id: 'sl-st', dom: ['sleep', 'move'], x: 'Sleep', y: 'steps that day', per: 1, xu: 'hour of sleep', fx: k => S.sleep[k], fy: k => S.steps[k] ?? null, unit: 'steps', dp: 0, exp: 1, ev: 'sleep',

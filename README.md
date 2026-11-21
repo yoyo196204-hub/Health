@@ -3,6 +3,11 @@
 A personal fat-loss, training and recovery app for one person, built on published evidence and on that
 person's own data. Every number on screen has a "why" link to the reasoning and the studies behind it.
 
+Everything is worked out on the phone, from nothing but what is stored on it: the energy you actually burn (learned
+from your scale and your food log, with its 95% interval), one recovery number made of signals each read against your
+own normal, the regularity of your sleep, and what drives what in your own day-to-day data. The more you log, the
+narrower the intervals get and the more the app can tell you about yourself.
+
 You lift in [openGym](https://github.com/DuarteSantos8/openGym); Health plans the training and reads it back. The plan
 goes to openGym as one file, the sets come back through openGym's backup folder and Health Connect, and they join the
 Amazfit and Polar H9 data that decides how hard each day should be.
@@ -30,7 +35,7 @@ straight over the last and keeps everything in it. No computer is involved at an
 - **Only ever install from the Releases page.** A build made anywhere else is named "Health test", has its own ID
   and installs separately; it cannot replace or touch the real app.
 - **Moving from version 2** (one time only): version 2 was signed with a key that no longer exists, so version 3
-  is a separate app and installs next to it. In the old app: Me › Backup › Export. In the new app: Today ›
+  is a separate app and installs next to it. In the old app: You › Backup › Export. In the new app: Today ›
   Import a backup, pick that file, check your history is there, then uninstall the old app. Allow Health
   Connect, pick the backup folder and connect the H9 again in the new app.
 
@@ -40,7 +45,7 @@ straight over the last and keeps everything in it. No computer is involved at an
 app needs the internet for it). openGym is where you lift: its animations, rest timer, watch app and 5,600 exercises.
 Health stays the brain: the plan, recovery, food, weight, and the analysis of everything you lift.
 
-**Health → openGym: your plan.** Me › Training › Train in openGym makes `Health plan for openGym.json`: your
+**Health → openGym: your plan.** You › Training › Train in openGym makes `Health plan for openGym.json`: your
 programme as Health has it today (gym or home kit, shoulder care, anything pain has taken out), with rep ranges, double
 progression, the next loads, rest times, the cues and the weekdays, and also:
 
@@ -53,7 +58,7 @@ progression, the next loads, rest times, the cues and the weekdays, and also:
 
 openGym's double progression is the same rule as Health's, so the loads keep moving the same way there.
 
-1. Health: Me › Training › **Save the plan file** (in the app, with openGym's folder linked: **Put the plan in the openGym folder**).
+1. Health: You › Training › **Save the plan file** (in the app, with openGym's folder linked: **Put the plan in the openGym folder**).
 2. openGym: **Plan** › share icon (top right) › **Import a plan file** › pick `Health plan for openGym.json`.
 3. Turn on **Use this weekly schedule**, then **Add to my plan**. The routines are named "Day A (Health)" and so on.
    To run the block: Plan › menu › Programmes › the Health block › Start programme.
@@ -74,10 +79,10 @@ and deletions, and keeps any shoulder report you gave it in Health. Change a set
 Health's own.
 
 - **Android app, automatic**: in openGym, Settings › Data & backup › turn on **Auto-backup on changes**. In Health,
-  Me › Data sources › openGym › **Link openGym's folder** and choose Documents › openGym (the picker opens there).
+  You › Data sources › openGym › **Link openGym's folder** and choose Documents › openGym (the picker opens there).
   The first read shows what would come in; after you accept it, Health reads openGym's newest backup by itself each
   time it opens, and only when it has changed.
-- **By hand, anywhere**: openGym's **Export backup** or **Export as CSV** (workouts), then Me › Data sources ›
+- **By hand, anywhere**: openGym's **Export backup** or **Export as CSV** (workouts), then You › Data sources ›
   openGym › Choose an openGym file. A copy is kept first, so it can be undone.
 
 Exercises in Health's plan go to the same exercise in openGym's library and come back as Health's own. Anything else
@@ -87,20 +92,29 @@ you log in openGym arrives with its name and the muscles it trains, from `opengy
 
 | Tab | What it is for |
 | --- | --- |
-| Today | In the order of the day: the verdict as a ring with HRV, resting heart rate and sleep each against your own normal; a dock of quick actions; what is due elsewhere; calories, protein and fibre left with one concrete suggestion; the meals, each with its protein against the main-meal target (swipe one left to remove it, save any meal as a plate); Body today (weight, steps, sleep, and the waist in a waist week, each marked while due); then at a glance: last night, movement, body trend and the next openGym session |
-| Recovery | One verdict for the day; the H9 morning check (1–5 minutes, lying or sitting) with live beats, skin contact and signal quality, and a result with its tachogram, Poincaré plot and every measure; the strap Lab; night by night, each opening a day in detail; HRV against your normal range, read with morning heart rate; resting and sleeping heart rate; sleep; the watch's overnight HRV and breathing rate against their own baselines; watch-vs-strap agreement |
-| Training | The next openGym session with today's recovery guidance; the shoulder check; sessions with their sets and watch heart rate; strength per lift; the muscle map; cardio with the H9 (live trace, zones, α1) and the aerobic threshold it gives |
-| Review | The week as a matrix, the actions it triggers, the energy ledger, body trend and projections, links in your own data |
+| Today | Three rings: recovery (0–100, in its green/yellow/red zone), calories left, and last night's sleep; what is due today as a row of one-tap actions (weigh in, the morning check, the next meal); Fuel: eaten against the target, protein, carbs, fat and fibre, each meal one tap from adding, and one concrete suggestion; the one thing your data most wants you to know; weight trend and steps; last night with its stages, heart rate asleep and regularity; the next openGym session |
+| Food | The diary. The week as a strip of rings (green within 10% of target, red over it, saffron under); swipe across the page for the day before or after. What is left as a ring, with eaten, target and the burn the model has learned; the four macros; a suggestion. Each meal as a card: tap an entry to change it, hold it, or swipe it left to remove it (with undo); an empty meal offers "same as yesterday" and your usual foods, one tap each. Then where the day's protein and energy went, meal by meal, and the week as bars against the target |
+| Heart | Recovery as one number, with each part it is made of (HRV, resting heart rate, sleep, breathing) drawn against your own normal;  the H9 morning check (1–5 minutes, lying or sitting) with live beats, skin contact and signal quality, and a result with its tachogram, Poincaré plot and every measure; the strap Lab; night by night, each opening a day in detail; HRV against your normal range, read with morning heart rate; resting and sleeping heart rate; sleep; the watch's overnight HRV and breathing rate against their own baselines; watch-vs-strap agreement |
+| Train | The next openGym session with today's recovery guidance; the shoulder check; sessions with their sets and watch heart rate; strength per lift; the muscle map; cardio with the H9 (live trace, zones, α1) and the aerobic threshold it gives |
+| Insights | The headlines from your data; your energy: the burn learned from your scale and log, its 95% interval over time against what you ate, and what this week's balance means in kilograms; the body: weigh-ins with the filtered trend, body fat from your waist, strength, and where the trend leads; what moves what: each link in your own data with its effect in real units, its interval drawn around zero, and how to test it; how you eat across the week (logging, consistency, weekdays against weekends, protein at each meal); the week as a matrix and what it asks you to do |
+| The log button (every tab) | Everything you might log, from anywhere: each meal (the one due now first), quick kcal, plates, search, your own foods, weight, waist, the morning check, breathing, a spot check, cardio, a Live session |
+| Weigh in / waist | A big number set with steppers, a ruler you drag, or the keyboard; it starts at your trend, says how far from it you are, and asks before keeping a reading that looks like a typo |
 | Automation (Android app) | The remembered strap connects by itself when the app opens with it on your chest, and before 11 with no check yet that day the morning check starts by itself; both can be turned off under the morning check. On a day without a morning check the watch's night stands in for it in the verdict, and the verdict says what it rests on |
 | Lab (from Recovery or Today) | Breathe (resonance, cyclic sighing, box; with or without the strap, haptic cues per breath), the resonance finder, the orthostatic test, spot checks, and Live: an open-ended session with RMSSD, SDNN, pNN50, SD1/SD2, breathing rate and α1 moving as you watch, marks for what you are doing, each marked stretch read on its own and against your earlier ones, and the beats saved as a CSV file for other HRV software; every session kept |
 | A day in detail (tap a night, or Your day) | The watch's heart rate across 24 hours with sleep and workouts marked, the night stage by stage, and every number against your previous four weeks |
 | Beat by beat (from any morning check or Lab session) | The recording beat by beat: one finger reads each beat (time to the millisecond, RR, bpm, change from the last, and what correction it needed), a pinch zooms, the strip below moves the window; RMSSD, SDNN, pNN50, SD1/SD2, the Poincaré plot and the spectrum are worked out again for the stretch on screen |
 | Data checks (Me, and a line in Review when something needs a look) | About twenty fixed-rule checks across every dataset: food energy against its own macros, sleep stages against the night's total, watch resting and workout heart rate against the strap (Bland–Altman), saved RMSSD against its own beats, steps against distance, active against total energy, duplicate workouts, load typos, and how fresh the watch data is. Each gives its numbers and lists the records that failed |
-| Adding food | Search that understands Marathi, Hindi and English names (roti, chawal, anda, chaas, aloo, kombdi…) and forgives a typo; chips for Usual, Recent (exactly as you last logged it), Plates (yours first), Quick add, Mine, and every group from home food to Pune street food, pizza and Chinese, bakery and Irani café, and upvas. Tap adds one; hold any food for any amount, by portion or by weight, into any meal |
-| A logged food (tap it) | Type any amount or step it in quarters and halves, weigh it, change the meal, change its own numbers (it then becomes your own entry and the library food stays as it was), move or copy it to another day, or save it as your own food |
-| Me | Your numbers, and a page each for goal, training, profile, data sources, all your data (see, change or delete any record), backup and data, feel, and the evidence |
+| Adding food | A switch between the four meals at the top; search that understands Marathi, Hindi and English names (roti, chawal, anda, chaas, aloo, kombdi…) and forgives a typo; chips for Usual, Recent (exactly as you last logged it), Plates (yours first), Quick add, Mine, and every group from home food to Pune street food, pizza and Chinese, bakery and Irani café, and upvas. Tap adds one (the list keeps its order while you add, so nothing jumps from under your finger); hold any food, or swipe it right, for any amount: steppers, a ruler you drag (a light detent each quarter; a flick keeps it rolling), or by weight, into any meal. The bar at the bottom shows the meal and the day as you go |
+| A logged food (tap it) | Type any amount, step it, or drag its ruler, weigh it, change the meal, change its own numbers (it then becomes your own entry and the library food stays as it was), move or copy it to another day, or save it as your own food |
+| You (the face at the top of every tab) | Your numbers, and a page each for goal, training, profile, data sources, all your data (see, change or delete any record), backup and data, feel, and the evidence |
 
-Gestures: swipe sideways to change tab, swipe right on a page to go back, swipe a row left to delete it (with undo), hold a food for its portion sheet, hold a stepper to repeat, swipe a result card or a toast away, drag a sheet down or tap outside it to close. Recovery, Training and Review carry a section bar that stays at the top and follows your reading.
+Gestures: swipe sideways to change tab (on Food: to change day), swipe right on a page to go back, swipe a row left to delete it (with undo), hold or swipe right on a food for its amount, drag any ruler, hold a stepper to repeat, swipe a result card or a toast away, drag a sheet down or tap outside it to close. Heart, Train and Insights carry a section bar that stays at the top and follows your reading.
+
+Haptics follow one vocabulary everywhere: a press under the finger, a tick when a choice changes, a light detent for each step of a ruler, a double pulse for something saved, a rising triple when protein reaches its target, and a firm double when the day passes its calorie target or a value is refused.
+
+The screen is redrawn as a patch, not from scratch: only what changed is touched, so rings ease to their new length,
+numbers count to their new value, and the scroll, the keyboard and anything half-typed stay where they are. Moving
+between tabs reuses what was already worked out from the data; anything that changes the data recalculates it.
 
 ## How the numbers are made
 
@@ -119,10 +133,35 @@ Gestures: swipe sideways to change tab, swipe right on a page to go back, swipe 
 - **Weight trend**: each weigh-in moves a smoothed line a tenth of the way; the weekly rate is the Theil–Sen
   slope (median of pairwise slopes) over 21 days, so one heavy evening cannot swing it. A weigh-in far from
   the trend asks whether it was a typo.
-- **Calories**: Mifflin-St Jeor plus steps and training, moving gradually to the burn your own complete logging
-  days imply. The target is recalculated on Mondays and moves by at most 150 kcal per update; changing goal,
-  pace or profile recalculates at once. Pace is a setting: maintain, slow 0.4%, steady 0.6%, faster 0.8% a week,
-  never more than a quarter of daily burn.
+- **Your burn** (`energy.js`): a Kalman filter tracks two hidden numbers, your true weight under the scale's noise and
+  the energy you burn a day. Each morning weigh-in pulls on both; each completely logged day says what went in; the steps
+  above or below your usual move that day's burn. A kilogram of change is not taken as 7,700 kcal: the share that is fat
+  depends on how much fat there is (Forbes: dFFM/dFM = 10.4/FM), fat holds 9,440 kcal/kg and lean tissue with its water
+  1,816 (Hall 2008), and body fat comes from your waist and height (Relative Fat Mass, calibrated against DXA in 12,581
+  adults, Woolcott 2018). The scale's own day-to-day noise is measured from your weigh-ins, and a reading far outside it
+  counts for a tenth. Days without a complete log add uncertainty, not bias. The same principle, run with a metabolic
+  model on weigh-ins alone, came within 40 kcal/d of doubly labelled water on average over two years in the CALERIE trial
+  (Sanghvi 2015). Because the burn is learned from your own log, if the log runs low the burn comes out low by the same
+  amount, and the target built on it still lands where it should.
+- **Calories**: Mifflin-St Jeor plus steps and training to start, moving to the learned burn as its interval narrows
+  (none of it at ±300 kcal, all of it at ±150), never further than 25% from the formula. The deficit is your pace times
+  the energy in a kilogram of your own change. The target is recalculated on Mondays and moves by at most 150 kcal per
+  update; changing goal, pace or profile recalculates at once. Pace is a setting: maintain, slow 0.4%, steady 0.6%,
+  faster 0.8% a week, never more than a quarter of daily burn.
+- **The recovery number** (`insights.js`): the verdict decides the zone, by the rules the HRV-guided training trials
+  used (the 7-day average of ln RMSSD against your own range of ± half a standard deviation, read with resting heart rate,
+  sleep and breathing): green 67–99, yellow 34–66, red 1–33. Where the day sits in its zone comes from how far each signal
+  is from your own normal, in standard deviations, weighted by its evidence: HRV 45%, sleep 25%, resting heart rate 20%,
+  breathing in sleep 10%. Every part is shown beside the number.
+- **Sleep regularity**: the Sleep Regularity Index (Phillips 2017), minute by minute from each night's onset and wake
+  time over consecutive nights: the chance of being in the same state 24 hours apart, from −100 to 100. Shown against the
+  UK Biobank median of 81, where regularity predicted mortality more strongly than sleep length (Windred 2024).
+- **What moves what**: each pair (sleep and morning HRV, bedtime and HRV, hard sets and next-morning HRV, sleep and the
+  calories eaten, steps and appetite, calories and carbs and the next morning's scale, the day's food and heart rate
+  asleep, the last meal's time and heart rate asleep, steps and sleep) is read as a single-person study: each series as
+  its deviation from its own 15-day running mean, lagged the way the physiology runs, with the effective number of days
+  cut by both series' autocorrelation, and the effect in real units with a 95% interval. A link is "clear" only when the
+  interval leaves out zero; each says whether it agrees with the research and how to test it on yourself.
 - **Every strap reading** (`hrv.js`): artefacts corrected with thresholds that adapt to your own beat-to-beat spread
   (Lipponen & Tarvainen 2019), so slow breathing is never mistaken for noise; RMSSD, SDNN, pNN50, Poincaré SD1/SD2, the
   Lomb–Scargle spectrum (HF from one minute, LF from two) and breathing rate from the rhythm in the beats. Each packet
@@ -146,13 +185,13 @@ Gestures: swipe sideways to change tab, swipe right on a page to go back, swipe 
   file in your backup folder.
 - Anything that removes data (removing old data, erasing, importing) keeps a copy first and offers Undo;
   the removals themselves need a press and hold.
-- Me › All your data lists every record by kind: tap to change it, swipe left to delete it. Anything deleted that came
+- You › All your data lists every record by kind: tap to change it, swipe left to delete it. Anything deleted that came
   from the watch or a scale stays deleted when the watch syncs again; a typed value always wins over the watch.
 - A strap cardio session is saved every 15 seconds while it runs, so a crash or a closed app offers it back.
-- Me › Backup and data shows what is stored and can **remove data older than** 3, 6, 12 or 24 months, for food,
+- You › Backup and data shows what is stored and can **remove data older than** 3, 6, 12 or 24 months, for food,
   weigh-ins, watch data or training separately.
 - **openGym**: see [Training in openGym](#training-in-opengym).
-- **Halftone**: Me › Backup and data › Bring in Halftone takes a Halftone backup file and adds its sessions,
+- **Halftone**: You › Backup and data › Bring in Halftone takes a Halftone backup file and adds its sessions,
   shoulder reports, bodyweight and cardio. Halftone's five demonstration sessions are recognised and left out,
   and any day already in Health keeps Health's version.
 
@@ -170,17 +209,20 @@ Plain JavaScript, no build step. Scripts load in this order:
 | `body-data.js` | Muscle map outlines (from react-body-highlighter, MIT) |
 | `store.js` | Storage, schema and migration, snapshots, removing old data, Halftone import |
 | `model.js` | Nutrition, weight, heart, HRV, sleep and activity conclusions |
+| `energy.js` | The burn learned from scale and log (Kalman filter), body fat, the energy in a kilogram of change |
+| `insights.js` | Links in your own data, the Sleep Regularity Index, the recovery number, eating patterns, the day's headline |
 | `train.js` | Which session is next, the plan, progression, volume |
 | `native.js` | The bridge to the Android app; one merge path for every outside data source |
-| `feel.js` | Haptics, screen transitions, sheets, undo toasts, press and hold, pull to refresh |
-| `ui.js` | Shared building blocks, the chart and the muscle map |
+| `feel.js` | Haptics, screen transitions, sheets, undo toasts, press and hold, the ruler, swipes, pull to refresh |
+| `ui.js` | Shared building blocks: rings, meters, icons, the chart (with interval bands) and the muscle map |
+| `styles.css`, `inter.woff2` | The design: graphite surfaces, one saffron accent, a colour per domain; Inter with optical sizing, bundled |
 | `h9.js` | The strap: connection, the beat timeline, live trace, morning HRV check, cardio with α1, heart-rate recovery, crash-safe drafts |
 | `beats.js` | The beat explorer |
 | `lab.js` | The Lab: breathing pacer, resonance finder, orthostatic test, spot check, Live sessions and the beat export |
 | `watch.js` | Zepp CSV import |
 | `opengym.js` | openGym: its backup and CSV coming in, the folder link, Health's plan as an openGym plan file with backups and the block |
-| `view-*.js` | One file per screen; `view-records.js` is all your data and a day in detail, `view-checks.js` the data checks |
-| `app.js` | State, routing, events |
+| `view-*.js` | One file per screen; `view-food.js` is the diary and everything about adding and changing food, `view-review.js` is Insights, `view-recovery.js` is Heart, `view-records.js` is all your data and a day in detail, `view-checks.js` the data checks |
+| `app.js` | State, routing, events, and the patching renderer |
 
 Exercise animations live in openGym. Tests: `node test/run.js` (the engine) and `node test/browser.js` (the screens in a real browser: that a finger scrolls every tab, fixed bars stay put, a Live session runs end to end; needs Playwright). Both run on GitHub before every build.
 
@@ -199,6 +241,9 @@ in the repository secret `HEALTH_KEYSTORE_PASSWORD` (keep a copy of it somewhere
 password a build is signed with a throwaway key and becomes "Health test" (`app.health.personal.test`).
 
 ## Credits
+
+The typeface is [Inter](https://github.com/rsms/inter) by Rasmus Andersson, under the SIL Open Font License 1.1
+(`licenses/Inter-OFL.txt`), bundled so the app never fetches anything.
 
 `opengym-ids.js` lists exercise numbers from [openGym](https://github.com/DuarteSantos8/openGym)'s catalogue, with only
 the 1,324 entries whose names and muscles come from ExerciseDB v1 by AscendAPI via

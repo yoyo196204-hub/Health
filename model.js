@@ -349,18 +349,5 @@ function projection() {
   });
 }
 
-// ---------- n-of-1 links ----------
-function links() {
-  const days = range(60), kcal = k => S.food[k] && isComplete(k) ? totals(k).k : null;
-  const pair = (fx, fy) => days.map(k => [fx(k), fy(k)]).filter(p => p[0] != null && p[1] != null);
-  return [
-    ['Sleep → calories eaten that day', pair(k => S.sleep[k], kcal)],
-    ['Sleep → morning HRV', pair(k => S.sleep[k], k => S.hrv[k] ? Math.log(S.hrv[k].rmssd) : null)],
-    ['Calories → sleeping heart rate that night', pair(kcal, k => S.sleepx[shift(k, 1)]?.hr ?? null)],
-    ['Steps → sleep that night', pair(k => S.steps[k], k => S.sleep[shift(k, 1)] ?? null)],
-    ['Hard sets lifted → next morning HRV', pair(k => Object.values(S.lifts[k]?.ex || {}).reduce((a, x) => a + x.filter(s => s[1] > 0).length, 0), k => S.hrv[shift(k, 1)] ? Math.log(S.hrv[shift(k, 1)].rmssd) : null)],
-    ['Sleep the night before → kg lifted that day', pair(k => S.lifts[k] ? S.sleep[k] ?? null : null, k => S.lifts[k] ? Object.values(S.lifts[k].ex).reduce((a, x) => a + x.reduce((b, s) => b + (s[0] || 0) * (s[1] || 0), 0), 0) : null)],
-  ].map(([label, p]) => ({ label, n: p.length, r: p.length >= 14 ? pearson(p) : null }));
-}
 // Loaded: this file ran to the end.
 (self.LOADED ||= []).push('model.js');
