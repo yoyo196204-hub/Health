@@ -2,7 +2,7 @@
 // Every request for the app's own files asks GitHub for the current version first (a quick "has it changed?"
 // check), so a stale file can never be mixed with a new one; the saved copy is used only when offline.
 // STAMP is written by test/stamp.js and matches the ?v= on every file in index.html.
-const STAMP = 'e668e8cd9e';
+const STAMP = '276d6cc8ca';
 const CACHE = 'health-' + STAMP;
 const SHELL = ['./', 'index.html', 'styles.css', 'lib.js', 'hrv.js', 'data.js', 'exercises.js', 'opengym-ids.js', 'body-data.js', 'store.js', 'model.js', 'train.js', 'native.js',
   'energy.js', 'insights.js', 'markers.js', 'feel.js', 'motion.js', 'ui.js', 'h9.js', 'lab.js', 'beats.js', 'zip.js', 'sqlite.js', 'hcbackup.js', 'gadgetbridge.js', 'watch.js', 'opengym.js', 'view-today.js', 'view-food.js', 'view-training.js', 'view-recovery.js', 'view-review.js', 'view-me.js', 'view-records.js', 'view-checks.js', 'scan.js', 'app.js', 'products.js', 'whole.js', 'indb.js',

@@ -165,10 +165,20 @@ function vTrain() {
       <div><span class="sub">Active minutes</span><b class="num">${Math.round(A.who)}<i> / 150</i></b>${meter(A.who, 150, A.who >= 150 ? 'ok' : '')}</div>
       <div><span class="sub">Strength days</span><b class="num">${A.strengthDays}<i> / ${P.per}</i></b>${meter(A.strengthDays, P.per, A.strengthDays >= P.per ? 'ok' : '')}</div></div>
     ${weekStrip()}
+    ${part(loadBlock)}
     <section id="in-train"><h3>Sessions</h3>${part(sessionList)}</section>
     <h3>Strength, 12 weeks ${why('e1rm', 'Best estimates')}</h3>${part(strengthBlock)}
     <details class="inner"><summary>Muscles, last 7 days</summary>${part(muscleBlock)}</details>
     <div class="rowb"><a class="ghost link" href="#set-train" data-act="popnav">The plan</a></div></aside>`;
+}
+// Training load: this week's zone TRIMP against the usual week, monotony beside it, and what was left out and why.
+function loadBlock() {
+  const L = trainingLoad();
+  if (!L.n7 && !L.out.length && L.usual == null) return '';
+  const why7 = [...new Set(L.out.map(o => o.why))].join('; ');
+  return `<div class="tload"><h3>Training load ${why('trimp', 'How it is counted')}</h3>
+    ${stats([[fmt(L.week), 'last 7 days'], [L.usual != null ? fmt(L.usual) : DASH, L.usual != null ? 'usual week' : 'usual after 4 weeks'], [L.mono != null ? r1(L.mono) : DASH, 'monotony']])}
+    ${L.out.length ? `<p class="sub small">${plural(L.out.length, 'session')} left out: ${esc(why7)}.</p>` : ''}</div>`;
 }
 function cardioHeart() {
   return `${sec('Cardio with the H9', strapBlock('workout') + strapMsg() + part(cardioList) + '<div class="rowb"><button class="ghost" data-act="cardioadd">Log cardio by hand</button></div>', { why: ['zones', 'Zones'] })}

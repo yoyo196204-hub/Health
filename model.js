@@ -387,14 +387,17 @@ function overlapMs(a0, a1, b0, b1) { return Math.max(0, Math.min(a1, b1) - Math.
 function sessions(k) {
   return cached('X' + k, () => {
     const H = hrProfile(), C = calibration(), fix = C.lineOn || C.exOn;
-    const strap = (S.cardio[k] || []).map((c, i) => ({ src: c.m ? 'manual' : 'strap', i, kind: (KINDS.find(x => x[0] === c.kind) || KINDS[KINDS.length - 1])[1], t: c.t, dur: c.dur, avg: c.avg ?? null, max: c.max ?? null, z: c.z, eff: c.eff }));
+    const strap = (S.cardio[k] || []).map((c, i) => Object.assign({ src: c.m ? 'manual' : 'strap', i, kind: (KINDS.find(x => x[0] === c.kind) || KINDS[KINDS.length - 1])[1], t: c.t, dur: c.dur, avg: c.avg ?? null, max: c.max ?? null, z: c.z, eff: c.eff },
+      c.m ? { load: null, noLoad: 'typed, no heart rate' } : c.tr ? trimpOf(c.tr.filter(Boolean).map(b => [b, 5]), H) : { load: null, noLoad: 'no heart-rate trace kept' }));
     const watch = (S.ex[k] || []).filter(w => !strap.some(c => c.t && overlapMs(c.t, c.t + c.dur * 1000, w.s, w.e) > 0.5 * Math.min(c.dur * 1000, w.e - w.s))).map(w => {
       const z = [0, 0, 0, 0], d = (w.e - w.s) / 1000;
       let sum = 0, secs = 0, max = 0;
       for (const [b, s] of w.h) { const c = watchFix(b, C); z[zoneOf(c, H)] += s; sum += c * s; secs += s; max = Math.max(max, c); }
       const noHr = secs < 60;
       if (noHr && !STRENGTH.test(w.k) && !CALM.test(w.k)) z[1] = d;   // a deliberate workout with no heart rate counts as moderate
-      return { src: 'watch', kind: w.og ? w.ti || 'openGym workout' : w.k, app: w.src, og: !!w.og, t: w.s, dur: d, avg: secs ? sum / secs : null, max: max || null, z, noHr, corrected: fix && !noHr, strength: w.og || STRENGTH.test(w.k) };
+      // Load from the watch only once its workout heart rate is on the strap's scale.
+      const L = noHr ? { load: null, noLoad: 'no heart rate' } : !fix ? { load: null, noLoad: 'watch not yet matched to the strap' } : trimpOf(w.h.map(([b, s]) => [watchFix(b, C), s]), H);
+      return Object.assign({ src: 'watch', kind: w.og ? w.ti || 'openGym workout' : w.k, app: w.src, og: !!w.og, t: w.s, dur: d, avg: secs ? sum / secs : null, max: max || null, z, noHr, corrected: fix && !noHr, strength: w.og || STRENGTH.test(w.k) }, L);
     });
     return [...strap, ...watch].sort((a, b) => (a.t || 0) - (b.t || 0));
   });
@@ -413,6 +416,35 @@ function activityWeek(end = todayKey()) {
     let mod = 0, vig = 0, n = 0;
     for (const k of range(7, end)) for (const s of sessions(k)) { mod += s.z[1] / 60; vig += (s.z[2] + s.z[3]) / 60; n++; }
     return { mod, vig, who: mod + 2 * vig, n, strengthDays: range(7, end).filter(liftedOn).length };
+  });
+}
+// ---------- training load ----------
+// Edwards' zone TRIMP (1993), from Banister's training impulse (1991): minutes in each tenth of maximum heart rate from
+// 50% up, times 1 to 5. Only from heart rate that is really there: the strap's trace, or the watch's once it is on the
+// strap's scale; a session without either is left out and named, never guessed.
+function trimpOf(hist, H = hrProfile()) {
+  const z = [0, 0, 0, 0, 0];
+  for (const [b, s] of hist) { const f = b / H.max; if (f >= 0.5) z[Math.min(4, Math.floor((f - 0.5) * 10 + 1e-9))] += s / 60; }
+  return { load: z.reduce((a, m, i) => a + m * (i + 1), 0), ez: z };
+}
+// The last 7 days against the usual week of the last 28, and Foster's monotony (1998: the week's mean daily load over
+// its SD) as context. Not the acute:chronic ratio as an injury risk: that reading does not hold up (Impellizzeri 2020).
+function trainingLoad(end = todayKey()) {
+  return cached('TL' + end, () => {
+    const days = range(28, end), daily = {}, out = [];
+    for (const k of days) {
+      daily[k] = 0;
+      for (const s of sessions(k)) { if (s.load != null) daily[k] += s.load; else if (s.dur >= 600) out.push({ k, why: s.noLoad, kind: s.kind }); }
+    }
+    // Lifting logged with no timed session behind it has no heart rate at all.
+    for (const k of days) if (S.lifts[k] && !sessions(k).some(s => s.strength)) out.push({ k, why: 'no heart rate', kind: 'Lifting' });
+    const wk = range(7, end), loads = wk.map(k => daily[k]), week = loads.reduce((a, b) => a + b, 0);
+    const n7 = wk.reduce((a, k) => a + sessions(k).filter(s => s.load != null).length, 0);
+    // The usual week only once there are four weeks of training records to take it from.
+    const first = [S.cardio, S.ex, S.lifts].map(o => Object.keys(o).filter(k => k <= end).sort()[0]).filter(Boolean).sort()[0];
+    const span = first ? gapDays(first, end) + 1 : 0, usual = span >= 28 ? days.reduce((a, k) => a + daily[k], 0) / 4 : null;
+    const m = mean(loads), s = sd(loads), mono = n7 >= 2 && s > 0 ? m / s : null;
+    return { week, usual, n7, mono, span, daily, out: out.filter(o => wk.includes(o.k)), out28: out.length };
   });
 }
 // ---------- energy ledger ----------

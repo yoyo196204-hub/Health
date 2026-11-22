@@ -176,6 +176,16 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await shot('daydetail');
     await page.evaluate(() => closePop()); await page.waitForTimeout(300);
   });
+  await test('training History: load this week against the usual, monotony as context, never a risk ratio', async () => {
+    await go('today');
+    await page.tap('.trcard [data-act="trainlog"]'); await page.waitForTimeout(600);
+    const t = await page.evaluate(() => document.querySelector('.tload')?.textContent || '');
+    assert.ok(/Training load/.test(t) && /last 7 days/.test(t) && /monotony/.test(t), t);
+    assert.ok(!/risk|injur|ratio/i.test(t), 'no acute:chronic risk');
+    await page.evaluate(() => document.querySelector('.tload').scrollIntoView({ block: 'center' })); await page.waitForTimeout(300);
+    await shot('trainload');
+    await page.evaluate(() => closePop()); await page.waitForTimeout(400);
+  });
   await test('recovery, training, review: the inputs behind the verdict, nights that end, short session list, honest links', async () => {
     await page.evaluate(() => { const k = shift(todayKey(), -1); S.sleepx[k] = { d: 60, l: 200, r: 60, w: 10, on: -60 }; S.sleep[k] = 5.5; save(); });
     const part = async (t, v) => { await page.evaluate(([t, v]) => { SUB[t] = v; renderView(); }, [t, v]); await page.waitForTimeout(300); };

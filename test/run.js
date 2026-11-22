@@ -1279,6 +1279,32 @@ test('watch workout heart rate: a fixed shift from 3 pairs, a line by effort fro
   C = run(c, 'calibration()');
   assert.ok(!C.lineOn && C.exOn, JSON.stringify(C.line));
 });
+// ---------- training load ----------
+test('training load: Edwards zone TRIMP from the strap, the watch only once matched, the rest left out and named', c => {
+  run(c, "S.profile.dob = '1990-01-01'; S.cardio = {}; S.pairs = {}; S.ex = {}; S.lifts = {}; memo.clear()");
+  const H = run(c, 'hrProfile()');
+  // 10 min at 55%, 10 at 75%, 10 at 95% of max: 10×1 + 10×3 + 10×5 = 90.
+  c.h = [[Math.round(H.max * 0.55), 600], [Math.round(H.max * 0.75), 600], [Math.round(H.max * 0.95), 600], [Math.round(H.max * 0.4), 600]];
+  assert.strictEqual(Math.round(run(c, 'trimpOf(h).load')), 90);
+  const k = run(c, 'shift(todayKey(), -1)'), t = run(c, `Date.parse('${k}T07:00:00')`), t2 = run(c, `Date.parse('${k}T18:00:00')`);
+  // A strap session with its trace: 30 min at 75% of max = 90.
+  run(c, `S.cardio['${k}'] = [{ t: ${t}, dur: 1800, avg: ${Math.round(H.max * 0.75)}, max: ${Math.round(H.max * 0.8)}, z: [0, 0, 1800, 0], tr: Array(360).fill(${Math.round(H.max * 0.75)}) },
+    { t: ${t + 7200000}, dur: 1200, m: 1, eff: 'mod', z: [0, 1200, 0, 0] }];
+    S.ex['${k}'] = [{ s: ${t2}, e: ${t2 + 1800000}, k: 'Run', src: 'Gadgetbridge', h: [[${Math.round(H.max * 0.75)}, 1800]] }]; memo.clear()`);
+  let X = run(c, `sessions('${k}')`);
+  assert.strictEqual(Math.round(X.find(x => x.src === 'strap').load), 90);
+  assert.deepStrictEqual(X.filter(x => x.src !== 'strap').map(x => [x.load, x.noLoad]), [[null, 'typed, no heart rate'], [null, 'watch not yet matched to the strap']]);
+  let L = run(c, 'trainingLoad()');
+  assert.deepStrictEqual([Math.round(L.week), L.usual, L.mono, L.out.length], [90, null, null, 2], 'one session, under 4 weeks of records: no usual, no monotony');
+  // Three paired workouts later, the watch is on the strap's scale and its run counts.
+  [2, 3, 4].forEach(i => { const ti = Date.parse('2026-10-01T07:00:00Z') + i * 864e5, kk = run(c, `dk(new Date(${ti}))`); run(c, `(S.cardio['${kk}'] ||= []).push({ t: ${ti}, dur: 1800, avg: 140, max: 160, z: [0, 1800, 0, 0] }); S.pairs['${ti}'] = { a: 135, n: 300 }`); });
+  run(c, 'memo.clear()');
+  X = run(c, `sessions('${k}').find(x => x.src === 'watch')`);
+  assert.ok(X.load > 0 && X.corrected, JSON.stringify(X));
+  L = run(c, 'trainingLoad()');
+  assert.ok(L.usual != null && L.n7 === 2 && L.mono != null && L.out.length === 1, JSON.stringify(L));
+  assert.strictEqual(run(c, 'trainingLoad().week'), run(c, `sessions('${k}').reduce((a, x) => a + (x.load || 0), 0)`));
+});
 test('every file the app loads later is in the version stamp, so none can be served stale', () => {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
   for (const f of ['products.js', 'whole.js', 'indb.js']) assert.ok(sw.includes(`'${f}'`), f);

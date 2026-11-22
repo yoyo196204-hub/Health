@@ -754,6 +754,8 @@ html.still *, html.still *::before, html.still *::after { animation-duration: .0
 .stamp path { stroke-dasharray: 34; animation: drawp .45s .45s var(--ease) both; }
 @keyframes drawc { from { stroke-dashoffset: 132; } to { stroke-dashoffset: 0; } }
 @keyframes drawp { from { stroke-dashoffset: 34; } to { stroke-dashoffset: 0; } }
+.tload { margin-top: 20px; }
+.tload h3 { margin-top: 0; }
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 10px; }
 .pair b { display: block; font: 700 24px var(--sans); letter-spacing: -.02em; }
 .pair i { font: 400 12.5px var(--sans); color: var(--soft); }
