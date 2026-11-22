@@ -924,6 +924,8 @@ atest('a Gadgetbridge database becomes days exactly as the daily sync makes them
   assert.strictEqual(D['2026-06-30'].wt, 81.4, 'the morning weigh-in, not the evening one');
   // Heart rate: the 24-hour curve, with the hour the watch was off left empty.
   assert.deepStrictEqual([D['2026-06-01'].hd.filter(Boolean).length, D['2026-05-27'].hd.filter(Boolean).length], [288, 276]);
+  // Minutes worn, from that watch's minutes with a step or a heart rate: the hour without heart rate still had steps.
+  assert.deepStrictEqual([D['2026-06-01'].wm, D['2026-05-27'].wm], [1440, 1440]);
   // Workouts: Gadgetbridge's kinds become the sync's names, an unnamed kind keeps its own name, and each workout has
   // its own watch's heart rate, so the old Bip's run is at its 90 bpm, not the Bip 6's.
   const ex = G.ex.map(w => [new Date(w.s).toISOString().slice(0, 16), w.k, w.kcal ?? null, w.h.reduce((a, x) => a + x[1], 0)]);
@@ -1172,6 +1174,59 @@ test('Indian recipes from INDB: each with a serving, energy that agrees with its
   assert.ok(L.length > 800, `${L.length} recipes`);
   assert.ok(L.some(l => /^ASC144\|Idli\|1 idli \(25 g\)/.test(l)), 'an idli is one idli');
   assert.ok(!L.some(l => /\|Poori\|/.test(l)), 'a poori with its whole kadai of oil is left out');
+});
+// ---------- wear time ----------
+// A day of 5-minute heart rate: worn from hour a to hour b (bins with a reading), nothing outside.
+function hrDay(a, b, fill = 60) { return Array.from({ length: 288 }, (_, i) => i >= a * 12 && i < b * 12 ? fill : 0); }
+test('wear time: an hour or more without heart rate is non-wear, shorter gaps are not, and 10 h makes a valid day', c => {
+  c.d = hrDay(0, 24); c.d[100] = c.d[101] = c.d[102] = 0;
+  assert.strictEqual(run(c, 'wornMin(d)'), 1440, 'a 15-minute gap is still worn');
+  c.d2 = hrDay(7, 15);
+  assert.strictEqual(run(c, 'wornMin(d2)'), 480);
+  run(c, `S.hrd[shift(todayKey(), -2)] = d2; S.hrd[shift(todayKey(), -3)] = d; S.steps[shift(todayKey(), -2)] = 3000; S.steps[shift(todayKey(), -3)] = 9000; S.steps[shift(todayKey(), -60)] = 7000; S.manual.steps[shift(todayKey(), -4)] = true; S.steps[shift(todayKey(), -4)] = 5000; S.hrd[shift(todayKey(), -4)] = d2;`);
+  assert.deepStrictEqual(run(c, '[-2, -3, -60].map(i => validDay(shift(todayKey(), i)))'), [false, true, null]);
+  // The short day's steps are out; an unknown day is kept (not called valid); a count you typed stands.
+  assert.deepStrictEqual(run(c, '[-2, -3, -60, -4].map(i => stepsOn(shift(todayKey(), i)))'), [null, 9000, 7000, 5000]);
+  const R = run(c, 'stepRun(range(7))');
+  assert.deepStrictEqual([R.vals.sort(), R.out.length, R.valid], [[5000, 9000], 1, 1]);
+  assert.strictEqual(run(c, 'wearNote(range(7))'), '1 day left out: watch worn under 10 h');
+  // Older days keep their worn minutes from a history file.
+  run(c, `S.wx[shift(todayKey(), -60)] = { wm: 420 }; memo.clear()`);
+  assert.strictEqual(run(c, 'validDay(shift(todayKey(), -60))'), false);
+});
+test('wear time: a night is used only if the watch was on through it', c => {
+  const k = run(c, 'shift(todayKey(), -1)'), p = run(c, 'shift(todayKey(), -2)');
+  // Asleep 23:00 to 07:00; heart rate all evening and all morning.
+  run(c, `S.sleepx['${k}'] = { d: 90, l: 300, r: 90, w: 0, on: -60, off: 420 }; S.sleep['${k}'] = 8;`);
+  c.ev = hrDay(0, 24); c.mo = hrDay(0, 24);
+  run(c, `S.hrd['${p}'] = ev; S.hrd['${k}'] = mo;`);
+  assert.deepStrictEqual(run(c, `[nightWorn('${k}'), sleepOn('${k}')]`), [true, 8]);
+  // Off the wrist from 02:00 to 04:00: the "sleep" may be a watch on the table.
+  c.mo2 = hrDay(0, 24); for (let i = 24; i < 48; i++) c.mo2[i] = 0;
+  const d = run(c, `S.hrd['${k}'] = mo2; memo.clear(); [nightWorn('${k}'), sleepOn('${k}'), midpoint('${k}'), sleepStats(7).n, sleepStats(7).out]`);
+  assert.deepStrictEqual(d, [false, null, null, 0, 1]);
+  // No 5-minute data for the night: unknown, so it is kept.
+  run(c, `delete S.hrd['${p}']; memo.clear()`);
+  assert.deepStrictEqual(run(c, `[nightWorn('${k}'), sleepOn('${k}')]`), [null, 8]);
+  // Typed sleep always stands.
+  run(c, `S.hrd['${p}'] = ev; S.hrd['${k}'] = mo2; S.manual.sleep['${k}'] = true; memo.clear()`);
+  assert.strictEqual(run(c, `sleepOn('${k}')`), 8);
+});
+test('wear time: the burn model and the long game leave out short days, and a sync keeps worn minutes past 45 days', c => {
+  // 28 days at 10,000 steps worn all day; then 6 days at 1,000 worn 3 h.
+  for (let i = 1; i <= 28; i++) run(c, `S.steps[shift(todayKey(), -${i})] = ${i <= 6 ? 1000 : 10000}; S.hrd[shift(todayKey(), -${i})] = ${JSON.stringify(hrDay(0, i <= 6 ? 3 : 24))}`);
+  run(c, 'memo.clear()');
+  assert.strictEqual(run(c, 'energyModel().stepMean'), 10000);
+  const st = run(c, "markers().find(m => m.id === 'steps')");
+  assert.strictEqual(st.raw, 10000);
+  assert.ok(/6 days left out: watch worn under 10 h/.test(st.s), st.s);
+  // Fewer than 4 valid days this week: the step figure for targets comes from four weeks.
+  assert.strictEqual(run(c, 'liveTargets().steps'), 10000);
+  assert.deepStrictEqual(run(c, 'stepRun(range(28, shift(todayKey(), -1)))').valid, 22);
+  // A sync with the day's heart rate: worn minutes are kept with the day, so they outlive the 45-day curve.
+  const old = run(c, 'shift(todayKey(), -80)');
+  run(c, `mergeSync({ days: { '${old}': { st: 4000, hd: ${JSON.stringify(hrDay(8, 14))} } } })`);
+  assert.deepStrictEqual(run(c, `[S.hrd['${old}'], S.wx['${old}'].wm, validDay('${old}'), stepsOn('${old}')]`), [null, 360, false, null]);
 });
 test('every file the app loads later is in the version stamp, so none can be served stale', () => {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');

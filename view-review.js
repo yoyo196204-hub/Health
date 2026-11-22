@@ -82,9 +82,10 @@ function linksCard() {
       <div class="forest" style="--c:${col}" aria-hidden="true"><i class="zero"></i><i class="cib" style="left:${x(l.elo)}%;width:${(x(l.ehi) - x(l.elo)).toFixed(1)}%"></i><i class="pt" style="left:${x(l.eff)}%"></i></div>
       ${l.status === 'clear' ? `<span class="ltest">${l.test}</span>` : ''}</div>`;
   };
-  const more = rest.length + wait.length;
+  const more = rest.length + wait.length, wn = wearNote(range(120), true);
   return `<section class="card" id="in-links">${cardHead('What moves what', 'insight', 'var(--sleep)', why('links', 'read with care'))}
     ${clear.length ? `<div class="lrows">${clear.map(row).join('')}</div>` : para(L.length ? 'No link is clear in your data yet. The more days you log, the sooner one shows.' : 'Links need 14 days with both halves of a pair.')}
+    ${wn ? `<p class="sub small">${wn}.</p>` : ''}
     ${more ? `<details class="inner"><summary>Not clear yet · ${more}</summary>${rest.length ? `<div class="lrows">${rest.map(row).join('')}</div>` : ''}${wait.length ? `<div class="lneed">${wait.map(l => `<span>${l.x} → ${l.y}: ${l.need} more days</span>`).join('')}</div>` : ''}</details>` : ''}</section>`;
 }
 // How you eat across the week: logging, consistency, the weekday profile, weekends, protein spread.

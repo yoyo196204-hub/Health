@@ -63,7 +63,7 @@ function energyModel(end = todayKey()) {
   return cached('EM' + end, () => {
     const p = S.profile, wkeys = Object.keys(S.weights).filter(k => k <= end).sort();
     const startCap = shift(end, -180), first = wkeys.find(k => k >= startCap);
-    const stepsAll = range(28, end).map(k => S.steps[k]).filter(v => v != null), stepMean = stepsAll.length ? mean(stepsAll) : 4000;
+    const stepsAll = stepRun(range(28, end)).vals, stepMean = stepsAll.length ? mean(stepsAll) : 4000;
     const firstLift = Object.keys(S.lifts).sort()[0], perWk = firstLift && gapDays(firstLift, end) >= 28 ? range(28, end).filter(liftedOn).length / 4 : p.days;
     const wNow = trendOn(end) ?? p.w0, F = formulaBurn(wNow, stepMean, perWk);
     const out = { formula: F.tdee, bmr: F.bmr, perWk, stepMean, hist: [], nW: 0, nI: 0, days: 0 };
@@ -92,7 +92,8 @@ function energyModel(end = todayKey()) {
       const full = S.food[k] && isComplete(k), I = full ? totals(k).k : null;
       if (I != null) { known.push(I); out.nI++; }
       const fill = known.length ? mean(known.slice(-28)) : E;
-      const st = S.steps[k], stepAdj = st != null ? 0.0004 * W * (st - stepMean) : 0;
+      // A day worn under 10 h says nothing about its steps: it moves the burn by nothing, like a day without steps.
+      const st = stepsOn(k), stepAdj = st != null ? 0.0004 * W * (st - stepMean) : 0;
       const ink = I ?? fill, sig = I != null ? SIG_LOG : SIG_UNK;
       W += (ink - E - stepAdj) / r.rho;
       const a = -1 / r.rho;

@@ -131,6 +131,25 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     assert.ok(await page.evaluate(() => !!document.querySelector('.ckbanner.bad')), 'Review says something does not add up');
     await page.evaluate(() => { S.food[todayKey()] = S.food[todayKey()].filter(e => e.id !== 'qt'); save(); });
   });
+  await test('wear time: short days are left out of the long game and said so, and the check lists them', async () => {
+    const before = await page.evaluate(() => {
+      const full = Array(288).fill(62), short = Array(288).fill(0).map((_, i) => i >= 96 && i < 168 ? 70 : 0), old = { hrd: S.hrd, steps: S.steps };
+      S.hrd = {}; S.steps = { ...S.steps };
+      for (let i = 1; i <= 20; i++) { const k = shift(todayKey(), -i); S.hrd[k] = i <= 3 ? short : full; S.steps[k] = i <= 3 ? 900 : 8000; }
+      save(); window.__wear = old; return true;
+    });
+    assert.ok(before);
+    await go('set-checks');
+    const ck = await page.evaluate(() => { const li = [...document.querySelectorAll('.ck')].find(l => /Watch worn long enough/.test(l.textContent)); return li && [li.className, li.querySelector('summary .sub').textContent, li.querySelectorAll('.ckitems li').length]; });
+    assert.ok(ck && /look/.test(ck[0]) && /17 days of 20 worn 10 h or more; 3 left out/.test(ck[1]) && ck[2] === 6, JSON.stringify(ck));
+    await go('review'); await page.evaluate(() => { SUB.review = 'long'; renderView(); }); await page.waitForTimeout(300);
+    assert.strictEqual(await page.evaluate(() => markers().find(m => m.id === 'steps').raw), 8000, 'the short days do not pull the median down');
+    assert.ok(await page.evaluate(() => /3 days left out: watch worn under 10 h/.test(markers().find(m => m.id === 'steps').s)));
+    await page.evaluate(() => { SUB.review = 'links'; renderView(); }); await page.waitForTimeout(300);
+    assert.ok(/3 days left out: watch worn under 10 h/.test(await page.textContent('#in-links')), 'Links say what was left out');
+    await shot('wear');
+    await page.evaluate(() => { Object.assign(S, window.__wear); save(); render(); });
+  });
   await test('recovery, training, review: the inputs behind the verdict, nights that end, short session list, honest links', async () => {
     await page.evaluate(() => { const k = shift(todayKey(), -1); S.sleepx[k] = { d: 60, l: 200, r: 60, w: 10, on: -60 }; S.sleep[k] = 5.5; save(); });
     const part = async (t, v) => { await page.evaluate(([t, v]) => { SUB[t] = v; renderView(); }, [t, v]); await page.waitForTimeout(300); };

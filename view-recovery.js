@@ -70,7 +70,8 @@ function sleepSection() {
   const fix = J.v != null && J.v >= 1 ? `Weekends run ${r1(J.v)} h later: wake within an hour of your weekday time.`
     : L.avg != null && L.avg < 6.5 ? 'Short: protect sleep before cutting calories.'
     : (Q.band === 'low' || Q.band === 'verylow' || (L.midSd ?? 0) > 60) ? 'A fixed wake time, days off included, is the lever.' : '';
-  const line = L.avg != null ? `${r1(L.avg)} h a night${reg ? ` · ${reg}` : ''}. ${fix} ${why('sleep', 'Why it matters')}` : `Bars under 6 h are marked. ${why('sleep', 'Why sleep matters here')}`;
+  const left = L.out ? ` ${plural(L.out, 'night')} left out: watch off during it.` : '';
+  const line = L.avg != null ? `${r1(L.avg)} h a night${reg ? ` · ${reg}` : ''}.${left} ${fix} ${why('sleep', 'Why it matters')}` : `Bars under 6 h are marked. ${why('sleep', 'Why sleep matters here')}`;
   const nights = range(7).reverse().filter(k => S.sleep[k] != null || S.sleepx[k]).map(k => {
     const x = S.sleepx[k], V = versus(S.sleep[k], range(28, shift(k, -1)).map(d => S.sleep[d]));
     return `<li><button class="rowbtn" data-act="dayx" data-k="${k}"><span class="grow"><span class="nm">${dateLabel(k, { weekday: 'short', day: 'numeric', month: 'short' })} · ${S.sleep[k] != null ? `${r1(S.sleep[k])} h` : DASH}${V.word && V.word !== 'usual' ? ` <span class="vw ${V.z < 0 ? 'bad' : 'good'}">${V.word}</span>` : ''}</span>

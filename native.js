@@ -127,7 +127,9 @@ function mergeSync(P) {
     if (rh != null) { any = true; got.rhr++; if (!no('rhr', k)) S.rhr[k] = Math.round(rh); }
     const w = num(d.wt, ...LIMITS.weights);
     if (w != null) { got.weight++; if (!S.manual.weights[k] && !no('weights', k)) S.weights[k] = r1(w); }
-    const x = cleanWx(Object.assign({}, d, { rp: d.rh == null && d.rp != null }));
+    // Minutes worn, from the day's 5-minute heart rate, kept after the curve itself is let go at 45 days.
+    const wm = d.wm ?? (Array.isArray(d.hd) && d.hd.length === 288 ? wornMin(d.hd.map(v => num(v, 25, 230) || 0)) : null);
+    const x = cleanWx(Object.assign({}, d, { rp: d.rh == null && d.rp != null, wm }));
     if (x && !no('wx', k)) S.wx[k] = x;
     // The day's heart rate in 5-minute steps, for the 24-hour curve.
     if (Array.isArray(d.hd) && d.hd.length === 288 && !no('hrd', k)) { const h = d.hd.map(v => Math.round(num(v, 25, 230) || 0)); if (h.filter(Boolean).length >= 12) S.hrd[k] = h; }

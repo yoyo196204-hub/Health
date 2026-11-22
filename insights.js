@@ -66,7 +66,7 @@ function assoc(X, Y) {
 // out; pct: y is a log, so the slope is a percentage change. exp: the direction the research expects; ev: its evidence.
 const kcalOf = k => S.food[k] && isComplete(k) ? totals(k).k : null;
 const lnHrv = k => S.hrv[k] ? Math.log(S.hrv[k].rmssd) : null;
-const setsOn = k => S.lifts[k] ? Object.values(S.lifts[k].ex).reduce((a, x) => a + x.filter(s => s[1] > 0).length, 0) : (S.hrv[k] || S.sleep[k] != null ? 0 : null);
+const setsOn = k => S.lifts[k] ? Object.values(S.lifts[k].ex).reduce((a, x) => a + x.filter(s => s[1] > 0).length, 0) : (S.hrv[k] || sleepOn(k) != null ? 0 : null);
 // The clock time of the day's last logged food, in hours (after midnight counts as 24+), from logs made on the day.
 function lastMealHour(k) {
   const ts = (S.food[k] || []).map(e => e.t).filter(Boolean);
@@ -80,28 +80,30 @@ function onsetDev(k) {
   const base = cached('ON' + k, () => range(28, shift(k, -1)).map(d => S.sleepx[d]?.on).filter(v => v != null));
   return base.length >= 7 ? Math.abs(on - median(base)) / 60 : null;
 }
+// Heart rate asleep, only from a night the watch was on through.
+const sleepHrOn = k => nightWorn(k) === false ? null : S.sleepx[k]?.hr ?? null;
 const LINKS = [
-  { id: 'sl-hrv', dom: ['sleep', 'heart'], x: 'Sleep', y: 'morning HRV', per: 1, xu: 'hour of sleep', fx: k => S.sleep[k], fy: lnHrv, pct: true, exp: 1, ev: 'sleep',
+  { id: 'sl-hrv', dom: ['sleep', 'heart'], x: 'Sleep', y: 'morning HRV', per: 1, xu: 'hour of sleep', fx: sleepOn, fy: lnHrv, pct: true, exp: 1, ev: 'sleep',
     test: 'Go to bed 45 minutes earlier for a week and watch the morning checks.' },
   { id: 'reg-hrv', dom: ['sleep', 'heart'], x: 'Bedtime off your usual', y: 'morning HRV', per: 1, xu: 'hour off your usual bedtime', fx: onsetDev, fy: lnHrv, pct: true, exp: -1, ev: 'regular',
     test: 'Keep lights-out within 30 minutes of your usual for two weeks.' },
   { id: 'sets-hrv', dom: ['train', 'heart'], x: 'Hard sets', y: 'next morning HRV', per: 10, xu: '10 hard sets', fx: setsOn, fy: k => lnHrv(shift(k, 1)), pct: true, exp: -1, ev: 'hrv',
     test: 'Normal after hard sessions; a run of low mornings is the signal to look at, not one.' },
-  { id: 'sl-kcal', dom: ['sleep', 'food'], x: 'Sleep', y: 'calories eaten that day', per: 1, xu: 'hour of sleep', fx: k => S.sleep[k], fy: kcalOf, unit: 'kcal', dp: 0, exp: -1, ev: 'sleep',
+  { id: 'sl-kcal', dom: ['sleep', 'food'], x: 'Sleep', y: 'calories eaten that day', per: 1, xu: 'hour of sleep', fx: sleepOn, fy: kcalOf, unit: 'kcal', dp: 0, exp: -1, ev: 'sleep',
     test: 'Short sleep raises appetite; on short-sleep days, plan protein early.' },
-  { id: 'st-kcal', dom: ['move', 'food'], x: 'Steps', y: 'calories eaten', per: 2000, xu: '2,000 steps', fx: k => S.steps[k], fy: kcalOf, unit: 'kcal', dp: 0, exp: 1, ev: 'steps',
+  { id: 'st-kcal', dom: ['move', 'food'], x: 'Steps', y: 'calories eaten', per: 2000, xu: '2,000 steps', fx: stepsOn, fy: kcalOf, unit: 'kcal', dp: 0, exp: 1, ev: 'steps',
     test: 'Some of the energy that walking burns comes back as appetite; the energy model counts both.' },
   { id: 'kcal-wt', dom: ['food', 'body'], x: 'Calories', y: 'next morning’s weight', per: 500, xu: '500 kcal', fx: kcalOf, fy: k => S.weights[shift(k, 1)] ?? null, unit: 'kg', dp: 2, exp: 1, ev: 'trend',
     test: 'Mostly food mass, glycogen and water, not fat: it is why the trend, not one weigh-in, is what counts.' },
   { id: 'carb-wt', dom: ['food', 'body'], x: 'Carbs', y: 'next morning’s weight', per: 100, xu: '100 g of carbs', fx: k => { const t = totals(k); return S.food[k] && isComplete(k) && t.kn >= 0.9 * t.k ? t.c : null; }, fy: k => S.weights[shift(k, 1)] ?? null, unit: 'kg', dp: 2, exp: 1, ev: 'trend',
     test: 'Each gram of stored glycogen holds about three of water: a carb-heavy day shows on the scale and leaves again.' },
-  { id: 'kcal-shr', dom: ['food', 'sleep'], x: 'Calories', y: 'heart rate asleep that night', per: 500, xu: '500 kcal', fx: kcalOf, fy: k => S.sleepx[shift(k, 1)]?.hr ?? null, unit: 'bpm', dp: 1, exp: 1, ev: 'rhr',
+  { id: 'kcal-shr', dom: ['food', 'sleep'], x: 'Calories', y: 'heart rate asleep that night', per: 500, xu: '500 kcal', fx: kcalOf, fy: k => sleepHrOn(shift(k, 1)), unit: 'bpm', dp: 1, exp: 1, ev: 'rhr',
     test: 'Digesting a big meal keeps the heart working; try the largest meal earlier on a few days.' },
-  { id: 'late-shr', dom: ['food', 'sleep'], x: 'Last meal later', y: 'heart rate asleep that night', per: 1, xu: 'hour later', fx: lastMealHour, fy: k => S.sleepx[shift(k, 1)]?.hr ?? null, unit: 'bpm', dp: 1, exp: 1, ev: 'rhr',
+  { id: 'late-shr', dom: ['food', 'sleep'], x: 'Last meal later', y: 'heart rate asleep that night', per: 1, xu: 'hour later', fx: lastMealHour, fy: k => sleepHrOn(shift(k, 1)), unit: 'bpm', dp: 1, exp: 1, ev: 'rhr',
     test: 'Finish dinner three hours before bed on a few nights and compare the nights after.' },
-  { id: 'st-sl', dom: ['move', 'sleep'], x: 'Steps', y: 'sleep that night', per: 2000, xu: '2,000 steps', fx: k => S.steps[k], fy: k => S.sleep[shift(k, 1)] ?? null, unit: 'min', scale: 60, dp: 0, exp: 1, ev: 'steps',
+  { id: 'st-sl', dom: ['move', 'sleep'], x: 'Steps', y: 'sleep that night', per: 2000, xu: '2,000 steps', fx: stepsOn, fy: k => sleepOn(shift(k, 1)), unit: 'min', scale: 60, dp: 0, exp: 1, ev: 'steps',
     test: 'Daytime activity helps sleep pressure build; a walk after dinner is an easy test.' },
-  { id: 'sl-st', dom: ['sleep', 'move'], x: 'Sleep', y: 'steps that day', per: 1, xu: 'hour of sleep', fx: k => S.sleep[k], fy: k => S.steps[k] ?? null, unit: 'steps', dp: 0, exp: 1, ev: 'sleep',
+  { id: 'sl-st', dom: ['sleep', 'move'], x: 'Sleep', y: 'steps that day', per: 1, xu: 'hour of sleep', fx: sleepOn, fy: stepsOn, unit: 'steps', dp: 0, exp: 1, ev: 'sleep',
     test: 'Tired days are quieter days; the burn model sees it in the steps.' },
 ];
 function seriesOf(fn, days) { const o = {}; for (const k of days) { const v = fn(k); if (v != null && Number.isFinite(v)) o[k] = v; } return o; }
@@ -132,7 +134,7 @@ function effText(L, ci = true) {
 // and the least regular fifth died earlier, more strongly than short sleep predicted (Windred 2024).
 function sleepWindow(k) {
   const x = S.sleepx[k];
-  if (!x || x.on == null) return null;
+  if (!x || x.on == null || (nightWorn(k) === false && !S.manual.sleep[k])) return null;
   const len = x.off != null && x.off > x.on ? x.off - x.on : x.bed || x.d + x.l + x.r + x.w || (S.sleep[k] || 0) * 60;
   return len >= 120 ? [x.on, x.on + len] : null;
 }
@@ -174,9 +176,9 @@ function recoveryScore(k = todayKey()) {
     const rh = restingHR(k), rhBase = range(28, shift(k, -7)).map(d => restingHR(d)?.v).filter(v => v != null);
     const zr = rh ? zOf(rh.v, rhBase) : null;
     if (zr != null) parts.push({ id: 'rhr', label: 'Resting HR', w: 0.2, z: -zr, val: `${Math.round(rh.v)} bpm`, note: rh.src === 'strap' ? 'strap' : 'watch' });
-    const sl = S.sleep[k];
+    const sl = sleepOn(k);
     if (sl != null) {
-      const usual = mean(range(28, shift(k, -1)).map(d => S.sleep[d]).filter(v => v != null)) ?? 7.5, need = clamp(usual, 7, 9);
+      const usual = mean(range(28, shift(k, -1)).map(sleepOn).filter(v => v != null)) ?? 7.5, need = clamp(usual, 7, 9);
       parts.push({ id: 'sleep', label: 'Sleep', w: 0.25, z: clamp((sl - need) / 0.9, -3, 1), val: `${Math.floor(sl)}h ${Math.round((sl % 1) * 60)}m`, note: `need about ${r1(need)} h` });
     }
     const B = R.BR;

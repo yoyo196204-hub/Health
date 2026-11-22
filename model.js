@@ -103,7 +103,8 @@ function weighCheck(k, v) {
 function liveTargets() {
   return cached('TL', () => {
     const p = S.profile, set = S.settings, ser = series(), wt = ser.length ? ser[ser.length - 1].t : p.w0;
-    const st = range(7).map(k => S.steps[k]).filter(v => v != null);
+    // Steps: the last week's days worn 10 h or more (or not known), once there are 4; else the last four weeks'.
+    const s7 = stepRun(range(7)).vals, s28 = stepRun(range(28)).vals, st = s7.length >= WEAR_WEEK ? s7 : s28;
     const steps = st.length ? mean(st) : 2000;
     // Lifting sessions a week: what you actually did over the last four weeks once there is that much history,
     // otherwise the days you said you train.
@@ -174,7 +175,8 @@ function rhrMode() {
 function restingHR(k) {
   const mode = rhrMode(), C = calibration();
   if (mode !== 'watch' && S.hrv[k]) return { v: S.hrv[k].hr, src: 'strap' };
-  if (mode !== 'strap' && S.rhr[k] != null) return mode === 'both' ? { v: S.rhr[k] - C.rest.bias, src: 'watch', adj: true } : { v: S.rhr[k], src: 'watch' };
+  // The watch's figure only from a day it was worn long enough to know your resting rate (or not known).
+  if (mode !== 'strap' && S.rhr[k] != null && validDay(k) !== false) return mode === 'both' ? { v: S.rhr[k] - C.rest.bias, src: 'watch', adj: true } : { v: S.rhr[k], src: 'watch' };
   return null;
 }
 function hrProfile() {
@@ -247,13 +249,13 @@ function rhrTrend(k = todayKey()) {
 // One verdict for the day from everything that bears on recovery. Each reason carries its weight and evidence.
 function readiness(k = todayKey()) {
   return cached('R' + k, () => {
-    const V = hrvState(k), R = rhrTrend(k), sl = S.sleep[k], why = [];
+    const V = hrvState(k), R = rhrTrend(k), sl = sleepOn(k), why = [];
     if (V.state === 'low') why.push([3, `HRV 7-day average ${Math.round(V.roll)} ms, below your range of ${Math.round(V.lo)}–${Math.round(V.hi)}${V.hrDelta == null ? '' : V.hrDelta >= 3 ? `, with morning heart rate ${sign(V.hrDelta)} bpm: the usual pattern of fatigue, illness, short sleep or alcohol` : `; morning heart rate is not raised (${sign(V.hrDelta)} bpm), so this is the weaker pattern`}`, 'hrv']);
     else if (V.day === 'low') why.push([1, `This morning's HRV ${r1(V.now.rmssd)} ms is below your range; the weekly average is still normal`, 'hrv']);
     if (R.delta != null && R.delta >= 5) why.push([2, `Resting heart rate ${sign(R.delta)} bpm above the previous three weeks`, 'rhr']);
     else if (R.delta != null && R.delta >= 3) why.push([1, `Resting heart rate ${sign(R.delta)} bpm above the previous three weeks`, 'rhr']);
     if (sl != null && sl < 6) why.push([1, `${r1(sl)} h of sleep last night`, 'sleep']);
-    else { const n3 = range(3, k).map(d => S.sleep[d]).filter(v => v != null); if (n3.length === 3 && mean(n3) < 6.5) why.push([1, `${r1(mean(n3))} h of sleep a night over the last three`, 'sleep']); }
+    else { const n3 = range(3, k).map(sleepOn).filter(v => v != null); if (n3.length === 3 && mean(n3) < 6.5) why.push([1, `${r1(mean(n3))} h of sleep a night over the last three`, 'sleep']); }
     const sx = S.sleepx[k], sh = sleepStats(28, shift(k, -1));
     if (sx?.hr && sh.hr && sx.hr - sh.hr >= 4) why.push([1, `Sleeping heart rate ${Math.round(sx.hr)}, ${Math.round(sx.hr - sh.hr)} above your 4-week average`, 'rhr']);
     // The watch overnight: only when the strap has no verdict of its own this week, and never more than a nudge.
@@ -270,21 +272,86 @@ function readiness(k = todayKey()) {
   });
 }
 
+// ---------- wear time ----------
+// How long the watch was on the wrist each day. A day's steps, or a night's sleep, from a watch that spent half of it
+// on the table is not that day; accelerometer studies count a day only at 10 hours worn and a week only with 4 such
+// days, with non-wear as any hour or more with nothing recorded (Troiano 2008). Here "nothing" is no heart rate in a
+// 5-minute bin (S.hrd, the last 45 days), or, for older days, the worn minutes a history file gave (wx.wm: a minute
+// with a step or a heart rate). A day with neither is unknown: kept, never called valid.
+const WEAR_H = 10, WEAR_WEEK = 4, NONWEAR_BINS = 12;
+// Minutes worn in a day of 288 five-minute bins: all of it except runs of an hour or more without a reading.
+function wornMin(bins, upTo = 288) {
+  let off = 0, gap = 0;
+  for (let i = 0; i <= upTo; i++) {
+    if (i < upTo && !bins[i]) gap++;
+    else { if (gap >= NONWEAR_BINS) off += gap; gap = 0; }
+  }
+  return (upTo - off) * 5;
+}
+function wear(k) {
+  return cached('WR' + k, () => {
+    const now = new Date(), today = k === todayKey(), upTo = today ? Math.floor((now.getHours() * 60 + now.getMinutes()) / 5) : 288;
+    if (S.hrd[k]) return { min: wornMin(S.hrd[k], upTo), src: 'hr', today };
+    const wm = S.wx[k]?.wm;
+    return wm != null ? { min: wm, src: 'file', today } : null;
+  });
+}
+// true: worn 10 h or more. false: worn less (today only once the day is over). null: not known.
+function validDay(k) {
+  const w = wear(k);
+  if (!w) return null;
+  return w.min >= WEAR_H * 60 ? true : w.today ? null : false;
+}
+// The day's steps for any trend or model: none from a day the watch was worn under 10 h. A count you typed stands.
+function stepsOn(k) { const v = S.steps[k]; return v == null ? null : S.manual.steps[k] || validDay(k) !== false ? v : null; }
+// A run of days read for steps: the values that count, and how many were left out for wear.
+function stepRun(days) {
+  const vals = [], out = [];
+  for (const k of days) if (S.steps[k] != null) { const v = stepsOn(k); if (v == null) out.push(k); else vals.push(v); }
+  return { vals, out, valid: days.filter(k => S.steps[k] != null && validDay(k) === true).length };
+}
+// Was the watch on through the night? A gap of an hour or more without heart rate inside the sleep window means the
+// "sleep" may be a watch lying still; the night is then left out. Unknown (no 5-minute data for it) keeps the night.
+function nightWorn(k) {
+  return cached('NW' + k, () => {
+    const x = S.sleepx[k];
+    if (!x || x.on == null) return null;
+    const len = x.off != null && x.off > x.on ? x.off - x.on : x.bed || x.d + x.l + x.r + x.w;
+    if (!len) return null;
+    const a = S.hrd[shift(k, -1)], b = S.hrd[k];
+    let gap = 0, worst = 0;
+    for (let m = Math.floor(x.on / 5) * 5; m < x.on + len; m += 5) {
+      const bins = m < 0 ? a : b, i = m < 0 ? 288 + m / 5 : m / 5;
+      if (!bins || i < 0 || i >= 288) return null;
+      gap = bins[i] ? 0 : gap + 1; worst = Math.max(worst, gap);
+    }
+    return worst < NONWEAR_BINS;
+  });
+}
+// The night's sleep for any conclusion: none from a night the watch was off for an hour or more. Typed sleep stands.
+function sleepOn(k) { const v = S.sleep[k]; return v == null ? null : S.manual.sleep[k] || nightWorn(k) !== false ? v : null; }
+// Days and nights left out for wear in a run of days, in words: "3 days left out: watch worn under 10 h".
+function wearNote(days, nights = false) {
+  const d = days.filter(k => S.steps[k] != null && stepsOn(k) == null).length, n = nights ? days.filter(k => S.sleep[k] != null && sleepOn(k) == null).length : 0;
+  return [d ? `${plural(d, 'day')} left out: watch worn under ${WEAR_H} h` : '', n ? `${plural(n, 'night')} left out: watch off during it` : ''].filter(Boolean).join('; ');
+}
+
 // ---------- sleep ----------
 function midpoint(k) {
+  if (nightWorn(k) === false && !S.manual.sleep[k]) return null;
   const x = S.sleepx[k];
   if (!x || x.on == null) return null;
   return x.on + (x.bed || x.d + x.l + x.r + x.w || (S.sleep[k] || 0) * 60) / 2;
 }
 function sleepStats(n = 14, end = todayKey()) {
   return cached(`L${n}${end}`, () => {
-    const ks = range(n, end).filter(k => S.sleep[k] != null), X = ks.map(k => S.sleepx[k]).filter(Boolean);
+    const ks = range(n, end).filter(k => sleepOn(k) != null), X = ks.map(k => S.sleepx[k]).filter(Boolean);
     const mids = ks.map(midpoint).filter(v => v != null), ons = X.map(x => x.on).filter(v => v != null);
     const effs = X.filter(x => x.bed || x.w).map(x => (x.d + x.l + x.r) / (x.bed || x.d + x.l + x.r + x.w) * 100).filter(v => v > 0 && v <= 100);
     const staged = X.filter(x => x.d + x.r > 0), st = staged.reduce((a, x) => { a.d += x.d; a.l += x.l; a.r += x.r; return a; }, { d: 0, l: 0, r: 0 });
     const tot = st.d + st.l + st.r, hrs = ks.map(k => S.sleepx[k]?.hr).filter(Boolean);
     return {
-      n: ks.length, avg: ks.length ? mean(ks.map(k => S.sleep[k])) : null,
+      n: ks.length, avg: ks.length ? mean(ks.map(sleepOn)) : null, out: range(n, end).filter(k => S.sleep[k] != null && sleepOn(k) == null).length,
       eff: effs.length >= 3 ? mean(effs) : null, mid: mids.length >= 3 ? mean(mids) : null,
       midSd: mids.length >= 5 ? sd(mids) : null, onSd: ons.length >= 5 ? sd(ons) : null,
       stages: staged.length >= 3 ? { d: st.d / tot * 100, l: st.l / tot * 100, r: st.r / tot * 100, n: staged.length } : null,
