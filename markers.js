@@ -115,12 +115,12 @@ function markers(end = todayKey()) {
       s: `${r1(F.mets)} METs, ${['low', 'middle', 'high'][F.band]} in the cohorts (95% range ${Math.round(F.lo)}–${Math.round(F.hi)}).${F.levers[0] ? ` Biggest lever: ${F.levers[0].t.toLowerCase()}, +${r1(F.levers[0].dv)}.` : ''}` });
     else out.push({ id: 'fit', ic: 'pulse', c: 'var(--heart)', t: 'Fitness, estimated', v: null, ev: 'fitness', st: null,
       s: F.need === 'rhr' ? 'Needs 5 resting heart rates in 4 weeks: morning checks with the strap, or the watch.' : 'Needs a waist measurement.' });
-    const stv = range(28, end).map(k => S.steps[k]).filter(v => v != null);
+    const SR = stepRun(range(28, end)), stv = SR.vals, left = SR.out.length ? ` ${plural(SR.out.length, 'day')} left out: watch worn under ${WEAR_H} h.` : '';
     if (stv.length >= 14) {
       const s = median(stv), hr = stepsHR(s), top = age >= 60 ? 6000 : 8000;
       out.push({ id: 'steps', ic: 'move', c: 'var(--move)', t: 'Steps a day', v: fmt(s), raw: s, u: '4-week median', ev: 'steps',
         st: s >= top ? 2 : s >= 5800 ? 1 : 0, scale: [[2000, 'var(--bad)'], [5800, 'var(--mid)'], [top, 'var(--good)'], [12000]], at: s,
-        s: `Cohorts at this level: ${hr < 1 ? `${Math.round((1 - hr) * 100)}% lower mortality than at 3,500` : 'the reference level'}. The curve flattens at ${fmt(top)}–${fmt(top + 2000)}${s < top ? `, ${fmt(top - s)} a day away` : ''}.` });
+        s: `Cohorts at this level: ${hr < 1 ? `${Math.round((1 - hr) * 100)}% lower mortality than at 3,500` : 'the reference level'}. The curve flattens at ${fmt(top)}–${fmt(top + 2000)}${s < top ? `, ${fmt(top - s)} a day away` : ''}.${left}` });
     }
     const R = rhr28(end);
     if (R) {
@@ -133,12 +133,12 @@ function markers(end = todayKey()) {
     if (wc && p.h) out.push({ id: 'whtr', ic: 'tape', c: 'var(--body)', t: 'Waist ÷ height', v: whtr.toFixed(2), u: '', ev: 'waist',
       st: whtr < 0.5 ? 2 : whtr < 0.6 ? 1 : 0, scale: [[0.7, 'var(--bad)'], [0.6, 'var(--mid)'], [0.5, 'var(--good)'], [0.4]], at: whtr,
       s: whtr < 0.5 ? 'Under 0.5: "keep your waist to less than half your height".' : `${r1(wc - 0.5 * p.h)} cm of waist above half your height; it predicted heart and metabolic risk better than BMI.` });
-    const sl = range(28, end).map(k => S.sleep[k]).filter(v => v != null);
+    const sl = range(28, end).map(sleepOn).filter(v => v != null), slOut = range(28, end).filter(k => S.sleep[k] != null && sleepOn(k) == null).length;
     if (sl.length >= 7) {
       const a = mean(sl);
       out.push({ id: 'sleep', ic: 'sleep', c: 'var(--sleep)', t: 'Sleep a night', v: `${Math.floor(a)}:${String(Math.round((a % 1) * 60)).padStart(2, '0')}`, u: 'h, 4 weeks', ev: 'sleepdur',
         st: a >= 7 && a <= 9 ? 2 : a >= 6 ? 1 : 0, scale: [[5, 'var(--bad)'], [6, 'var(--mid)'], [7, 'var(--good)'], [9, 'var(--mid)'], [10]], at: a,
-        s: a < 7 ? `Under 7 hours: 12% higher mortality in pooled cohorts of 1.4 million. ${fmt((7 - a) * 60)} minutes a night short.` : a > 9 ? 'Over 9 hours went with higher mortality, though illness behind long sleep explains much of it.' : 'Within the 7–9 hours adults are advised.' });
+        s: (a < 7 ? `Under 7 hours: 12% higher mortality in pooled cohorts of 1.4 million. ${fmt((7 - a) * 60)} minutes a night short.` : a > 9 ? 'Over 9 hours went with higher mortality, though illness behind long sleep explains much of it.' : 'Within the 7–9 hours adults are advised.') + (slOut ? ` ${plural(slOut, 'night')} left out: watch off during it.` : '') });
     }
     const Q = sri(14, end);
     if (Q.v != null) out.push({ id: 'sri', ic: 'cal', c: 'var(--sleep)', t: 'Sleep regularity', v: Math.round(Q.v), u: 'SRI', ev: 'regular',

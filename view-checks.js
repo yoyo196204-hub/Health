@@ -82,6 +82,12 @@ function runChecks() {
         'The strap’s morning reading lying still is the reference. A steady offset is corrected for on days without a strap reading; a wide spread means the watch’s resting figure is noisy.'));
       out.push(chk('h-ex', 'Heart', 'Watch workout heart rate against the strap', C.ex.n < 3 ? 'na' : Math.abs(C.ex.bias) > 5 || (C.ex.hi - C.ex.lo) > 20 ? 'look' : 'ok',
         C.ex.n < 3 ? `${plural(C.ex.n, 'shared workout')}; the comparison starts at three.` : `${C.ex.n} workouts: the watch reads ${sign(C.ex.bias, 1)} bpm, 95% within ${sign(C.ex.lo, 0)} to ${sign(C.ex.hi, 0)}.`));
+      const L = C.line;
+      out.push(chk('h-line', 'Heart', 'Watch workout heart rate corrected by effort', C.lineOn ? (1.96 * L.se > 10 ? 'look' : 'ok') : 'na',
+        C.lineOn ? `strap = ${L.m.toFixed(2)} × watch ${L.b < 0 ? '−' : '+'} ${Math.round(Math.abs(L.b))}, from ${L.n} workouts over ${Math.round(L.span)} bpm; 95% of corrected workouts within ±${Math.round(1.96 * L.se)} bpm (against ±${Math.round(1.96 * C.ex.sd)} with a fixed shift).`
+          : L.m != null ? `${L.n} workouts over ${Math.round(L.span)} bpm give a slope of ${r1(L.m)}, outside 0.6–1.4: the fixed shift is used until the pairs settle.`
+          : `${plural(L.n, 'shared workout')} over ${Math.round(L.span)} bpm; a line needs 6 over at least 30 bpm. Until then the fixed shift is used${C.exOn ? '' : ' (from 3)'}.`, [],
+        'A wrist reads blood flow with light, and its error grows with effort and arm movement (Bent 2020), so one offset can fit easy sessions and miss hard ones. With enough workouts across easy to hard, a line from watch to strap (least squares) takes that into account; its residual error is what is left. Heart › Cardio has a three-session protocol that covers the range.'));
       const vals = Object.keys(S.rhr).filter(inWin).sort(), odd = [];
       vals.forEach((k, i) => { const h = vals.slice(Math.max(0, i - 28), i).map(j => S.rhr[j]); if (h.length >= 10) { const m = median(h), s = sd(h) || 1; if (Math.abs(S.rhr[k] - m) > Math.max(3 * s, 8)) odd.push({ k, t: `${S.rhr[k]} bpm against a usual ${Math.round(m)}`, s: 'rhr' }); } });
       out.push(chk('h-jump', 'Heart', 'Resting heart rate without sudden jumps', vals.length < 11 ? 'na' : odd.length ? 'look' : 'ok',
@@ -136,6 +142,14 @@ function runChecks() {
       out.push(chk('a-merge', 'Movement', 'The watch’s steps against Health Connect’s merge', merged.length ? 'look' : 'ok',
         merged.length ? `${plural(merged.length, 'day')} where the watch's own count and Health Connect's merged total differ by over 10%. The watch's own count is used, so it matches the watch app.` : 'The watch’s own count and Health Connect’s merge agree, or only the watch counts steps.', merged,
         'Health Connect merges every app that counts steps by its priority list; on recent Android the phone counts too. That merged figure is why another app can show a different total.'));
+      // Wear time: a day counts at 10 h on the wrist, a week at 4 such days (Troiano 2008).
+      const known = days.filter(k => k < todayKey() && wear(k)), short = known.filter(k => !validDay(k)), unknown = days.filter(k => k < todayKey() && S.steps[k] != null && !wear(k));
+      const nk = days.filter(k => S.sleepx[k] && nightWorn(k) != null), off = nk.filter(k => nightWorn(k) === false);
+      const weeks = [0, 1, 2, 3].map(i => range(7, shift(todayKey(), -1 - 7 * i))).filter(w => w.some(k => wear(k))), thin = weeks.filter(w => w.filter(k => validDay(k)).length < WEAR_WEEK).length;
+      out.push(chk('a-wear', 'Movement', 'Watch worn long enough to count', !known.length ? 'na' : short.length > known.length / 4 || off.length ? 'look' : 'ok',
+        !known.length ? 'No heart rate through the day yet to tell when the watch was worn.' : `${plural(known.length - short.length, 'day')} of ${known.length} worn ${WEAR_H} h or more${short.length ? `; ${short.length} left out of step trends, the burn model, the long game and links` : ''}.${nk.length ? ` ${nk.length - off.length} of ${plural(nk.length, 'night')} worn throughout${off.length ? `; ${off.length} left out` : ''}.` : ''}${thin ? ` ${plural(thin, 'week')} of the last 4 under ${WEAR_WEEK} valid days: too thin to report.` : ''}${unknown.length ? ` ${plural(unknown.length, 'day')} with steps but no record of wear time: kept, not counted as valid.` : ''}`,
+        short.map(k => ({ k, t: `worn ${dur(wear(k).min)}`, s: 'steps' })).concat(off.map(k => ({ k, t: 'night: off the wrist an hour or more', s: 'sleep' }))),
+        'Non-wear is any hour or more with no heart rate (or, from a history file, no step either). A day counts at 10 hours worn and a week at 4 such days, the rule accelerometer studies use (Troiano 2008); a day the watch spent on the table would read as a lazy day, and a night on the bedside table as sleep.'));
       out.push(chk('a-kcal', 'Movement', 'Active energy within total energy', kcal.length ? 'bad' : 'ok', kcal.length ? `${plural(kcal.length, 'day')} with more active than total energy.` : 'Every day’s active energy is part of its total.', kcal));
       const over = [];
       for (const k of days) { const L = S.ex[k] || []; for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) { const o = overlapMs(L[i].s, L[i].e, L[j].s, L[j].e); if (o > 0.5 * Math.min(L[i].e - L[i].s, L[j].e - L[j].s)) over.push({ k, t: `${esc(L[i].k)} (${esc(L[i].src || '')}) and ${esc(L[j].k)} (${esc(L[j].src || '')}) overlap` }); } }

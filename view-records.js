@@ -162,6 +162,9 @@ function hypnogram(sx) {
     <p class="key hx"><span>${lab[0]}</span><span>${lab[1]}</span><span>${lab[2]}</span></p>
     ${para(`${cyc ? `${plural(cyc, 'REM period')}, roughly one per 90-minute cycle. ` : ''}${firstDeep ? `First deep sleep ${firstDeep[0]} min after falling asleep${firstRem ? `, first REM at ${firstRem[0]} min` : ''}. ` : ''}${awak ? `${plural(awak, 'waking')} in the night.` : ''} Deep sleep comes mostly early, REM mostly late. Watch staging agrees with a sleep lab only moderately, so read the shape, not the minutes. ${why('stages', 'Why')}`)}`;
 }
+// A stage as the watch scored it, and nothing more: no usual, no word. Watch staging agrees with a sleep lab only
+// moderately (de Zambotti 2019; Chinoy 2021), so stages describe a night and never judge it.
+function stageRow(label, v) { return v == null ? '' : `<tr><td>${label}<i>the watch's estimate</i></td><td>${Math.round(v)} min</td></tr>`; }
 // One row: the day's value, your usual (the mean ± one SD of the 28 days before), and the word for where it sits.
 function dayRow(label, v, hist, f, unit, good = 0) {
   if (v == null) return '';
@@ -173,9 +176,9 @@ function vDayDetail(p) {
   const hist = f => prev.map(f).filter(v => v != null && Number.isFinite(v));
   const rows = [
     dayRow('Sleep', S.sleep[k], hist(d => S.sleep[d]), v => r1(v), ' h', 1),
-    dayRow('Asleep while in bed', sx && (sx.bed || sx.w) ? (sx.d + sx.l + sx.r) / (sx.bed || sx.d + sx.l + sx.r + sx.w) * 100 : null, hist(d => { const y = S.sleepx[d]; return y && (y.bed || y.w) ? (y.d + y.l + y.r) / (y.bed || y.d + y.l + y.r + y.w) * 100 : null; }), v => Math.round(v), '%', 1),
-    dayRow('Deep sleep', sx && sx.d + sx.r > 0 ? sx.d : null, hist(d => S.sleepx[d]?.d || null), v => Math.round(v), ' min', 0),
-    dayRow('REM sleep', sx && sx.d + sx.r > 0 ? sx.r : null, hist(d => S.sleepx[d]?.r || null), v => Math.round(v), ' min', 0),
+    dayRow('Asleep while in bed', sx && (sx.bed || sx.w) ? (sx.d + sx.l + sx.r) / (sx.bed || sx.d + sx.l + sx.r + sx.w) * 100 : null, hist(d => { const y = S.sleepx[d]; return y && (y.bed || y.w) ? (y.d + y.l + y.r) / (y.bed || y.d + y.l + y.r + y.w) * 100 : null; }), v => Math.round(v), '%', 0),
+    stageRow('Deep sleep', sx && sx.d + sx.r > 0 ? sx.d : null),
+    stageRow('REM sleep', sx && sx.d + sx.r > 0 ? sx.r : null),
     dayRow('Sleeping heart rate', sx?.hr, hist(d => S.sleepx[d]?.hr), v => Math.round(v), ' bpm', -1),
     dayRow('Lowest in sleep', sx?.lo, hist(d => S.sleepx[d]?.lo), v => Math.round(v), ' bpm', -1),
     dayRow('Resting heart rate', restingHR(k)?.v, hist(d => restingHR(d)?.v), v => Math.round(v), ' bpm', -1),

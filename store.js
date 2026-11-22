@@ -185,7 +185,8 @@ function cleanSleepx(v) {
   return r;
 }
 // Extra daily figures from the watch: distance m, active and total kcal, body fat %, SpO2 %, breaths/min, VO2max, watch HRV ms.
-const WX = { sa: [1, 100000], di: [0, 200000], ak: [0, 10000], tk: [0, 15000], bf: [3, 70], o2: [70, 100], br: [4, 40], vo: [10, 90], hv: [1, 300] };
+const WX = { sa: [1, 100000], di: [0, 200000], ak: [0, 10000], tk: [0, 15000], bf: [3, 70], o2: [70, 100], br: [4, 40], vo: [10, 90], hv: [1, 300], wm: [0, 1440] };
+// wm: minutes the watch was worn that day (model.js wear()), kept for days older than the 45 days of 5-minute heart rate.
 // What the last Health Connect read found about freshness: when it read, which app is the watch, and per kind of
 // data when its newest record was written (w), the latest moment the data reaches (e) and the app that wrote it.
 const FRESH_KINDS = ['steps', 'distance', 'active', 'total', 'sleep', 'heart', 'resting', 'hrv', 'weight', 'bodyfat', 'exercise', 'spo2', 'breathing', 'vo2'];

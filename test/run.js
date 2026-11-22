@@ -924,6 +924,8 @@ atest('a Gadgetbridge database becomes days exactly as the daily sync makes them
   assert.strictEqual(D['2026-06-30'].wt, 81.4, 'the morning weigh-in, not the evening one');
   // Heart rate: the 24-hour curve, with the hour the watch was off left empty.
   assert.deepStrictEqual([D['2026-06-01'].hd.filter(Boolean).length, D['2026-05-27'].hd.filter(Boolean).length], [288, 276]);
+  // Minutes worn, from that watch's minutes with a step or a heart rate: the hour without heart rate still had steps.
+  assert.deepStrictEqual([D['2026-06-01'].wm, D['2026-05-27'].wm], [1440, 1440]);
   // Workouts: Gadgetbridge's kinds become the sync's names, an unnamed kind keeps its own name, and each workout has
   // its own watch's heart rate, so the old Bip's run is at its 90 bpm, not the Bip 6's.
   const ex = G.ex.map(w => [new Date(w.s).toISOString().slice(0, 16), w.k, w.kcal ?? null, w.h.reduce((a, x) => a + x[1], 0)]);
@@ -1172,6 +1174,136 @@ test('Indian recipes from INDB: each with a serving, energy that agrees with its
   assert.ok(L.length > 800, `${L.length} recipes`);
   assert.ok(L.some(l => /^ASC144\|Idli\|1 idli \(25 g\)/.test(l)), 'an idli is one idli');
   assert.ok(!L.some(l => /\|Poori\|/.test(l)), 'a poori with its whole kadai of oil is left out');
+});
+// ---------- wear time ----------
+// A day of 5-minute heart rate: worn from hour a to hour b (bins with a reading), nothing outside.
+function hrDay(a, b, fill = 60) { return Array.from({ length: 288 }, (_, i) => i >= a * 12 && i < b * 12 ? fill : 0); }
+test('wear time: an hour or more without heart rate is non-wear, shorter gaps are not, and 10 h makes a valid day', c => {
+  c.d = hrDay(0, 24); c.d[100] = c.d[101] = c.d[102] = 0;
+  assert.strictEqual(run(c, 'wornMin(d)'), 1440, 'a 15-minute gap is still worn');
+  c.d2 = hrDay(7, 15);
+  assert.strictEqual(run(c, 'wornMin(d2)'), 480);
+  run(c, `S.hrd[shift(todayKey(), -2)] = d2; S.hrd[shift(todayKey(), -3)] = d; S.steps[shift(todayKey(), -2)] = 3000; S.steps[shift(todayKey(), -3)] = 9000; S.steps[shift(todayKey(), -60)] = 7000; S.manual.steps[shift(todayKey(), -4)] = true; S.steps[shift(todayKey(), -4)] = 5000; S.hrd[shift(todayKey(), -4)] = d2;`);
+  assert.deepStrictEqual(run(c, '[-2, -3, -60].map(i => validDay(shift(todayKey(), i)))'), [false, true, null]);
+  // The short day's steps are out; an unknown day is kept (not called valid); a count you typed stands.
+  assert.deepStrictEqual(run(c, '[-2, -3, -60, -4].map(i => stepsOn(shift(todayKey(), i)))'), [null, 9000, 7000, 5000]);
+  const R = run(c, 'stepRun(range(7))');
+  assert.deepStrictEqual([R.vals.sort(), R.out.length, R.valid], [[5000, 9000], 1, 1]);
+  assert.strictEqual(run(c, 'wearNote(range(7))'), '1 day left out: watch worn under 10 h');
+  // Older days keep their worn minutes from a history file.
+  run(c, `S.wx[shift(todayKey(), -60)] = { wm: 420 }; memo.clear()`);
+  assert.strictEqual(run(c, 'validDay(shift(todayKey(), -60))'), false);
+});
+test('wear time: a night is used only if the watch was on through it', c => {
+  const k = run(c, 'shift(todayKey(), -1)'), p = run(c, 'shift(todayKey(), -2)');
+  // Asleep 23:00 to 07:00; heart rate all evening and all morning.
+  run(c, `S.sleepx['${k}'] = { d: 90, l: 300, r: 90, w: 0, on: -60, off: 420 }; S.sleep['${k}'] = 8;`);
+  c.ev = hrDay(0, 24); c.mo = hrDay(0, 24);
+  run(c, `S.hrd['${p}'] = ev; S.hrd['${k}'] = mo;`);
+  assert.deepStrictEqual(run(c, `[nightWorn('${k}'), sleepOn('${k}')]`), [true, 8]);
+  // Off the wrist from 02:00 to 04:00: the "sleep" may be a watch on the table.
+  c.mo2 = hrDay(0, 24); for (let i = 24; i < 48; i++) c.mo2[i] = 0;
+  const d = run(c, `S.hrd['${k}'] = mo2; memo.clear(); [nightWorn('${k}'), sleepOn('${k}'), midpoint('${k}'), sleepStats(7).n, sleepStats(7).out]`);
+  assert.deepStrictEqual(d, [false, null, null, 0, 1]);
+  // No 5-minute data for the night: unknown, so it is kept.
+  run(c, `delete S.hrd['${p}']; memo.clear()`);
+  assert.deepStrictEqual(run(c, `[nightWorn('${k}'), sleepOn('${k}')]`), [null, 8]);
+  // Typed sleep always stands.
+  run(c, `S.hrd['${p}'] = ev; S.hrd['${k}'] = mo2; S.manual.sleep['${k}'] = true; memo.clear()`);
+  assert.strictEqual(run(c, `sleepOn('${k}')`), 8);
+});
+test('wear time: the burn model and the long game leave out short days, and a sync keeps worn minutes past 45 days', c => {
+  // 28 days at 10,000 steps worn all day; then 6 days at 1,000 worn 3 h.
+  for (let i = 1; i <= 28; i++) run(c, `S.steps[shift(todayKey(), -${i})] = ${i <= 6 ? 1000 : 10000}; S.hrd[shift(todayKey(), -${i})] = ${JSON.stringify(hrDay(0, i <= 6 ? 3 : 24))}`);
+  run(c, 'memo.clear()');
+  assert.strictEqual(run(c, 'energyModel().stepMean'), 10000);
+  const st = run(c, "markers().find(m => m.id === 'steps')");
+  assert.strictEqual(st.raw, 10000);
+  assert.ok(/6 days left out: watch worn under 10 h/.test(st.s), st.s);
+  // Fewer than 4 valid days this week: the step figure for targets comes from four weeks.
+  assert.strictEqual(run(c, 'liveTargets().steps'), 10000);
+  assert.deepStrictEqual(run(c, 'stepRun(range(28, shift(todayKey(), -1)))').valid, 22);
+  // A sync with the day's heart rate: worn minutes are kept with the day, so they outlive the 45-day curve.
+  const old = run(c, 'shift(todayKey(), -80)');
+  run(c, `mergeSync({ days: { '${old}': { st: 4000, hd: ${JSON.stringify(hrDay(8, 14))} } } })`);
+  assert.deepStrictEqual(run(c, `[S.hrd['${old}'], S.wx['${old}'].wm, validDay('${old}'), stepsOn('${old}')]`), [null, 360, false, null]);
+});
+// ---------- sleep stages describe, never decide ----------
+test('sleep: every conclusion is the same whatever the watch called deep, light or REM', c => {
+  c.raw = seedV3(); run(c, 'S = sanitize(raw)');
+  // 40 nights with stages, at a varying length and time, with morning checks and food beside them.
+  for (let i = 0; i < 40; i++) {
+    const k = run(c, `shift(todayKey(), -${i})`), tot = 380 + (i * 37) % 120, on = -90 + (i * 23) % 80;
+    run(c, `S.sleepx['${k}'] = { d: ${Math.round(tot * 0.2)}, l: ${tot - Math.round(tot * 0.2) - Math.round(tot * 0.22)}, r: ${Math.round(tot * 0.22)}, w: 20, on: ${on}, off: ${on + tot + 20}, hr: ${52 + i % 5} }; S.sleep['${k}'] = ${Math.round(tot / 6) / 10};
+      S.hrv['${k}'] = { rmssd: ${40 + (i * 7) % 15}, hr: ${55 + i % 4}, t: Date.parse('${k}T07:00') }`);
+  }
+  const all = () => run(c, `memo.clear(), JSON.stringify([readiness(), recoveryScore(), sleepStats(14), sleepStats(28), sri(), socialJetlag(), markers(), allLinks(), headline()])`);
+  const before = all();
+  // The same nights, the stages shuffled: deep and REM swapped and halved into light.
+  run(c, `for (const x of Object.values(S.sleepx)) { const d = x.d, r = x.r; x.d = Math.round(r / 2); x.r = Math.round(d / 2); x.l += d + r - x.d - x.r; }`);
+  assert.strictEqual(all(), before);
+});
+// ---------- watch against strap, by effort ----------
+// Paired workouts: strap sessions with the watch's average over the same time. sw: [[watch, strap], ...].
+function pairUp(c, sw) {
+  run(c, 'S.cardio = {}; S.pairs = {}');
+  sw.forEach(([w, st], i) => {
+    const t = Date.parse('2026-11-01T07:00:00Z') + i * 864e5, k = run(c, `dk(new Date(${t}))`);
+    run(c, `(S.cardio['${k}'] ||= []).push({ t: ${t}, dur: 1800, avg: ${st}, max: ${st + 15}, z: [0, 1800, 0, 0] }); S.pairs['${t}'] = { a: ${w}, n: 300 }; memo.clear()`);
+  });
+}
+test('watch workout heart rate: a fixed shift from 3 pairs, a line by effort from 6 over 30 bpm', c => {
+  // The watch reads low, more so the harder it gets: strap = 1.25 × watch − 25, give or take a beat.
+  const line = w => Math.round(1.25 * w - 25);
+  pairUp(c, [[100, line(100)], [104, line(104)], [108, line(108) + 1]]);
+  let C = run(c, 'calibration()');
+  assert.ok(C.exOn && !C.lineOn, 'three pairs: the fixed shift only');
+  assert.strictEqual(run(c, 'Math.round(watchFix(150))'), Math.round(150 - C.ex.bias));
+  // Six pairs, but all easy: too narrow a range for a line.
+  pairUp(c, [100, 102, 104, 106, 108, 110].map(w => [w, line(w)]));
+  C = run(c, 'calibration()');
+  assert.ok(!C.lineOn && C.line.span < 30, `span ${C.line.span}`);
+  // Six pairs from easy to hard: the line, with its residual error, and corrections that follow effort.
+  pairUp(c, [[100, line(100) + 1], [110, line(110) - 1], [120, line(120)], [130, line(130) + 1], [140, line(140) - 1], [150, line(150)]]);
+  C = run(c, 'calibration()');
+  assert.ok(C.lineOn, JSON.stringify(C.line));
+  assert.ok(Math.abs(C.line.m - 1.25) < 0.05 && C.line.se < 1.5, JSON.stringify(C.line));
+  assert.ok(Math.abs(run(c, 'watchFix(150)') - line(150)) < 2 && Math.abs(run(c, 'watchFix(100)') - line(100)) < 2, 'right at both ends, where one shift cannot be');
+  // A watch workout is counted on the strap's scale through the line.
+  const k = run(c, 'shift(todayKey(), -1)'), s0 = run(c, `Date.parse('${k}T18:00:00')`);
+  run(c, `S.ex['${k}'] = [{ s: ${s0}, e: ${s0 + 1800000}, k: 'Run', src: 'Gadgetbridge', h: [[150, 1800]] }]; memo.clear()`);
+  const X = run(c, `sessions('${k}').find(x => x.src === 'watch')`);
+  assert.ok(X.corrected && Math.abs(X.avg - line(150)) < 2, JSON.stringify(X));
+  // Pairs that scatter with no steady slope: the fixed shift stays.
+  pairUp(c, [[100, 160], [110, 100], [120, 165], [130, 105], [140, 150], [150, 110]]);
+  C = run(c, 'calibration()');
+  assert.ok(!C.lineOn && C.exOn, JSON.stringify(C.line));
+});
+// ---------- training load ----------
+test('training load: Edwards zone TRIMP from the strap, the watch only once matched, the rest left out and named', c => {
+  run(c, "S.profile.dob = '1990-01-01'; S.cardio = {}; S.pairs = {}; S.ex = {}; S.lifts = {}; memo.clear()");
+  const H = run(c, 'hrProfile()');
+  // 10 min at 55%, 10 at 75%, 10 at 95% of max: 10×1 + 10×3 + 10×5 = 90.
+  c.h = [[Math.round(H.max * 0.55), 600], [Math.round(H.max * 0.75), 600], [Math.round(H.max * 0.95), 600], [Math.round(H.max * 0.4), 600]];
+  assert.strictEqual(Math.round(run(c, 'trimpOf(h).load')), 90);
+  const k = run(c, 'shift(todayKey(), -1)'), t = run(c, `Date.parse('${k}T07:00:00')`), t2 = run(c, `Date.parse('${k}T18:00:00')`);
+  // A strap session with its trace: 30 min at 75% of max = 90.
+  run(c, `S.cardio['${k}'] = [{ t: ${t}, dur: 1800, avg: ${Math.round(H.max * 0.75)}, max: ${Math.round(H.max * 0.8)}, z: [0, 0, 1800, 0], tr: Array(360).fill(${Math.round(H.max * 0.75)}) },
+    { t: ${t + 7200000}, dur: 1200, m: 1, eff: 'mod', z: [0, 1200, 0, 0] }];
+    S.ex['${k}'] = [{ s: ${t2}, e: ${t2 + 1800000}, k: 'Run', src: 'Gadgetbridge', h: [[${Math.round(H.max * 0.75)}, 1800]] }]; memo.clear()`);
+  let X = run(c, `sessions('${k}')`);
+  assert.strictEqual(Math.round(X.find(x => x.src === 'strap').load), 90);
+  assert.deepStrictEqual(X.filter(x => x.src !== 'strap').map(x => [x.load, x.noLoad]), [[null, 'typed, no heart rate'], [null, 'watch not yet matched to the strap']]);
+  let L = run(c, 'trainingLoad()');
+  assert.deepStrictEqual([Math.round(L.week), L.usual, L.mono, L.out.length], [90, null, null, 2], 'one session, under 4 weeks of records: no usual, no monotony');
+  // Three paired workouts later, the watch is on the strap's scale and its run counts.
+  [2, 3, 4].forEach(i => { const ti = Date.parse('2026-10-01T07:00:00Z') + i * 864e5, kk = run(c, `dk(new Date(${ti}))`); run(c, `(S.cardio['${kk}'] ||= []).push({ t: ${ti}, dur: 1800, avg: 140, max: 160, z: [0, 1800, 0, 0] }); S.pairs['${ti}'] = { a: 135, n: 300 }`); });
+  run(c, 'memo.clear()');
+  X = run(c, `sessions('${k}').find(x => x.src === 'watch')`);
+  assert.ok(X.load > 0 && X.corrected, JSON.stringify(X));
+  L = run(c, 'trainingLoad()');
+  assert.ok(L.usual != null && L.n7 === 2 && L.mono != null && L.out.length === 1, JSON.stringify(L));
+  assert.strictEqual(run(c, 'trainingLoad().week'), run(c, `sessions('${k}').reduce((a, x) => a + (x.load || 0), 0)`));
 });
 test('every file the app loads later is in the version stamp, so none can be served stale', () => {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');

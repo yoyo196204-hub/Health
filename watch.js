@@ -39,10 +39,12 @@ function watchParser(name) {
     },
     // Heart rate through the day, every minute or so. Kept per day as a resting estimate and a 5-minute curve.
     hr() {
-      const iH = col('heartrate'), iT = col('time'), byDay = {}, bins = {};
+      const iH = col('heartrate'), iT = col('time'), byDay = {}, bins = {}, seen = {};
       done = () => {
         // Resting estimate: the 5th percentile of the day's readings, which falls in sleep or quiet rest.
         for (const k in byDay) if (byDay[k].length >= 30) day(k).rp = Math.round(quantile(byDay[k], 0.05));
+        // Minutes worn each day, from which 5-minute bins have a reading (model.js wornMin).
+        for (const k in seen) day(k).wm = wornMin(seen[k]);
         // The 24-hour curve only for the last weeks: the app keeps 45 days of them.
         const from = shift(todayKey(), -45);
         for (const k in bins) if (k >= from) { const hd = Array.from({ length: 288 }, (_, i) => bins[k][i] ? Math.round(median(bins[k][i])) : 0); if (hd.filter(Boolean).length >= 12) day(k).hd = hd; }
@@ -63,7 +65,7 @@ function watchParser(name) {
         }
         if (k.length !== 10 || !DATE.test(k)) return;
         (byDay[k] ||= []).push(h);
-        if (min != null && min >= 0 && min < 1440 && k >= recent) ((bins[k] ||= {})[Math.floor(min / 5)] ||= []).push(h);
+        if (min != null && min >= 0 && min < 1440) { (seen[k] ||= new Uint8Array(288))[Math.floor(min / 5)] = 1; if (k >= recent) ((bins[k] ||= {})[Math.floor(min / 5)] ||= []).push(h); }
       };
     },
     // A Zepp scale: weight, and its body-fat reading. The last reading of a day is the day's.

@@ -131,6 +131,61 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     assert.ok(await page.evaluate(() => !!document.querySelector('.ckbanner.bad')), 'Review says something does not add up');
     await page.evaluate(() => { S.food[todayKey()] = S.food[todayKey()].filter(e => e.id !== 'qt'); save(); });
   });
+  await test('wear time: short days are left out of the long game and said so, and the check lists them', async () => {
+    const before = await page.evaluate(() => {
+      const full = Array(288).fill(62), short = Array(288).fill(0).map((_, i) => i >= 96 && i < 168 ? 70 : 0), old = { hrd: S.hrd, steps: S.steps };
+      S.hrd = {}; S.steps = { ...S.steps };
+      for (let i = 1; i <= 20; i++) { const k = shift(todayKey(), -i); S.hrd[k] = i <= 3 ? short : full; S.steps[k] = i <= 3 ? 900 : 8000; }
+      save(); window.__wear = old; return true;
+    });
+    assert.ok(before);
+    await go('set-checks');
+    const ck = await page.evaluate(() => { const li = [...document.querySelectorAll('.ck')].find(l => /Watch worn long enough/.test(l.textContent)); return li && [li.className, li.querySelector('summary .sub').textContent, li.querySelectorAll('.ckitems li').length]; });
+    assert.ok(ck && /look/.test(ck[0]) && /17 days of 20 worn 10 h or more; 3 left out/.test(ck[1]) && ck[2] === 6, JSON.stringify(ck));
+    await go('review'); await page.evaluate(() => { SUB.review = 'long'; renderView(); }); await page.waitForTimeout(300);
+    assert.strictEqual(await page.evaluate(() => markers().find(m => m.id === 'steps').raw), 8000, 'the short days do not pull the median down');
+    assert.ok(await page.evaluate(() => /3 days left out: watch worn under 10 h/.test(markers().find(m => m.id === 'steps').s)));
+    await page.evaluate(() => { SUB.review = 'links'; renderView(); }); await page.waitForTimeout(300);
+    assert.ok(/3 days left out: watch worn under 10 h/.test(await page.textContent('#in-links')), 'Links say what was left out');
+    await shot('wear');
+    await page.evaluate(() => { Object.assign(S, window.__wear); save(); render(); });
+  });
+  await test('watch against strap: a line by effort, its error in Data checks, and the protocol on Heart', async () => {
+    await page.evaluate(() => {
+      window.__cal = { cardio: S.cardio, pairs: S.pairs }; S.cardio = {}; S.pairs = {};
+      [100, 110, 120, 130, 140, 150].forEach((w, i) => { const t = Date.now() - (i + 2) * 864e5, k = dk(new Date(t)); (S.cardio[k] ||= []).push({ t, dur: 1800, avg: Math.round(1.25 * w - 25) + (i % 2 ? 1 : -1), max: 180, z: [0, 1800, 0, 0] }); S.pairs[t] = { a: w, n: 300 }; });
+      save(); render();
+    });
+    await go('set-checks');
+    const r = await page.evaluate(() => [...document.querySelectorAll('.ck')].find(l => /corrected by effort/.test(l.textContent))?.querySelector('summary .sub').textContent);
+    assert.ok(/strap = 1\.2\d × watch − 2\d, from 6 workouts over \d+ bpm; 95% of corrected workouts within ±\d bpm/.test(r), r);
+    await go('recovery'); await page.evaluate(() => { SUB.recovery = 'cardio'; renderView(); }); await page.waitForTimeout(300);
+    const t = await page.evaluate(() => document.getElementById('view').textContent);
+    assert.ok(/put on the strap's scale by effort/.test(t) && /5 min resting, 10 min easy, 10 min moderate, 3–5 min hard/.test(t), 'the line and the protocol');
+    await shot('calibration');
+    await page.evaluate(() => { Object.assign(S, window.__cal); save(); render(); });
+  });
+  await test('a day in detail: stages are described, never judged against your usual', async () => {
+    await go('today');
+    const k = await page.evaluate(() => { const k = shift(todayKey(), -1); S.sleepx[k] = { d: 20, l: 300, r: 30, w: 15, on: -60, off: 305, hr: 55 }; S.sleep[k] = 5.8; save(); openPop({ kind: 'dayx', k }); return k; });
+    await page.waitForTimeout(600);
+    const rows = await page.evaluate(() => [...document.querySelectorAll('#sheet tr')].map(r => r.textContent));
+    const st = rows.filter(r => /^(Deep|REM) sleep/.test(r));
+    assert.strictEqual(st.length, 2, rows.join(' | '));
+    assert.ok(st.every(r => /the watch's estimate/.test(r) && !/usual|low|high|short|long/i.test(r.replace("the watch's estimate", ''))), st.join(' | '));
+    await shot('daydetail');
+    await page.evaluate(() => closePop()); await page.waitForTimeout(300);
+  });
+  await test('training History: load this week against the usual, monotony as context, never a risk ratio', async () => {
+    await go('today');
+    await page.tap('.trcard [data-act="trainlog"]'); await page.waitForTimeout(600);
+    const t = await page.evaluate(() => document.querySelector('.tload')?.textContent || '');
+    assert.ok(/Training load/.test(t) && /last 7 days/.test(t) && /monotony/.test(t), t);
+    assert.ok(!/risk|injur|ratio/i.test(t), 'no acute:chronic risk');
+    await page.evaluate(() => document.querySelector('.tload').scrollIntoView({ block: 'center' })); await page.waitForTimeout(300);
+    await shot('trainload');
+    await page.evaluate(() => closePop()); await page.waitForTimeout(400);
+  });
   await test('recovery, training, review: the inputs behind the verdict, nights that end, short session list, honest links', async () => {
     await page.evaluate(() => { const k = shift(todayKey(), -1); S.sleepx[k] = { d: 60, l: 200, r: 60, w: 10, on: -60 }; S.sleep[k] = 5.5; save(); });
     const part = async (t, v) => { await page.evaluate(([t, v]) => { SUB[t] = v; renderView(); }, [t, v]); await page.waitForTimeout(300); };

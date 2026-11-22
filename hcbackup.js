@@ -174,12 +174,16 @@ function hcbSleep(nights, day, prefer) {
 function hcbHeart(hT, hB, days, day, main, ex) {
   if (!hT.length) return;
   const lower = x => { let a = 0, b = hT.length; while (a < b) { const m = (a + b) >> 1; if (hT[m] < x) a = m + 1; else b = m; } return a; };
-  const byDay = {}, bins = {}, recent = shift(todayKey(), -45);
+  const byDay = {}, bins = {}, seen = {}, recent = shift(todayKey(), -45);
   for (let i = 0; i < hT.length; i++) {
     const dt = new Date(hT[i]), k = dk(dt);
     (byDay[k] ||= []).push(hB[i]);
-    if (k >= recent) { const b = bins[k] ||= []; (b[Math.floor((dt.getHours() * 60 + dt.getMinutes()) / 5)] ||= []).push(hB[i]); }
+    const slot = Math.floor((dt.getHours() * 60 + dt.getMinutes()) / 5);
+    (seen[k] ||= new Uint8Array(288))[slot] = 1;
+    if (k >= recent) { const b = bins[k] ||= []; (b[slot] ||= []).push(hB[i]); }
   }
+  // Minutes worn each day, from which 5-minute bins have a reading (model.js wornMin), for every day of the file.
+  for (const [k, b] of Object.entries(seen)) { const o = day(k); if (o && o.wm == null) o.wm = wornMin(b); }
   for (const [k, v] of Object.entries(byDay)) { const o = day(k); if (o && o.rh == null && v.length >= 30) o.rp = v.sort((a, b) => a - b)[Math.floor(v.length * 0.05)]; }
   for (const [k, m] of Object.entries(main)) {
     const a = lower(m.s), b = lower(m.e + 1) - 1;

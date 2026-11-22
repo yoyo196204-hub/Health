@@ -59,8 +59,8 @@ async function gbRead(db, onStep = () => {}) {
     db.each(name, r => {
       const ms = r.timestamp * 1000, id = r.device_id, hr = r.heart_rate, s = r.steps > 0 && r.steps <= 300 ? r.steps : 0, beat = hr >= 30 && hr <= 230;
       if (!(ms > 946684800000) || !(s || beat)) return;
-      const a = (per[dayOf(ms)] ||= {})[id] ||= [0, 0];
-      a[0]++; a[1] += s;
+      const a = (per[dayOf(ms)] ||= {})[id] ||= [0, 0, new Uint8Array(288)], t = new Date(ms);
+      a[0]++; a[1] += s; a[2][Math.floor((t.getHours() * 60 + t.getMinutes()) / 5)] = 1;
       if (dev[id]) dev[id].worn++;
       if (beat && T.length < 3e6) { T.push(ms); B.push(hr); D.push(id); }
     });
@@ -68,9 +68,11 @@ async function gbRead(db, onStep = () => {}) {
   // Each day's watch: the one worn more of it. Its steps are the day's.
   const mainDev = {};
   for (const [k, by] of Object.entries(per)) {
-    const [id, [, st]] = Object.entries(by).reduce((a, b) => (b[1][0] > a[1][0] ? b : a));
+    const [id, [, st, bins]] = Object.entries(by).reduce((a, b) => (b[1][0] > a[1][0] ? b : a));
     mainDev[k] = +id;
     const o = day(k); if (o && st >= 1) o.st = st;
+    // Minutes worn: that watch's 5-minute bins with a step or a heart rate, less any hour or more with neither.
+    if (o) o.wm = wornMin(bins);
   }
   const own = (id, ms) => { const m = mainDev[dayOf(ms)]; return m == null || m === id; };
 
