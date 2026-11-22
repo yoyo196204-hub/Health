@@ -867,8 +867,13 @@ atest('moving from Zepp to Gadgetbridge: each day takes the watch app that wrote
   T.sleep_session_record_table[2].start_time = at('2026-06-09', 22); T.sleep_stages_table[2].stage_start_time = at('2026-06-09', 22);   // the phone's longer guess
   const beats = (app, k, h, n, bpm) => { id++; T.heart_rate_record_table.push({ row_id: id, app_info_id: app, last_modified_time: at(k, 21) }); for (let i = 0; i < n; i++) T.heart_rate_record_series_table.push({ parent_key: id, epoch_millis: at(k, h) + i * 60000, beats_per_minute: bpm }); };
   beats(1, '2026-06-09', 8, 300, 60); beats(2, '2026-06-10', 8, 300, 62); beats(4, '2026-06-10', 12, 40, 140);
+  // Blood oxygen: three watch readings in the night, one at midday, and the phone's 80% in the night.
+  T.oxygen_saturation_record_table = [[2, 3, 93], [2, 4, 91], [2, 5, 95], [2, 14, 99], [3, 4, 80]].map(([app, h, v]) => ({ app_info_id: app, time: at('2026-06-10', h), zone_offset: 0, percentage: v }));
   c.T = T;
   const H = JSON.parse(JSON.stringify(await vm.runInContext('hcBackup({ each: (n, fn) => (T[n] || []).forEach(fn) || (T[n] || []).length })', c)));
+  const d10 = H.days['2026-06-10'];
+  assert.deepStrictEqual([d10.o2n, d10.o2c, d10.o2l, d10.o2], [93, 3, 91, 94.5], 'the night’s own readings, the watch’s alone; the midday one only in the day’s average');
+  assert.strictEqual(H.days['2026-06-09'].o2n, undefined);
   assert.strictEqual(H.watch, 'Gadgetbridge', 'the watch app still writing is the one named');
   assert.deepStrictEqual([H.days['2026-06-09'].st, H.days['2026-06-10'].st], [7000, 6000], 'each day the watch app that wrote it, not the phone');
   assert.deepStrictEqual([H.days['2026-06-09'].sl.l, H.days['2026-06-10'].sl.l], [420, 420], 'the watch’s night, not the phone’s longer guess');
@@ -921,6 +926,8 @@ atest('a Gadgetbridge database becomes days exactly as the daily sync makes them
   // HRV from the readings inside the night only: 40–42 overnight, not the 20s at noon; none on the day with no night.
   assert.deepStrictEqual([D['2026-06-01'].hv, D['2026-05-22'].hv], [40.9, undefined]);
   assert.deepStrictEqual([D['2026-05-22'].o2, D['2026-05-23'].o2, D['2026-05-22'].br, D['2026-05-23'].br], [96, 97, 14, 15]);
+  // The 03:00 reading falls in the night on days with one, and becomes that night's blood oxygen in sleep.
+  assert.deepStrictEqual([D['2026-06-01'].o2n, D['2026-06-01'].o2c, D['2026-05-22'].o2n], [D['2026-06-01'].o2, 1, undefined]);
   assert.strictEqual(D['2026-06-30'].wt, 81.4, 'the morning weigh-in, not the evening one');
   // Heart rate: the 24-hour curve, with the hour the watch was off left empty.
   assert.deepStrictEqual([D['2026-06-01'].hd.filter(Boolean).length, D['2026-05-27'].hd.filter(Boolean).length], [288, 276]);
@@ -1431,6 +1438,30 @@ test('early illness: a strap reading is never read against the watch baseline', 
   if (mode === 'strap') assert.ok(I.missing.some(m => /resting heart rate needs/.test(m)), JSON.stringify(I.missing));
   assert.strictEqual(I.on, false);
   assert.deepStrictEqual(I.nights.map(n => n.hrv.src), ['watch', 'watch']);
+});
+
+test('low blood oxygen in sleep: only from nights with enough readings and the watch on, only with 5 nights, only when 3 are under 92%', c => {
+  const t = run(c, 'todayKey()');
+  const night = (i, v, n = 6, lo = v - 2) => run(c, `S.wx[shift('${t}', -${i})] = cleanWx({ o2n: ${v}, o2c: ${n}, o2l: ${lo} }); memo.clear()`);
+  for (let i = 0; i < 4; i++) night(i, i < 3 ? 90.5 : 96);
+  let O = run(c, 'spo2Nights()');
+  assert.deepStrictEqual([O.on, O.ready, O.need, O.low.length], [false, false, 1, 3], 'four nights are not enough');
+  night(5, 96);
+  O = run(c, 'spo2Nights()');
+  assert.deepStrictEqual([O.on, O.ready, O.low.length, O.nights.length], [true, true, 3, 5]);
+  night(1, 96); assert.strictEqual(run(c, 'spo2Nights().on'), false, 'two low nights are not repeated enough');
+  // A night with two readings, or with the watch off, is left out and said so.
+  night(1, 89, 2);
+  O = run(c, 'spo2Nights()');
+  assert.deepStrictEqual([O.on, O.left.map(x => x[1])], [false, ['2 readings']]);
+  night(1, 89);
+  run(c, `S.sleepx['${t}'] = { on: -60, off: 420, d: 60, l: 300, r: 60, w: 20 }; S.hrd['${t}'] = Array(288).fill(0); S.hrd[shift('${t}', -1)] = Array(288).fill(60); memo.clear()`);
+  O = run(c, 'spo2Nights()');
+  assert.deepStrictEqual([O.on, O.low.length, O.left.map(x => x[1])], [false, 2, ['watch off during the night']]);
+  // The day's average (o2), with daytime spot checks in it, is never read for this.
+  run(c, `for (let i = 0; i < 14; i++) S.wx[shift('${t}', -i)] = { o2: 85 }; memo.clear()`);
+  assert.deepStrictEqual(run(c, '[spo2Nights().on, spo2Nights().nights.length]'), [false, 0]);
+  assert.deepStrictEqual(run(c, 'cleanWx({ o2n: 60, o2c: 0, o2l: 40 })'), null, 'impossible values are not kept');
 });
 
 (async () => {

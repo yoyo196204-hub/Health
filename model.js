@@ -337,6 +337,28 @@ function illness(k = todayKey()) {
   });
 }
 
+// ---------- low blood oxygen in sleep ----------
+// Repeated nights whose blood oxygen in sleep averages under about 92% are worth mentioning to a doctor (in healthy
+// adults it stays around 95–98% through the night; a mean under 92% is uncommon without a breathing or lung problem).
+// Wrist SpO2 is not medical grade: it reads several points off, and low with a loose strap, cold hands or lying on the
+// arm, so one night means nothing. Read only from nights with at least 3 readings inside the main sleep and the watch
+// worn through, over the last 14 days; said only with 5 such nights, and only when 3 or more of them are under 92%.
+const O2_LOW = 92, O2_READS = 3, O2_NIGHTS = 5, O2_REPEAT = 3;
+function spo2Nights(k = todayKey()) {
+  return cached('O2' + k, () => {
+    const days = range(14, k), nights = [], left = [];
+    for (const d of days) {
+      const x = S.wx[d];
+      if (x?.o2n == null) continue;
+      if ((x.o2c || 0) < O2_READS) left.push([d, `${plural(x.o2c || 0, 'reading')}`]);
+      else if (nightWorn(d) === false) left.push([d, 'watch off during the night']);
+      else nights.push({ k: d, v: x.o2n, n: x.o2c, lo: x.o2l ?? null });
+    }
+    const low = nights.filter(n => n.v < O2_LOW), ready = nights.length >= O2_NIGHTS;
+    return { nights, low, left, ready, need: Math.max(0, O2_NIGHTS - nights.length), on: ready && low.length >= O2_REPEAT };
+  });
+}
+
 // ---------- wear time ----------
 // How long the watch was on the wrist each day. A day's steps, or a night's sleep, from a watch that spent half of it
 // on the table is not that day; accelerometer studies count a day only at 10 hours worn and a week only with 4 such

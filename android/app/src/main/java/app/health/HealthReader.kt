@@ -262,7 +262,24 @@ class HealthReader(private val a: MainActivity) {
         // Point readings: daily average, or the morning value for weight and body fat.
         safe("resting") { avg(c, watches, RestingHeartRateRecord::class, instants, { dateOf(it.time) }, { it.beatsPerMinute.toDouble() }) { d, v -> day(d)?.put("rh", v.roundToInt()) } }
         safe("hrv") { avg(c, watches, HeartRateVariabilityRmssdRecord::class, instants, { dateOf(it.time) }, { it.heartRateVariabilityMillis }) { d, v -> day(d)?.put("hv", Math.round(v * 10) / 10.0) } }
-        safe("spo2") { avg(c, watches, OxygenSaturationRecord::class, instants, { dateOf(it.time) }, { it.percentage.value }) { d, v -> day(d)?.put("o2", Math.round(v * 10) / 10.0) } }
+        safe("spo2") {
+            avg(c, watches, OxygenSaturationRecord::class, instants, { dateOf(it.time) }, { it.percentage.value }) { d, v -> day(d)?.put("o2", Math.round(v * 10) / 10.0) }
+            // Blood oxygen in the night's main sleep (filed under the morning it ends): mean, count and lowest, the
+            // watch's own readings wherever it wrote any. A daytime spot check never enters the night's figure.
+            val all = HashMap<LocalDate, ArrayList<Double>>(); val mine = HashMap<LocalDate, ArrayList<Double>>()
+            readAll(c, OxygenSaturationRecord::class, instants) { r ->
+                val v = r.percentage.value
+                if (v < 70 || v > 100) return@readAll
+                val d0 = dateOf(r.time)
+                val n = listOf(d0, d0.plusDays(1)).firstOrNull { d -> mainSleep[d]?.let { r.time >= it.start && r.time <= it.end } == true } ?: return@readAll
+                all.getOrPut(n) { ArrayList() }.add(v)
+                if (r.metadata.dataOrigin.packageName in watches) mine.getOrPut(n) { ArrayList() }.add(v)
+            }
+            for ((d, a) in all) {
+                val v = mine[d] ?: a
+                day(d)?.put("o2n", Math.round(v.average() * 10) / 10.0)?.put("o2c", v.size)?.put("o2l", Math.round(v.min() * 10) / 10.0)
+            }
+        }
         safe("breathing") { avg(c, watches, RespiratoryRateRecord::class, instants, { dateOf(it.time) }, { it.rate }) { d, v -> day(d)?.put("br", Math.round(v * 10) / 10.0) } }
         safe("weight") { first(c, WeightRecord::class, instants, { it.time }) { r -> day(dateOf(r.time))?.put("wt", Math.round(r.weight.inKilograms * 10) / 10.0) } }
         safe("bodyfat") { first(c, BodyFatRecord::class, instants, { it.time }) { r -> day(dateOf(r.time))?.put("bf", Math.round(r.percentage.value * 10) / 10.0) } }

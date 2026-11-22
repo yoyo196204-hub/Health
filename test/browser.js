@@ -205,6 +205,25 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await page.evaluate(() => { Object.assign(S, window.__ill); save(); });
     await go('today');
   });
+  await test('low blood oxygen in sleep: a notice on Today worded for a doctor, a line on Heart › Sleep, and quiet with too few nights', async () => {
+    await page.evaluate(() => {
+      window.__o2 = JSON.parse(JSON.stringify(S.wx));
+      for (let i = 0; i < 8; i++) { const d = shift(todayKey(), -i); S.wx[d] = Object.assign({}, S.wx[d], { o2n: i % 2 ? 95.5 : 90.4, o2c: 12, o2l: 86 }); }
+      save();
+    });
+    await go('review'); await go('today');
+    const t = await page.evaluate(() => document.querySelector('.callout.ill')?.textContent.replace(/\s+/g, ' '));
+    assert.ok(t && /Blood oxygen was low on several nights/.test(t) && /under 92% on 4 of your last 8 measured nights \(lowest 90.4%\)/.test(t) && /worth mentioning to a doctor/.test(t) && /not medical grade/.test(t), t);
+    await page.evaluate(() => scrollTo(0, 0)); await shot('spo2');
+    await go('recovery-sleep');
+    const l = await page.textContent('#view');
+    assert.ok(/Blood oxygen in sleep under 92% on 4 of 8 nights/.test(l), l.slice(-600));
+    await page.evaluate(() => { for (let i = 4; i < 8; i++) delete S.wx[shift(todayKey(), -i)].o2n; save(); render(); });
+    assert.ok(/Blood oxygen in sleep: [\d.]+% on average over 4 nights in the last two weeks, under 92% on 2\. 1 more night before it is read for low nights\./.test(await page.textContent('#view')));
+    await go('today');
+    assert.ok(await page.evaluate(() => !document.querySelector('.callout.ill')), 'nothing on Today with four nights');
+    await page.evaluate(() => { S.wx = window.__o2; save(); });
+  });
   await test('wear time: short days are left out of the long game and said so, and the check lists them', async () => {
     const before = await page.evaluate(() => {
       const full = Array(288).fill(62), short = Array(288).fill(0).map((_, i) => i >= 96 && i < 168 ? 70 : 0), old = { hrd: S.hrd, steps: S.steps };

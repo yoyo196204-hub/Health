@@ -105,6 +105,9 @@ async function gbRead(db, onStep = () => {}) {
   // Resting heart rate is one figure a day, stamped with the zone the watch was in.
   await avg(['HUAMI_HEART_RATE_RESTING_SAMPLE'], 'heart_rate', 'rh', Math.round, v => v >= 25 && v <= 150, r => hcbDay(r.timestamp, (r.utc_offset || 0) / 1000));
   await avg(['HUAMI_SPO2_SAMPLE', 'GENERIC_SPO2_SAMPLE'], 'spo2', 'o2', r1, v => v >= 70 && v <= 100);
+  const o2 = [];
+  for (const name of ['HUAMI_SPO2_SAMPLE', 'GENERIC_SPO2_SAMPLE']) db.each(name, r => { const v = r.spo2; if (v >= 70 && v <= 100 && r.timestamp > 946684800000 && own(r.device_id, r.timestamp)) o2.push([r.timestamp, v, true]); });
+  hcbNightO2(main, o2, day);
   await avg(['HUAMI_SLEEP_RESPIRATORY_RATE_SAMPLE'], 'rate', 'br', r1, v => v >= 4 && v <= 40);
   await avg(['GENERIC_RESPIRATORY_RATE_SAMPLE'], 'respiratory_rate', 'br', r1, v => v >= 4 && v <= 40);
   // HRV: the readings taken during the night's main sleep, so a daytime reading cannot pull the figure down; the

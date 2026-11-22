@@ -94,6 +94,15 @@ function illCard() {
     <span class="sub">Two nights in a row, your resting heart rate has been clearly above your usual and your HRV below your normal range. This pattern often comes a day or so before a cold or other infection. It is not a diagnosis: rest, drink, and see how you feel.</span>
     <ul class="illwhy">${illReasons(I).map(t => `<li>${esc(t)}</li>`).join('')}</ul>${why('ill', 'How this is read')}</div>`;
 }
+// Low blood oxygen in sleep (spo2Nights() in model.js): only on repeated low nights, with enough nights to say so.
+function o2Card() {
+  const O = spo2Nights();
+  if (!O.on) return '';
+  const lowest = Math.min(...O.low.map(n => n.v));
+  return `<div class="callout ill"><b>Blood oxygen was low on several nights</b>
+    <span class="sub">In sleep it averaged under ${O2_LOW}% on ${O.low.length} of your last ${plural(O.nights.length, 'measured night')} (lowest ${r1(lowest)}%). That is worth mentioning to a doctor. Wrist SpO2 is not medical grade and can read low, so this is a reason to ask, not a finding.</span>
+    ${why('spo2', 'How this is read')}</div>`;
+}
 // What is due today, each one tap from being done.
 function todoStrip() {
   const k = todayKey(), D = dueList(), items = [], T = targets();
@@ -182,7 +191,7 @@ function vToday() {
   const h = new Date().getHours(), greet = h < 5 ? 'Late night' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   return `${appbar(greet, dateLabel(todayKey(), { weekday: 'long', day: 'numeric', month: 'long' }), syncPill())}
     ${welcome()}${needsSyncLine() ? syncLine() : ''}
-    ${part(illCard)}${part(trio)}${part(todoStrip)}${part(insightCard)}${part(fuelCard)}${part(bodyMove)}${part(nightCard)}${part(shoulderCard)}${part(trainCard)}`;
+    ${part(illCard)}${part(o2Card)}${part(trio)}${part(todoStrip)}${part(insightCard)}${part(fuelCard)}${part(bodyMove)}${part(nightCard)}${part(shoulderCard)}${part(trainCard)}`;
 }
 
 // ---------- the log button ----------

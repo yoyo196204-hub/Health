@@ -96,6 +96,10 @@ async function hcBackup(db, onStep = () => {}) {
   await avg('resting_heart_rate_record_table', 'beats_per_minute', 'rh', Math.round, v => v >= 25 && v <= 150);
   await avg('heart_rate_variability_rmssd_record_table', 'heart_rate_variability_millis', 'hv', r1, v => v > 0 && v <= 300);
   await avg('oxygen_saturation_record_table', 'percentage', 'o2', r1, v => v >= 70 && v <= 100);
+  // Blood oxygen in the night's main sleep, the watch's own readings where it wrote any.
+  const o2 = [];
+  await t('oxygen_saturation_record_table', r => { const v = r.percentage; if (v >= 70 && v <= 100 && r.time > 946684800000) o2.push([r.time, v, isW(pkg(r))]); });
+  hcbNightO2(main, o2, day);
   await avg('respiratory_rate_record_table', 'rate', 'br', r1, v => v >= 4 && v <= 40);
   // The day's first weight and body fat (a morning weigh-in), and the day's latest VO2max estimate.
   const firstOf = async (name, field, key, conv, latest = false) => {
@@ -153,6 +157,17 @@ function hcbNight(stages, s, e, p) {
   if (last && seg.length < 200) seg.push(last);
   if (d + l + r === 0) l = Math.floor((e - s) / 6e4) - w;
   return d + l + r >= 15 ? { s, e, d, l, r, w, seg, p } : null;
+}
+// Readings [time, value, from a watch] that fall inside a main sleep (main[k] = { s, e }, filed under the morning
+// it ends), kept per night as o2n (mean), o2c (how many) and o2l (lowest). The watch's own wherever it wrote any.
+function hcbNightO2(main, pts, day) {
+  const by = {}, mine = {};
+  for (const [t, v, w] of pts) {
+    const k0 = dk(new Date(t)), k = [k0, shift(k0, 1)].find(n => main[n] && t >= main[n].s && t <= main[n].e);
+    if (!k) continue;
+    (by[k] ||= []).push(v); if (w) (mine[k] ||= []).push(v);
+  }
+  for (const k of Object.keys(by)) { const v = mine[k] || by[k], o = day(k); if (o) Object.assign(o, { o2n: r1(mean(v)), o2c: v.length, o2l: r1(Math.min(...v)) }); }
 }
 // The nights of each morning: the longest of the preferred source's is the main sleep (the others' only when it has
 // none), and the others that do not overlap it are naps. Returns each day's main night.
