@@ -1,5 +1,5 @@
 'use strict';
-// Review: every stream on one page, the decisions it triggers, and the numbers that fired them.
+// Insights: what your data says, one part at a time (energy, body, the long game, the links that are real for you).
 
 const grade = (v, hit, part) => v >= hit ? 2 : v >= part ? 1 : 0;
 // Each cell: value shown and 0 (off) / 1 (partial) / 2 (on target); null = no data.
@@ -15,38 +15,6 @@ function dayCells(k, T) {
     train: S.lifts[k] ? { v: S.lifts[k].day, s: 2 } : ss.length ? { v: Math.round(act) || '♥', s: 2 } : null,
     hrv: V && V.lo ? { v: Math.round(V.now.rmssd), s: V.day === 'low' ? 0 : 2, x: V.now.rmssd } : V ? { v: Math.round(S.hrv[k].rmssd), s: 1, x: S.hrv[k].rmssd } : null,
   };
-}
-function matrix(T, days, cells) {
-  // Each row's average is written the way its cells are: calories and steps in thousands, like the cells.
-  const k1 = v => (v / 1000).toFixed(1);
-  const rows = [['kcal', 'Calories', `${k1(T.kcal)}k kcal`, 'kcal', k1], ['protein', 'Protein', `${T.protein} g`, 'protein', v => Math.round(v)], ['fibre', 'Fibre', `${T.fibre} g`, 'fibre', v => Math.round(v)],
-    ['steps', 'Steps', `${k1(T.stepGoal)}k`, 'steps', k1], ['sleep', 'Sleep', '7–9 h', 'sleep', v => r1(v)], ['train', 'Training', `${S.profile.days}+ a week`, 'lift', null], ['hrv', 'HRV', 'your range', 'hrv', v => Math.round(v)]];
-  return `<div class="mx"><span></span>${days.map(k => `<span class="dh ${k === todayKey() ? 'now' : ''}">${weekday(k)}</span>`).join('')}<span class="dh">avg</span>
-    ${rows.map(([key, label, goal, ev, f]) => {
-      const vals = cells.map(c => c[key]).filter(c => c && c.x != null);
-      const avg = key === 'train' ? `${cells.filter(c => c.train).length}` : vals.length ? f(mean(vals.map(c => c.x))) : DASH;
-      return `<a class="rl" href="#why-${ev}">${label}<i>${goal}</i></a>${cells.map(c => c[key] ? `<i class="c s${c[key].s} ${c[key].part ? 'part' : ''}">${c[key].v}</i>` : '<i class="c"></i>').join('')}<b class="av num">${avg}</b>`;
-    }).join('')}</div>
-    <p class="key"><i class="c s2"></i>on target<i class="c s1"></i>partial<i class="c s0"></i>off<i class="c"></i>no data</p><p class="sub small">Calories and steps in thousands; training shows the openGym day, or cardio minutes. Averages are over the days with data; a calorie day counts once it is fully logged.</p>`;
-}
-// Rules that turn the week into at most a few actions. Each shows the number that fired it, most important first.
-function decisions(T, cells, E, St) {
-  const out = [], have = key => cells.map(c => c[key]).filter(c => c && c.x != null), avg = key => { const v = have(key); return v.length ? mean(v.map(c => c.x)) : null; };
-  const logged = cells.filter(c => c.kcal && !c.kcal.part).length, rate = T.slope == null ? null : T.slope * 7 / T.wt * 100;
-  const p = avg('protein'), st = avg('steps'), A = activityWeek(), R = readiness(), L = sleepStats(7), L14 = sleepStats(14);
-  if (logged < 4) out.push([3, `${logged} of 7 days fully logged`, 'Too little to judge intake. Log whole days before changing anything.', 'logging']);
-  if (rate != null && rate < -1) out.push([3, `Losing ${(-rate).toFixed(1)}% a week`, 'Faster than 1%: muscle is at risk. Eat 150 kcal more a day.', 'rate']);
-  if (rate != null && rate > -0.25 && logged >= 5) out.push([2, `Losing ${Math.max(0, -rate).toFixed(1)}% a week on ${logged} logged days`, T.trust > 0 ? `Your burn is being re-measured from your data (${Math.round(T.trust * 100)}% weight so far); the target follows.` : 'The target starts following your own data after 7 complete days.', 'balance']);
-  if (E.gap != null && E.gap < -15) out.push([2, `Your data implies ${Math.round(-E.gap)}% less burn than the formula`, 'The usual cause is unlogged oil, snacks or outside meals. Check portions first.', 'balance']);
-  if (p != null && logged >= 4 && p < T.protein * 0.8) out.push([2, `Protein ${Math.round(p)} of ${T.protein} g`, `Add ${Math.ceil((T.protein - p) / 24)} scoop${T.protein - p > 24 ? 's' : ''} of whey, or a katori of usal and dahi at each meal.`, 'protein']);
-  if (A.strengthDays < Math.min(2, S.profile.days)) out.push([2, `Lifted on ${A.strengthDays} of ${S.profile.days} days`, 'In a deficit, lifting is what keeps the loss from being muscle.', 'lift']);
-  if (St && St.pct < -5) out.push([2, `Strength down ${Math.round(-St.pct)}%`, 'Check protein, sleep and rate of loss before pushing harder.', 'comp']);
-  if (R.level === 'easy') out.push([2, R.why[0][1], 'Easy day: walk, or lift lighter. Rule out illness if it persists.', R.why[0][2]]);
-  if (L.avg != null && L.n >= 3 && L.avg < 6) out.push([2, `Sleep ${r1(L.avg)} h average`, 'Expect more hunger and less fat per kg lost. Protect sleep before cutting calories.', 'sleep']);
-  if (L14.midSd != null && L14.midSd > 60) out.push([1, `Sleep timing varies by ±${Math.round(L14.midSd)} min`, 'Anchor the wake time on off days, even after a late night.', 'regular']);
-  if (st != null && st < T.stepGoal * 0.7) out.push([1, `Steps ${fmt(st)} of ${fmt(T.stepGoal)}`, 'A 15-minute walk after lunch and after dinner covers the gap.', 'steps']);
-  if (A.who < 75 && A.n < 3) out.push([1, `${Math.round(A.who)} active minutes this week`, 'Two brisk 25-minute walks with the strap would double it.', 'zones']);
-  return out.sort((a, b) => b[0] - a[0]);
 }
 // The week as text, for sharing with a coach or a doctor.
 function shareWeek(T, cells, E) {

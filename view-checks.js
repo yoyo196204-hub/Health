@@ -1,7 +1,7 @@
 'use strict';
 // Data checks: every dataset read against itself and against the others, by fixed rules, with the numbers that
 // decided each result. Nothing here guesses or scores; each check says what it compared, how many records it looked at,
-// and lists the records that failed, each one tap from where it can be fixed. Me › Data checks, and a line in Review.
+// and lists the records that failed, each one tap from where it can be fixed. Me › Data checks, and a line on Insights.
 //
 // status: ok (passed), look (worth a look: a likely typo or a measurement that varies), bad (internally impossible),
 // na (not enough data to check yet).
@@ -164,7 +164,7 @@ function runChecks() {
     return out;
   });
 }
-// One line for Me, and a banner on Review only when something does not add up or is worth a look.
+// One line for Me, and a banner on Insights only when something does not add up or is worth a look.
 function checkLine() { const s = checkSummary(); return s.bad + s.look ? `${s.bad ? `${s.bad} do not add up · ` : ''}${s.look} worth a look · ${s.ok} passed` : `All ${s.ok} passed${s.na ? ` · ${s.na} need more data` : ''}`; }
 function checkBanner() {
   const s = checkSummary();

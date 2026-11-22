@@ -282,7 +282,9 @@ const ACT = {
   sub: el => {
     if (SUB[el.dataset.t] === el.dataset.v) return;
     SUB[el.dataset.t] = el.dataset.v; buzz('tick');
-    const nav = $('#view > .subnav'), top = nav ? nav.offsetTop - parseFloat(getComputedStyle(nav).top || 0) : 0;
+    // Where the row sits in the page when not stuck: right under whatever is above it.
+    const nav = $('#view > .subnav'), prev = nav?.previousElementSibling;
+    const top = prev ? prev.offsetTop + prev.offsetHeight + Math.max(parseFloat(getComputedStyle(prev).marginBottom) || 0, parseFloat(getComputedStyle(nav).marginTop) || 0) : 0;
     renderView();
     if (scrollY > top) scrollTo(0, top);
     fresh(null);

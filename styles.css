@@ -699,10 +699,6 @@ html.still *, html.still *::before, html.still *::after { animation-duration: .0
 /* =====================================================================================================
    Insights
    ===================================================================================================== */
-.heads { display: grid; gap: 10px; margin: 0 0 4px; }
-.head { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; padding: 14px 16px; margin: 0; text-decoration: none; color: inherit; }
-.head b { display: block; font-size: 15px; letter-spacing: -.01em; }
-.head .sub { font-size: 12.5px; margin-top: 3px; }
 .burnkpi { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin: 6px 0 2px; }
 .burnkpi .kpi b { font-size: 40px; color: var(--fuel); }
 .confbadge { display: inline-flex; align-items: center; gap: 6px; font: 600 11px var(--sans); letter-spacing: .04em; text-transform: uppercase; padding: 4px 9px; border-radius: 999px; background: var(--bg3); color: var(--soft); margin-bottom: 6px; }
@@ -733,31 +729,7 @@ html.still *, html.still *::before, html.still *::after { animation-duration: .0
 .wdbars b { font: 650 10.5px var(--sans); font-variant-numeric: tabular-nums; }
 .wdbars span { font: 600 10px var(--sans); color: var(--soft); }
 
-/* =====================================================================================================
-   The week matrix and its decisions (Insights)
-   ===================================================================================================== */
-.block.first { padding-top: 14px; }
-.mx { display: grid; grid-template-columns: minmax(62px, 1.4fr) repeat(7, minmax(0, 1fr)) 40px; gap: 5px 3px; align-items: center; }
-.mx .dh { text-align: center; font: 600 10.5px var(--sans); color: var(--soft); letter-spacing: .06em; text-transform: uppercase; }
-.mx .dh.now { color: var(--ink); font-weight: 750; }
-.mx .rl { font-weight: 600; font-size: 13px; text-decoration: none; line-height: 1.15; min-width: 0; }
-.mx .rl i { display: block; font: 400 10.5px var(--sans); color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.c { display: grid; place-items: center; height: 30px; min-width: 0; border-radius: 8px; background: var(--track); font: 650 10.5px var(--sans); font-style: normal; font-variant-numeric: tabular-nums; color: var(--ink); overflow: hidden; }
-.c.s2 { background: color-mix(in srgb, var(--good) 80%, transparent); color: #04140a; }
-.c.s1 { background: color-mix(in srgb, var(--mid) 45%, var(--track)); }
-.c.s0 { background: color-mix(in srgb, var(--bad) 80%, transparent); color: #fff; }
-.c.part { background: repeating-linear-gradient(135deg, var(--track) 0 4px, color-mix(in srgb, var(--mid) 30%, var(--track)) 4px 8px); color: var(--ink); }
-.mx .av { text-align: right; font: 650 13px var(--sans); font-variant-numeric: tabular-nums; }
-.key .c { width: 14px; height: 14px; border-radius: 4px; margin-left: 8px; }
-.key .c:first-child { margin-left: 0; }
-.dec a { display: block; padding: 10px 0 10px 14px; box-shadow: inset 3px 0 0 var(--line2); margin-top: 10px; text-decoration: none; border-radius: 2px; }
-.dec .w3 a { box-shadow: inset 3px 0 0 var(--bad); } .dec .w2 a { box-shadow: inset 3px 0 0 var(--mid); }
-.dec .sig { display: block; font: 650 15px var(--sans); }
-.dec .act { display: block; color: var(--soft); font-size: 13.5px; }
 .ahead { margin-top: 4px; }
-.lk b { display: block; font: 600 14px var(--sans); }
-.lk .sub { display: block; font: 400 12px var(--sans); white-space: nowrap; }
-.lk.muted b { font-weight: 500; }
 .evid .nm { font-weight: 600; }
 
 /* =====================================================================================================
@@ -1131,9 +1103,6 @@ body { padding-bottom: calc(var(--tabh) + 28px + env(safe-area-inset-bottom)); }
 .trplan .chev { color: inherit; }
 .prehabdone { margin-top: 10px; }
 
-/* Lists of decisions and headlines read as cards of their own. */
-ul.dec li a { transition: transform .2s var(--spring); }
-ul.dec li a:active { transform: scale(.985); }
 
 /* ---------- the long game ---------- */
 .lever { position: relative; overflow: hidden; display: grid; gap: 3px; padding: 14px 14px 13px; margin: 2px 0 12px; border-radius: 16px; --tint: var(--heart);
