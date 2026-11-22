@@ -109,11 +109,19 @@ function devicesSection() {
       <tr><td>Workouts</td><td>${C.ex.n}</td><td>${fmtA(C.ex, 3)}</td><td>${lim(C.ex)}</td></tr></table>
     ${para(used.join(' '))}${proto}`, { why: ['devices', 'How this works'] });
 }
+// One line under the heart rate: whether the early-illness pattern can be read yet, and what it found.
+function illLine() {
+  const I = illness();
+  const t = I.on ? `<b>Seen two nights in a row.</b> ${illReasons(I).map(esc).join('. ')}.`
+    : I.ready ? 'Not seen: resting heart rate and HRV were not both off your normal on the last two nights.'
+    : `Not read yet: ${esc(I.missing.join('; '))}.`;
+  return `<p class="sub illline">Early sign of illness: ${t} ${why('ill', 'How')}</p>`;
+}
 function vRecovery() {
   const H = hrProfile(), nav = subnav('recovery', [['rec', 'Recovery'], ['sleep', 'Sleep'], ['cardio', 'Cardio']]), on = SUB.recovery;
   const body = on === 'sleep' ? part(sleepSection) + part(nightSection)
     : on === 'cardio' ? part(cardioHeart) + part(devicesSection)
-    : `${part(recoveryHero)}${sec('Morning check', strapBlock('morning') + strapMsg(), { why: ['hrv', 'Why mornings'] })}${part(hrvSection)}${part(rhrSection)}`;
+    : `${part(recoveryHero)}${sec('Morning check', strapBlock('morning') + strapMsg(), { why: ['hrv', 'Why mornings'] })}${part(hrvSection)}${part(rhrSection)}${part(illLine)}`;
   return `${appbar('Heart', `Resting ${H.rest} · max ${H.max} bpm`, NATIVE ? syncPill() : '')}${nav}${body}`;
 }
 // Loaded: this file ran to the end.

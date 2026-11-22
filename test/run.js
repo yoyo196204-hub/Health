@@ -1392,6 +1392,47 @@ test('shortcuts: the three the phone offers are exactly the three the page opens
   for (const d of ['sc_food', 'sc_weigh', 'sc_check']) assert.ok(fs.existsSync(path.join(root, `android/app/src/main/res/drawable/${d}.xml`)), d);
 });
 
+test('early illness: resting HR up AND HRV down on both of the last two nights, each against its own baseline, never on less', c => {
+  const t = run(c, 'todayKey()');
+  // Five weeks of the watch: resting heart rate 54–56, overnight HRV 45–55 ms.
+  const seed = (days = 40) => run(c, `S.rhr = {}; S.wx = {}; S.hrv = {}; for (let i = 0; i < ${days}; i++) { const d = shift('${t}', -i); S.rhr[d] = 54 + (i % 3); S.wx[d] = { hv: 45 + (i % 5) * 2.5 }; } memo.clear()`);
+  const set = (i, rhr, hv) => run(c, `S.rhr[shift('${t}', -${i})] = ${rhr}; S.wx[shift('${t}', -${i})] = { hv: ${hv} }; memo.clear()`);
+  seed();
+  let I = run(c, 'illness()');
+  assert.deepStrictEqual([I.ready, I.on, I.missing], [true, false, []]);
+  set(0, 63, 36); set(1, 62, 37);
+  I = run(c, 'illness()');
+  assert.ok(I.on, JSON.stringify(I.nights));
+  assert.deepStrictEqual(I.nights.map(n => [n.rhr.src, n.hrv.src, n.rhr.up, n.hrv.low]), [['watch', 'watch', true, true], ['watch', 'watch', true, true]]);
+  assert.ok(Math.abs(I.nights[1].rhr.m - 55) < 0.2);
+  // One night only, or one signal only: nothing.
+  set(1, 55, 50); assert.strictEqual(run(c, 'illness().on'), false, 'one night is not a pattern');
+  set(1, 62, 50); assert.strictEqual(run(c, 'illness().on'), false, 'HRV normal the night before');
+  set(1, 62, 37); set(0, 56, 36); assert.strictEqual(run(c, 'illness().on'), false, 'resting HR within 3 bpm');
+  // A night the watch was off the wrist does not count for HRV, and is said so.
+  set(0, 63, 36);
+  run(c, `S.sleepx['${t}'] = { on: -60, off: 420, d: 60, l: 300, r: 60, w: 20 }; S.hrd['${t}'] = Array(288).fill(0); S.hrd[shift('${t}', -1)] = Array(288).fill(60); memo.clear()`);
+  I = run(c, 'illness()');
+  assert.deepStrictEqual([I.on, I.ready, I.missing], [false, false, ['no HRV for last night']]);
+  run(c, `delete S.sleepx['${t}']; delete S.hrd['${t}']; delete S.hrd[shift('${t}', -1)]; memo.clear()`);
+  // Too little baseline: not read, and what is missing is said.
+  seed(20); set(0, 63, 36); set(1, 62, 37);
+  I = run(c, 'illness()');
+  assert.strictEqual(I.on, false);
+  assert.deepStrictEqual(I.missing, ['resting heart rate needs 2 more days of baseline', 'HRV needs 2 more nights of baseline']);
+});
+test('early illness: a strap reading is never read against the watch baseline', c => {
+  const t = run(c, 'todayKey()');
+  run(c, `for (let i = 0; i < 40; i++) { const d = shift('${t}', -i); S.rhr[d] = 55; S.wx[d] = { hv: 50 + (i % 4) }; } S.rhr[shift('${t}', -3)] = 57; memo.clear()`);
+  // Two strap mornings, heart rate 65 and HRV 30, with no strap baseline: HRV falls back to the watch; resting HR is the strap's and has no baseline.
+  run(c, `S.hrv['${t}'] = { rmssd: 30, hr: 65, q: 95 }; S.hrv[shift('${t}', -1)] = { rmssd: 30, hr: 65, q: 95 }; memo.clear()`);
+  const I = run(c, 'illness()');
+  const mode = run(c, 'rhrMode()');
+  if (mode === 'strap') assert.ok(I.missing.some(m => /resting heart rate needs/.test(m)), JSON.stringify(I.missing));
+  assert.strictEqual(I.on, false);
+  assert.deepStrictEqual(I.nights.map(n => n.hrv.src), ['watch', 'watch']);
+});
+
 (async () => {
   for (const [name, fn] of later) {
     try { await fn(sandbox()); passed++; console.log('  ok  ', name); }

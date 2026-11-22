@@ -288,6 +288,55 @@ function readiness(k = todayKey()) {
   });
 }
 
+// ---------- early illness ----------
+// Resting heart rate clearly above your own usual AND HRV below your own normal range, both on each of the last two
+// nights, is the pattern wearables have seen a day or more before symptoms of infection (Mishra 2020: resting heart
+// rate; Radin 2020: resting heart rate across a population; Hirten 2021: HRV). It is only a reason to take it easy,
+// never a diagnosis, and it is only read when both signals have a baseline of their own: 14 values from the four
+// weeks before the last week. Each signal is read against values from the same source only (strap with strap,
+// watch with watch), and the watch's overnight HRV only from nights it was worn through.
+const ILL_BASE = 14;
+function illBase(vals) { return vals.length < ILL_BASE ? null : { m: mean(vals), s: sd(vals), n: vals.length }; }
+function illRhr(d, ref) {
+  const r = restingHR(d);
+  if (!r) return null;
+  const B = illBase(range(28, shift(ref, -7)).map(x => restingHR(x)).filter(x => x && x.src === r.src).map(x => x.v));
+  if (!B) return { v: r.v, src: r.src, need: ILL_BASE - range(28, shift(ref, -7)).map(x => restingHR(x)).filter(x => x && x.src === r.src).length };
+  const up = r.v - B.m >= Math.max(3, 1.5 * B.s);
+  return { v: r.v, src: r.src, m: B.m, s: B.s, up };
+}
+function illHrv(d, ref) {
+  const base = range(28, shift(ref, -7));
+  const strap = () => { const B = illBase(base.filter(x => S.hrv[x]).map(x => Math.log(S.hrv[x].rmssd))); return B && S.hrv[d] ? [S.hrv[d].rmssd, B, 'strap'] : null; };
+  const watch = () => {
+    const ok = x => S.wx[x]?.hv != null && nightWorn(x) !== false, B = illBase(base.filter(ok).map(x => Math.log(S.wx[x].hv)));
+    return B && ok(d) ? [S.wx[d].hv, B, 'watch'] : null;
+  };
+  const got = strap() || watch();
+  if (!got) {
+    const have = Math.max(base.filter(x => S.hrv[x]).length, base.filter(x => S.wx[x]?.hv != null && nightWorn(x) !== false).length);
+    return { need: Math.max(0, ILL_BASE - have), none: !S.hrv[d] && !(S.wx[d]?.hv != null && nightWorn(d) !== false) };
+  }
+  const [v, B, src] = got, lo = Math.exp(B.m - B.s), hi = Math.exp(B.m + B.s);
+  return { v, src, lo, hi, low: Math.log(v) < B.m - B.s };
+}
+function illness(k = todayKey()) {
+  return cached('ILL' + k, () => {
+    const ref = shift(k, -1), nights = [ref, k].map(d => ({ k: d, rhr: illRhr(d, ref), hrv: illHrv(d, ref) }));
+    const out = { on: false, nights, missing: [] };
+    for (const n of nights) {
+      const when = n.k === k ? 'last night' : 'the night before';
+      if (!n.rhr) out.missing.push(`no resting heart rate for ${when}`);
+      else if (n.rhr.need) out.missing.push(`resting heart rate needs ${plural(n.rhr.need, 'more day')} of baseline`);
+      if (n.hrv?.need != null) out.missing.push(n.hrv.need ? `HRV needs ${plural(n.hrv.need, 'more night')} of baseline` : `no HRV for ${when}`);
+    }
+    out.missing = [...new Set(out.missing)];
+    out.ready = !out.missing.length;
+    out.on = out.ready && nights.every(n => n.rhr.up && n.hrv.low);
+    return out;
+  });
+}
+
 // ---------- wear time ----------
 // How long the watch was on the wrist each day. A day's steps, or a night's sleep, from a watch that spent half of it
 // on the table is not that day; accelerometer studies count a day only at 10 hours worn and a week only with 4 such

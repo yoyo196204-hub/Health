@@ -81,6 +81,19 @@ function trio() {
     <a class="tri" href="#food" data-act="gotoday" style="--c:var(--fuel)">${fuel}<span class="tl">kcal</span><span class="ts" style="color:var(--soft)">${fmt(eaten)} of ${fmt(target)}</span></a>
     <a class="tri" href="#recovery-sleep" style="--c:var(--sleep)">${slp}<span class="tl">Sleep</span><span class="ts">${D.sleep.word}</span></a></section>`;
 }
+// Early illness (illness() in model.js): shown only when both signals are clearly off for two nights in a row.
+function illReasons(I) {
+  const [a, b] = I.nights, src = x => x === 'strap' ? 'strap' : 'watch';
+  return [`Resting heart rate ${Math.round(a.rhr.v)} and ${Math.round(b.rhr.v)} bpm; your usual is ${Math.round(a.rhr.m)} (${src(b.rhr.src)})`,
+    `HRV ${Math.round(a.hrv.v)} and ${Math.round(b.hrv.v)} ms; your normal range is ${Math.round(b.hrv.lo)}–${Math.round(b.hrv.hi)} (${b.hrv.src === 'strap' ? 'strap, morning' : 'watch, overnight'})`];
+}
+function illCard() {
+  const I = illness();
+  if (!I.on) return '';
+  return `<div class="callout ill"><b>Take it easy today</b>
+    <span class="sub">Two nights in a row, your resting heart rate has been clearly above your usual and your HRV below your normal range. This pattern often comes a day or so before a cold or other infection. It is not a diagnosis: rest, drink, and see how you feel.</span>
+    <ul class="illwhy">${illReasons(I).map(t => `<li>${esc(t)}</li>`).join('')}</ul>${why('ill', 'How this is read')}</div>`;
+}
 // What is due today, each one tap from being done.
 function todoStrip() {
   const k = todayKey(), D = dueList(), items = [], T = targets();
@@ -169,7 +182,7 @@ function vToday() {
   const h = new Date().getHours(), greet = h < 5 ? 'Late night' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   return `${appbar(greet, dateLabel(todayKey(), { weekday: 'long', day: 'numeric', month: 'long' }), syncPill())}
     ${welcome()}${needsSyncLine() ? syncLine() : ''}
-    ${part(trio)}${part(todoStrip)}${part(insightCard)}${part(fuelCard)}${part(bodyMove)}${part(nightCard)}${part(shoulderCard)}${part(trainCard)}`;
+    ${part(illCard)}${part(trio)}${part(todoStrip)}${part(insightCard)}${part(fuelCard)}${part(bodyMove)}${part(nightCard)}${part(shoulderCard)}${part(trainCard)}`;
 }
 
 // ---------- the log button ----------

@@ -177,6 +177,34 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     assert.strictEqual(await page.evaluate(() => tab), 'recovery', 'anything else is ignored');
     await go('today');
   });
+  await test('early illness: a gentle notice on Today with its reasons, a line on Heart, and nothing when the data is not there', async () => {
+    await page.evaluate(() => {
+      window.__ill = { rhr: S.rhr, wx: S.wx, hrv: S.hrv };
+      S.rhr = {}; S.wx = {}; S.hrv = {};
+      for (let i = 0; i < 40; i++) { const d = shift(todayKey(), -i); S.rhr[d] = 54 + (i % 3); S.wx[d] = { hv: 45 + (i % 5) * 2.5 }; }
+      S.rhr[todayKey()] = 63; S.wx[todayKey()] = { hv: 36 }; S.rhr[shift(todayKey(), -1)] = 62; S.wx[shift(todayKey(), -1)] = { hv: 37 };
+      save();
+    });
+    await go('review'); await go('today');
+    const t = await page.evaluate(() => document.querySelector('.callout.ill')?.textContent.replace(/\s+/g, ' '));
+    assert.ok(t && /Take it easy today/.test(t) && /not a diagnosis/.test(t), t + JSON.stringify(await page.evaluate(() => [illness(), rhrMode()])));
+    assert.ok(/Resting heart rate 62 and 63 bpm; your usual is 55 \(watch\)/.test(t) && /HRV 37 and 36 ms; your normal range is \d+–\d+ \(watch, overnight\)/.test(t), t);
+    await page.evaluate(() => scrollTo(0, 0)); await shot('illness');
+    await go('recovery-rec');
+    const il = await page.evaluate(() => document.querySelector('.illline')?.textContent);
+    assert.ok(/Early sign of illness: Seen two nights in a row/.test(il), il);
+    await page.evaluate(() => { S.wx[todayKey()] = { hv: 50 }; save(); render(); });
+    const il2 = await page.textContent('.illline');
+    assert.ok(/Not seen/.test(il2), il2);
+    await go('today');
+    assert.ok(await page.evaluate(() => !document.querySelector('.callout.ill')), 'gone when HRV is normal again');
+    await page.evaluate(() => { for (let i = 8; i < 30; i++) delete S.rhr[shift(todayKey(), -i)]; save(); });
+    await go('recovery-rec');
+    const il3 = await page.textContent('.illline');
+    assert.ok(/Not read yet: resting heart rate needs \d+ more days? of baseline/.test(il3), il3);
+    await page.evaluate(() => { Object.assign(S, window.__ill); save(); });
+    await go('today');
+  });
   await test('wear time: short days are left out of the long game and said so, and the check lists them', async () => {
     const before = await page.evaluate(() => {
       const full = Array(288).fill(62), short = Array(288).fill(0).map((_, i) => i >= 96 && i < 168 ? 70 : 0), old = { hrd: S.hrd, steps: S.steps };
