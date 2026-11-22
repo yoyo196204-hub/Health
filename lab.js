@@ -375,20 +375,6 @@ function vLab(kind) {
     <div class="lab lab-${kind}">${running || res ? '' : `<p class="sub">${L.d}.</p>`}${running || res ? '' : strapLine}${body}${strapMsg()}
     ${hist.length && !running ? sec(`Your sessions · ${hist.length}`, `<ul class="list swipelist">${hist.slice(0, 40).map(x => `<li data-swipe="labdel" data-k="${x.k}" data-t="${x.t}"><button class="rowbtn" data-act="labinfo" data-k="${x.k}" data-t="${x.t}"><span class="grow"><span class="nm">${dateLabel(x.k, { weekday: 'short', day: 'numeric', month: 'short' })} · ${hm(new Date(x.t).getHours() * 60 + new Date(x.t).getMinutes())}</span><span class="sub">${labSummary(x)}</span></span><span class="chev">›</span></button></li>`).join('')}</ul>`) : ''}</div>`;
 }
-// The Lab on Recovery: one tile per session kind, each with its latest result.
-function labTiles() {
-  return `<div class="tiles">${Object.entries(LABS).map(([k, L]) => {
-    const h = labHist(k)[0];
-    return `<a class="tile t-${k}" href="#lab-${k}"><span class="tic">${LABICON[k]}</span><b>${L.n}</b><span class="sub">${HR.mode === k ? 'Running now' : h ? `${dateLabel(h.k)}: ${k === 'rf' ? `${h.best}/min` : k === 'breathe' ? dur(h.dur / 60) : k === 'live' ? `${dur(h.dur / 60)}, ${Math.round(h.rmssd)} ms` : k === 'ortho' ? `${sign(h.hrStd - h.hrSup)} bpm` : `${Math.round(h.rmssd)} ms`}` : L.strap ? 'Needs the strap' : 'Strap optional'}</span></a>`;
-  }).join('')}</div>`;
-}
-const LABICON = {
-  breathe: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="6.5" opacity=".6"/><circle cx="12" cy="12" r="10" opacity=".3"/></svg>',
-  rf: '<svg viewBox="0 0 24 24"><path d="M2 12c2-6 4-6 6 0s4 6 6 0 4-6 6 0"/><path d="M4 20v-3M9 20v-5M14 20v-7M19 20v-4"/></svg>',
-  ortho: '<svg viewBox="0 0 24 24"><path d="M3 18h7"/><path d="M15 21V9"/><circle cx="15" cy="5" r="2"/><path d="M12 13l3-3 3 3"/></svg>',
-  spot: '<svg viewBox="0 0 24 24"><path d="M3 12h4l2-5 3 10 2.5-7 1.5 2H21"/></svg>',
-  live: '<svg viewBox="0 0 24 24"><path d="M2 12h3l2-6 3 12 3-9 2 3h7"/><circle cx="20" cy="5" r="2" fill="currentColor" stroke="none"/></svg>',
-};
 function vLabInfo(p) {
   const list = S.lab[p.k] || [], x = list.find(y => String(y.t) === String(p.t));
   if (!x) return '';

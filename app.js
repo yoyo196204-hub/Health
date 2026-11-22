@@ -29,8 +29,8 @@ let cat = 'usual', query = '', installEvt = null, softQueued = false;
 // The four tabs, in the order a swipe moves through them. Me is reached from the face at the top of every tab.
 const VIEWS = { today: vToday, food: vFood, recovery: vRecovery, review: vReview, me: vMe };
 const TABS = ['today', 'food', 'recovery', 'review'];
-const ALIAS = { heart: 'recovery', trend: 'review', insights: 'review', train: 'review', training: 'review', diary: 'food' };
-const POPS = { fedit: p => vFoodEdit(p.i), portion: p => vPortion(p), cedit: p => vCustomEdit(p), plate: p => vPlateSave(p), exinfo: p => vExInfo(p.id), cardioadd: () => vCardioAdd(), cardioinfo: p => vCardioInfo(p), sess: p => vSession(p), next: () => vNext(),
+const ALIAS = { heart: 'recovery', trend: 'review', insights: 'review', train: 'today', training: 'today', diary: 'food' };
+const POPS = { fedit: p => vFoodEdit(p.i), portion: p => vPortion(p), cedit: p => vCustomEdit(p), plate: p => vPlateSave(p), exinfo: p => vExInfo(p.id), cardioadd: () => vCardioAdd(), cardioinfo: p => vCardioInfo(p), sess: p => vSession(p), next: () => vNext(), train: () => vTrain(),
   hrvinfo: p => vHrvInfo(p), labinfo: p => vLabInfo(p), recedit: p => vRecEdit(p), dayx: p => vDayDetail(p), log: p => vLog(p), weigh: p => vWeigh(p) };
 const PAGES = ['add', 'why', 'set', 'lab', 'beats', 'scan'];
 const scrollMem = {};
@@ -102,7 +102,6 @@ function render() {
   const key = base ? `${base.type}-${base.key}` : tab + (tab === 'food' ? day : '');
   try {
     const banner = (loadNote ? `<p class="flag banner">${loadNote} <button class="link" data-act="dismissnote" data-dismiss>OK</button></p>` : '') + (saveFailed ? '<p class="flag banner">Storage is full or blocked: changes are not being kept. Export a backup from You › Backup and data.</p>' : '');
-    $('#view > .jumpbar')?.remove();
     paint($('#view'), banner + (adding ? vAdd(base.key) : base?.type === 'lab' ? vLab(base.key) : base?.type === 'beats' ? vBeats(base.key) : base?.type === 'scan' ? vScan(base.key) : setting ? vSet(base.key) : VIEWS[tab]()), key !== screenKey);
     paint($('#sheet'), pending ? (pending.type === 'halftone' ? vHalftone(pending) : pending.type === 'opengym' ? vOpenGym(pending) : vImport(pending)) : pop && POPS[pop.kind] ? part(POPS[pop.kind], pop) : overlay?.type === 'why' ? vWhy(overlay.key) : '', !$('#sheet .sheet'));
     screenKey = key;
@@ -115,14 +114,17 @@ function render() {
   }
   document.body.classList.toggle('adding', adding);
   document.body.classList.toggle('setting', setting);
-  document.body.classList.toggle('sheet-open', !!$('#sheet').innerHTML.trim());
+  const sheetUp = !!$('#sheet').innerHTML.trim();
+  document.body.classList.toggle('sheet-open', sheetUp);
+  // Black behind the page while a sheet is up, so the page recedes onto it (a class, not :has(), so it costs nothing).
+  document.documentElement.classList.toggle('sheet-up', sheetUp && !adding && !setting);
   document.body.classList.toggle('noFab', tab === 'me' && !overlay);
   $$('#tabs a').forEach(a => a.classList.toggle('on', !overlay && a.hash === '#' + tab));
   $('#tabs').style.setProperty('--i', Math.max(0, TABS.indexOf(tab)));
   $('#tabs').style.setProperty('--on', TABS.includes(tab) ? 1 : 0);
   $('#tabs').style.setProperty('--tc', { today: 'var(--accent)', food: 'var(--fuel)', recovery: 'var(--heart)', review: 'var(--sleep)' }[tab] || 'var(--accent)');
   document.documentElement.classList.toggle('still', !motionOK());
-  jumpbar(); sheetEntered(); sheetLift(); settle(); liveKick(); labKick(); bxKick();
+  sheetEntered(); sheetLift(); settle(); liveKick(); labKick(); bxKick();
 }
 // Renders caused by the watch or the strap wait until you have finished typing in a field.
 function renderSoft() {
@@ -177,7 +179,8 @@ function applyTheme() {
   if (t === 'system') delete root.dataset.theme; else root.dataset.theme = t;
   const dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   nat('setTheme', dark);
-  document.querySelectorAll('meta[name="theme-color"]').forEach(m => { if (t !== 'system') m.setAttribute('content', dark ? '#08090b' : '#f4f5f7'); });
+  // Each meta keeps its own scheme's colour under 'system'; a chosen theme puts its colour on both.
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.setAttribute('content', t === 'system' ? (/dark/.test(m.media) ? '#0c0c0b' : '#f6f5f2') : dark ? '#0c0c0b' : '#f6f5f2'));
 }
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
 
@@ -268,7 +271,22 @@ const ACT = {
   fullsync: () => syncNow(90),
   hcask: () => hcAsk(),
   zepp: () => openZepp(),
-  jump: el => { const t = document.getElementById(el.dataset.to); if (t) { buzz('tick'); t.scrollIntoView({ block: 'start', behavior: motionOK() ? 'smooth' : 'auto' }); } },
+  jump: el => {
+    const id = el.dataset.to, owner = SUBOF[id];
+    // A section in another part of the tab: that part first, then the section.
+    if (!document.getElementById(id) && owner && owner[0] === tab) { SUB[tab] = owner[1]; renderView(); }
+    const t = document.getElementById(id);
+    if (t) { buzz('tick'); t.scrollIntoView({ block: 'start', behavior: motionOK() ? 'smooth' : 'auto' }); }
+  },
+  // A part of a long tab: the row stays where it is on screen and the part below it changes.
+  sub: el => {
+    if (SUB[el.dataset.t] === el.dataset.v) return;
+    SUB[el.dataset.t] = el.dataset.v; buzz('tick');
+    const nav = $('#view > .subnav'), top = nav ? nav.offsetTop - parseFloat(getComputedStyle(nav).top || 0) : 0;
+    renderView();
+    if (scrollY > top) scrollTo(0, top);
+    fresh(null);
+  },
   bkpick: () => { S.meta.welcomed = true; save(); nat('backupPick'); },
   shareweek: () => { const T = targets(); shareText('Health · week', shareWeek(T, range(7).map(k => dayCells(k, T)), energy())); },
   // The log button: everything you might log, from anywhere.
@@ -372,8 +390,6 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) { remindPlan(); return flushMirror(); }
   if (!NATIVE && rollDay()) render();
 });
-// The log button shrinks a little while you scroll down a long page, and comes back when you stop.
-addEventListener('scroll', () => { document.body.classList.add('scrolled'); clearTimeout(ACT.scrollT); ACT.scrollT = setTimeout(() => document.body.classList.remove('scrolled'), 220); }, { passive: true });
 
 applyTheme();
 if (backfillMacros()) save();

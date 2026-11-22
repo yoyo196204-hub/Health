@@ -23,18 +23,11 @@ function vNext() {
   return `${sheetTop(`${today ? `Today: ${esc(today.n)} done · next` : 'Next session'} in openGym`, `${esc(plan.name)} <span class="sub">${esc(plan.focus)}</span>`, 'next')}<div class="nextog lv-${R.level}">
     <div class="ease"><span class="dot"></span><span class="grow"><b>${head}</b><span class="sub">${sub}${R.why[0] ? ` <a href="#recovery">${esc(R.why[0][1])}</a>.` : ''}</span></span></div>
     <ul class="list">${rows}</ul>
-    ${S.profile.shoulder && plan.lifts.filter(x => shoulderLoads(x.id)).length >= 2 ? `<details class="inner prehab"><summary>Shoulder warm-up before it · 5 min${S.prehab[k] ? ' · done today' : ''}</summary><ol>${PREHAB.map(([n, dose, w]) => `<li><b>${n}</b>, ${dose}<span class="sub">${w}</span></li>`).join('')}</ol>
-      <label class="check"><input type="checkbox" data-act="prehab" ${S.prehab[k] ? 'checked' : ''}><span>Done today</span></label></details>` : ''}
+    ${S.profile.shoulder ? `<details class="inner prehab"><summary>Shoulder routine · 5 min${S.prehab[k] ? ' · done today' : ''}</summary><ol>${PREHAB.map(([n, dose, w]) => `<li><b>${n}</b>, ${dose}<span class="sub">${w}</span></li>`).join('')}</ol></details>
+      <label class="check prehabdone"><input type="checkbox" data-act="prehab" ${S.prehab[k] ? 'checked' : ''}><span>Shoulder routine done today</span></label>` : ''}
     ${plan.retired.length ? `<p class="flag">Out of the plan after pain twice: ${plan.retired.map(id => `${esc(exName(id))} <button class="link" data-act="clear" data-id="${esc(id)}">Bring back</button>`).join(', ')}</p>` : ''}
     <div class="rowb">${NATIVE && OGF.app ? '<button class="solid" data-act="ogopen">Open openGym</button>' : ''}<a class="ghost link" href="#set-train" data-act="popnav">The plan</a></div></div></aside>`;
 }
-function staleStrip() {
-  if (!ogPlanStale() && S.meta.ogplan) return '';
-  const never = !S.meta.ogplan;
-  return `<a class="strip lv-care" href="#set-train"><span class="dot"></span><span class="grow"><b>${never ? 'Put your plan in openGym' : 'Your plan changed: send it to openGym again'}</b>
-    <span class="sub">${never ? 'One file with your programme, the next loads, backups for every exercise and the training block.' : 'An exercise was swapped or left out, or the programme changed.'}</span></span><span class="chev">›</span></a>`;
-}
-
 // ---------- the shoulder check ----------
 // openGym does not ask how the shoulder felt, so Health asks once the session arrives. A niggle holds the load next time,
 // pain swaps the exercise, pain twice takes it out of the plan: the plan file then changes and says so.
@@ -162,17 +155,20 @@ function thresholdBlock() {
 }
 
 // ---------- where it lives now ----------
-// There is no Train tab: you lift in openGym. The next session is a card on Today that opens as a sheet, what the
-// lifting did (week, sessions, muscles, strength) is a section of Insights, and cardio with the strap sits on Heart
-// next to the morning check.
-function trainInsights() {
+// There is no Train tab: you lift in openGym. Today has one card with two buttons: the next session, and what you
+// have lifted (this sheet: the week, the sessions, strength per lift, and the muscles). Cardio with the strap sits
+// on Heart next to the morning check.
+function vTrain() {
   const P = prog(), A = activityWeek();
-  return `${sec('Training this week', `<div class="pair">
-        <div><span class="sub">Active minutes</span><b class="num">${Math.round(A.who)}<i> / 150</i></b>${meter(A.who, 150, A.who >= 150 ? 'ok' : '')}</div>
-        <div><span class="sub">Strength days</span><b class="num">${A.strengthDays}<i> / ${P.per}</i></b>${meter(A.strengthDays, P.per, A.strengthDays >= P.per ? 'ok' : '')}</div></div>
-        ${weekStrip()}${part(sessionList)}`, { why: ['zones', 'How it counts'], right: `<a class="mini icon" href="#set-train" aria-label="Plan settings">${ICON.gear}</a>`, id: 'in-train' })}
-    ${sec('Muscles, last 7 days', muscleBlock(), { why: ['volume', 'How sets count'] })}
-    ${sec('Strength, 12 weeks', part(strengthBlock), { why: ['e1rm', 'Best estimates'] })}`;
+  return `${sheetTop('What you lifted', 'Training', 'train')}
+    <div class="pair">
+      <div><span class="sub">Active minutes</span><b class="num">${Math.round(A.who)}<i> / 150</i></b>${meter(A.who, 150, A.who >= 150 ? 'ok' : '')}</div>
+      <div><span class="sub">Strength days</span><b class="num">${A.strengthDays}<i> / ${P.per}</i></b>${meter(A.strengthDays, P.per, A.strengthDays >= P.per ? 'ok' : '')}</div></div>
+    ${weekStrip()}
+    <section id="in-train"><h3>Sessions</h3>${part(sessionList)}</section>
+    <h3>Strength, 12 weeks ${why('e1rm', 'Best estimates')}</h3>${part(strengthBlock)}
+    <details class="inner"><summary>Muscles, last 7 days</summary>${part(muscleBlock)}</details>
+    <div class="rowb"><a class="ghost link" href="#set-train" data-act="popnav">The plan</a></div></aside>`;
 }
 function cardioHeart() {
   return `${sec('Cardio with the H9', strapBlock('workout') + strapMsg() + part(cardioList) + '<div class="rowb"><button class="ghost" data-act="cardioadd">Log cardio by hand</button></div>', { why: ['zones', 'Zones'] })}
@@ -229,6 +225,7 @@ function trainAct(a, el) {
     render(); return true;
   }
   if (a === 'nextgo') { openPop({ kind: 'next' }); return true; }
+  if (a === 'trainlog') { openPop({ kind: 'train' }); return true; }
   if (a === 'sessinfo') { openPop({ kind: 'sess', k: el.dataset.k }); return true; }
   if (a === 'exinfo') { openPop({ kind: 'exinfo', id }); return true; }
   if (a === 'clear') { S.cleared[id] = todayKey(); save(); buzz('ok'); toast(`${exName(id)} is back in the plan`); render(); return true; }

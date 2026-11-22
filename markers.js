@@ -173,23 +173,15 @@ function bestLever(M = markers()) {
 
 // ---------- drawing ----------
 // A scale with its evidence bands and your position. stops: [[value, colour of the band that starts there], ..., [end]].
-function evScale(m) {
-  const lo = m.scale[0][0], hi = m.scale[m.scale.length - 1][0], X = v => clamp((v - lo) / (hi - lo), 0, 1) * 100;
-  const segs = m.scale.slice(0, -1).map(([v, c], i) => { const a = X(v), b = X(m.scale[i + 1][0]); return `<i style="left:${Math.min(a, b).toFixed(1)}%;width:${Math.abs(b - a).toFixed(1)}%;--c:${c}"></i>`; }).join('');
-  const ci = m.ci ? `<b class="eci" style="left:${Math.min(X(m.ci[0]), X(m.ci[1])).toFixed(1)}%;width:${Math.abs(X(m.ci[1]) - X(m.ci[0])).toFixed(1)}%"></b>` : '';
-  return `<div class="evscale" aria-hidden="true">${segs}${ci}<em style="left:${X(m.at).toFixed(1)}%"></em></div>`;
-}
+// The long game: one line per measure (its dot is where the cohorts put you), the one change worth the most named
+// first. What each measure means, and the study behind it, is one tap away.
 function markersCard() {
-  const M = markers(), L = bestLever(M), F = fitness(), ok = M.filter(m => m.st === 2).length, read = M.filter(m => m.st != null).length;
-  const rows = M.map(m => `<a class="mk mk-s${m.st ?? 'x'}" href="#why-${m.ev}" style="--c:${m.c}"><span class="ico">${ic(m.ic)}</span>
-      <span class="mkb"><span class="mkt"><span class="nm">${m.t}</span>${m.v != null ? `<b class="num">${m.v}<i>${m.u ? ' ' + m.u : ''}</i></b>` : '<b class="num">' + DASH + '</b>'}</span>
-      ${m.scale ? evScale(m) : ''}<span class="sub">${m.s}</span></span></a>`).join('');
-  const lev = F.v != null && F.levers.length ? `<div class="levers">${F.levers.map(l => `<div><b class="num">+${r1(l.dv)}</b><span>${l.t}</span><i>${Math.round((1 - l.rr) * 100)}% lower risk</i></div>`).join('')}</div>` : '';
+  const M = markers(), L = bestLever(M), ok = M.filter(m => m.st === 2).length, read = M.filter(m => m.st != null).length;
+  const rows = M.map(m => `<a class="mk mk-s${m.st ?? 'x'}" href="#why-${m.ev}"><span class="nm">${m.t}</span><b class="num">${m.v != null ? `${m.v}<i>${m.u ? ' ' + m.u : ''}</i>` : DASH}</b><span class="chev">›</span></a>`).join('');
   return `<section class="card" id="in-long">${cardHead('The long game', 'pulse', 'var(--heart)', why('markers', 'what this is'))}
-    <p class="sub small" style="margin:4px 0 10px">${read ? `<b class="ok">${ok} of ${read}</b> where the evidence puts the most benefit.` : ''} Each is from your own data, read against what large cohorts found. Tap one for its study.</p>
-    ${L ? `<div class="lever"><span class="eyebrow">Worth the most now</span><b>${esc(L.t)}</b><span class="sub">${L.s}</span></div>` : ''}
-    <div class="mks">${rows}</div>
-    ${lev ? `<h3>What would move your fitness estimate</h3>${lev}${F.dv != null && Math.abs(F.dv) >= 3.6 ? para(`${F.dv > 0 ? 'Up' : 'Down'} ${r1(Math.abs(F.dv))} ml/kg/min on 8 weeks ago, beyond the model's error for a change (3.6).`, F.dv > 0 ? 'sub up' : 'flag') : ''}` : ''}</section>`;
+    ${read ? `<p class="sub small mksum"><b class="ok">${ok} of ${read}</b> where large cohorts found the most benefit.</p>` : ''}
+    ${L ? `<div class="lever"><span class="eyebrow">Worth the most now</span><b>${esc(L.t)}</b></div>` : ''}
+    <div class="mks">${rows}</div></section>`;
 }
 // Loaded: this file ran to the end.
 (self.LOADED ||= []).push('markers.js');

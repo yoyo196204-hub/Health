@@ -87,7 +87,7 @@ function nutritionCard(T, t) {
   return `<section class="card">${cardHead('Where it went', 'bowl', 'var(--pro)', why('spread', 'why'))}
     <h3>Protein at each meal <span class="muted" style="font-weight:500">· ${T.perMeal} g each is about 0.4 g/kg</span></h3><div class="pbars">${pb}</div>
     <h3>Energy by meal</h3>${kcalSplit}
-    <h3>Macro split</h3>${macroLine(t)}</section>`;
+    ${(m => m ? `<h3>Macro split</h3>${m}` : '')(macroLine(t))}</section>`;
 }
 // The week the day is in: intake bars against the target line, tap a bar to go to the day.
 function weekCard(T) {
@@ -95,7 +95,7 @@ function weekCard(T) {
   const logged = ks.filter(k => S.food[k] && k <= todayKey()), done = ks.filter(k => S.food[k] && isComplete(k));
   const avg = done.length ? mean(done.map(k => totals(k).k)) : null, on = done.filter(k => Math.abs(totals(k).k - T.kcal) <= T.kcal * 0.1).length;
   return `<section class="card">${cardHead('This week', 'cal', 'var(--fuel)', `<a class="more-link" href="#review">Trends ›</a>`)}
-    <div class="wkbars"><span class="tgt" style="bottom:${(T.kcal / top * 96 + 22).toFixed(1)}px"><span>${fmt(T.kcal)}</span></span>${ks.map((k, i) => `<button class="wb ${!vals[i] ? 'empty' : ''} ${k === day ? 'on' : ''}" data-act="gday" data-k="${k}" ${k > todayKey() ? 'disabled' : ''} style="--c:${dayColor(k, T)}"><i style="height:${Math.max(3, vals[i] / top * 96).toFixed(1)}px;animation-delay:${i * 40}ms"></i><span>${weekday(k)}</span></button>`).join('')}</div>
+    <div class="wkbars"><span class="tgt" style="bottom:${(T.kcal / top * 96 + 22).toFixed(1)}px" title="Target ${fmt(T.kcal)} kcal"></span>${ks.map((k, i) => `<button class="wb ${!vals[i] ? 'empty' : ''} ${k === day ? 'on' : ''}" data-act="gday" data-k="${k}" ${k > todayKey() ? 'disabled' : ''} style="--c:${dayColor(k, T)}"><i style="height:${Math.max(3, vals[i] / top * 96).toFixed(1)}px;animation-delay:${i * 40}ms"></i><span>${weekday(k)}</span></button>`).join('')}</div>
     ${stats([[avg != null ? fmt(avg) : DASH, 'kcal a day, complete days'], [`${on}<i>/ ${done.length}</i>`, 'within 10% of target'], [`${logged.length}<i>/ 7</i>`, 'days logged']])}</section>`;
 }
 function vFood() {

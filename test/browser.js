@@ -133,30 +133,41 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
   });
   await test('recovery, training, review: the inputs behind the verdict, nights that end, short session list, honest links', async () => {
     await page.evaluate(() => { const k = shift(todayKey(), -1); S.sleepx[k] = { d: 60, l: 200, r: 60, w: 10, on: -60 }; S.sleep[k] = 5.5; save(); });
-    await go('recovery');
+    const part = async (t, v) => { await page.evaluate(([t, v]) => { SUB[t] = v; renderView(); }, [t, v]); await page.waitForTimeout(300); };
+    await go('recovery'); await part('recovery', 'rec');
     assert.ok(await page.evaluate(() => document.querySelectorAll('.rhero .part').length) >= 2, 'the recovery number shows its parts');
-    assert.ok(await page.evaluate(() => [...document.querySelectorAll('.nights .sub')].some(e => /23:00–04:30/.test(e.textContent))), 'a night with no time in bed ends when its stages do');
     await page.evaluate(() => { const k = todayKey(); S.sleep[k] = 6.2; save(); render(); });
+    // An input of the verdict that lives in another part of Heart: that part comes up, at its section.
     await page.tap('.part[data-to="rc-sleep"]'); await page.waitForTimeout(700);
+    assert.strictEqual(await page.evaluate(() => SUB.recovery), 'sleep');
     assert.ok(await page.evaluate(() => Math.abs(document.getElementById('rc-sleep').getBoundingClientRect().top) < 200), 'tapping an input scrolls to its section');
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll('.nights .sub')].some(e => /23:00–04:30/.test(e.textContent))), 'a night with no time in bed ends when its stages do');
     await shot('recovery');
+    // Heart and Insights are one part at a time, never pages long.
+    for (const [t, parts] of [['recovery', ['rec', 'sleep', 'cardio']], ['review', ['energy', 'body', 'long', 'links']]]) {
+      await go(t);
+      for (const v of parts) { await part(t, v); const h = await page.evaluate(() => document.documentElement.scrollHeight / innerHeight); assert.ok(h < 2.6, `${t} ${v} is ${h.toFixed(1)} screens`); }
+    }
+    await go('recovery'); await page.tap('.subnav button[data-v="cardio"]'); await page.waitForTimeout(400);
     assert.ok(await page.evaluate(() => [...document.querySelectorAll('#view .block h2')].some(h => /Cardio with the H9/.test(h.textContent))), 'strap cardio lives on Heart');
-    // No Train tab: an old link lands on Insights, which carries the training sections, and Today opens the next session.
+    // No Train tab: an old link lands on Today, whose training card is two buttons: the next session and what you lifted.
     assert.strictEqual(await page.evaluate(() => document.querySelectorAll('#tabs a').length), 4);
     await go('training');
-    assert.strictEqual(await page.evaluate(() => tab), 'review');
-    assert.ok(await page.evaluate(() => document.querySelector('#in-train').querySelectorAll(':scope > ul.list > li').length <= 4 + 7), 'short session list');
-    await go('today');
-    if (await page.evaluate(() => !!document.querySelector('[data-act="nextgo"]'))) {
-      await page.tap('[data-act="nextgo"]'); await page.waitForTimeout(600);
-      assert.ok(await page.evaluate(() => pop?.kind === 'next' && !!document.querySelector('#sheet .nextog li')), 'the next session opens as a sheet with its exercises');
-      await page.evaluate(() => closePop()); await page.waitForTimeout(400);
-    }
-    await go('review');
+    assert.strictEqual(await page.evaluate(() => tab), 'today');
+    assert.strictEqual(await page.evaluate(() => document.querySelectorAll('.trcard .rowb button').length), 2, 'two buttons');
+    await page.tap('.trcard [data-act="trainlog"]'); await page.waitForTimeout(600);
+    assert.ok(await page.evaluate(() => pop?.kind === 'train' && document.querySelector('#in-train').querySelectorAll(':scope > ul.list > li').length <= 4 + 7), 'short session list');
+    await page.evaluate(() => closePop()); await page.waitForTimeout(400);
+    await page.tap('.trcard [data-act="nextgo"]'); await page.waitForTimeout(600);
+    assert.ok(await page.evaluate(() => pop?.kind === 'next' && !!document.querySelector('#sheet .nextog li')), 'the next session opens as a sheet with its exercises');
+    await page.evaluate(() => closePop()); await page.waitForTimeout(400);
+    await go('review'); await part('review', 'links');
     const lk = await page.evaluate(() => [...document.querySelectorAll('.lrow, .lneed span')].map(e => e.textContent));
     assert.ok(lk.length >= 5, lk.join(' | '));
     assert.ok(await page.evaluate(() => [...document.querySelectorAll('.lrow')].every(r => /No clear effect|\(.* to .*\)/.test(r.textContent))), 'every link with an effect carries its interval');
     assert.ok(await page.evaluate(() => [...document.querySelectorAll('.lneed span')].every(e => /\d+ more days/.test(e.textContent))), 'links still waiting say how long');
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll('#in-links > .lrows .lrow')].every(r => !/No clear effect|Hint/.test(r.textContent))), 'only real links are in view');
+    await part('review', 'energy');
     assert.ok(await page.evaluate(() => /kcal a day/.test(document.getElementById('in-burn')?.textContent || '')), 'the learned burn is shown');
   });
   await test('food: an Amul pack from its label, weighed by the gram, with carbs and fat on Today', async () => {
@@ -329,8 +340,8 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
   await test('a sheet is dragged down from its middle, the page sinking behind it until it goes', async () => {
     await go('today'); await page.evaluate(() => scrollTo(0, 0));
     await page.tap('#fab'); await page.waitForTimeout(700);
-    const st = await page.evaluate(() => ({ lift: +getComputedStyle(document.body).getPropertyValue('--lift'), sc: getComputedStyle(document.getElementById('view')).transform }));
-    assert.strictEqual(st.lift, 1, 'an open sheet lifts fully');
+    const st = await page.evaluate(() => ({ up: document.documentElement.classList.contains('sheet-up'), sc: getComputedStyle(document.getElementById('view')).transform }));
+    assert.ok(st.up, 'an open sheet lifts fully');
     assert.notStrictEqual(st.sc, 'none', 'the page behind recedes');
     const r = await page.evaluate(() => { const q = document.querySelector('.sheet .qgrid').getBoundingClientRect(); return [q.left + q.width / 2, q.top + 40]; });
     // A slow drag that stops short springs back.
@@ -341,7 +352,7 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     for (let i = 1; i <= 6; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: r[0], y: r[1] + i * 40 }] }); await page.waitForTimeout(12); }
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await page.waitForTimeout(1400);
-    assert.deepStrictEqual(await page.evaluate(() => [pop, document.body.classList.contains('sheet-open'), +getComputedStyle(document.body).getPropertyValue('--lift')]), [null, false, 0]);
+    assert.deepStrictEqual(await page.evaluate(() => [pop, document.body.classList.contains('sheet-open'), document.getElementById('view').style.transform]), [null, false, '']);
   });
   await test('the insight card is a deck: a fling brings the next', async () => {
     await go('today'); await page.evaluate(() => scrollTo(0, 0));

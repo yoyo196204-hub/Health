@@ -99,7 +99,7 @@ function niceTicks(a, b) {
   for (let v = Math.ceil(a / step) * step; v <= b + 1e-9; v += step) out.push(+v.toFixed(6));
   return out;
 }
-function legend(items) { return `<p class="key">${items.map(([cls, label]) => `<i class="k ${cls}"></i>${label}`).join('')}</p>`; }
+function legend(items) { return `<p class="key">${items.map(([cls, label]) => `<span class="kk"><i class="k ${cls}"></i>${label}</span>`).join('')}</p>`; }
 
 // A collapsible list of dated readings, each removable (with undo). stream names where they live in S.
 function historyList(title, rows, stream) {
@@ -168,6 +168,15 @@ function backupDue() {
   if (NATIVE) return !BACKUP.folder || (!!S.meta.backup && gapDays(S.meta.backup, todayKey()) >= 3);
   return !S.meta.exported || gapDays(S.meta.exported, todayKey()) > 14;
 }
+// The long tabs show one part at a time, picked from a row at the top, so a tab is a screen or two and never a
+// document to scroll through. Which part each tab is on is kept while the app is open.
+const SUB = { recovery: 'rec', review: 'energy' };
+function subnav(t, items) {
+  if (!items.some(([v]) => v === SUB[t])) SUB[t] = items[0][0];
+  return `<nav class="subnav" aria-label="Parts of this page"><div class="seg">${items.map(([v, l]) => `<button class="${v === SUB[t] ? 'on' : ''}" aria-pressed="${v === SUB[t]}" data-act="sub" data-t="${t}" data-v="${v}">${l}</button>`).join('')}</div></nav>`;
+}
+// Which part of which tab a section lives in, for links that point straight at a section.
+const SUBOF = { 'rc-hrv': ['recovery', 'rec'], 'rc-rhr': ['recovery', 'rec'], 'rc-sleep': ['recovery', 'sleep'], 'rc-night': ['recovery', 'sleep'] };
 // A card's heading with its domain icon in its colour.
 function cardHead(title, icon, c, right = '') { return `<div class="mh"><span class="ico" style="--c:${c}">${ic(icon)}</span><h2>${title}</h2>${right}</div>`; }
 // Loaded: this file ran to the end.

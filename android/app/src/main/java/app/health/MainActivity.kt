@@ -77,7 +77,7 @@ class MainActivity : ComponentActivity() {
         // Draw edge to edge, and pad the page by the system bars and the keyboard so nothing hides behind them.
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val night = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        root = FrameLayout(this).apply { setBackgroundColor(if (night) 0xFF14110D.toInt() else 0xFFF5EFE3.toInt()) }
+        root = FrameLayout(this).apply { setBackgroundColor(if (night) 0xFF0C0C0B.toInt() else 0xFFF6F5F2.toInt()) }
         web = WebView(this)
         root.addView(web, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
@@ -175,8 +175,8 @@ class MainActivity : ComponentActivity() {
 
     /** The page chose light or dark: match the status bar icons and the background behind the page. */
     fun setTheme(dark: Boolean) = main.post {
-        root.setBackgroundColor(if (dark) 0xFF14110D.toInt() else 0xFFF5EFE3.toInt())
-        web.setBackgroundColor(if (dark) 0xFF14110D.toInt() else 0xFFF5EFE3.toInt())
+        root.setBackgroundColor(if (dark) 0xFF0C0C0B.toInt() else 0xFFF6F5F2.toInt())
+        web.setBackgroundColor(if (dark) 0xFF0C0C0B.toInt() else 0xFFF6F5F2.toInt())
         WindowInsetsControllerCompat(window, root).apply { isAppearanceLightStatusBars = !dark; isAppearanceLightNavigationBars = !dark }
     }
 

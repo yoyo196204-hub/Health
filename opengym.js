@@ -416,21 +416,16 @@ function ogSourcesBlock() {
     <ol class="sub steps"><li>In openGym: Settings › Integrations › <b>Health Connect</b> › turn on <b>Workouts</b>, <b>Heart rate from your watch</b> and <b>Weigh-ins from other apps</b>.</li><li>In Zepp: Profile › Health Connect › allow heart rate, so openGym and Health both get it.</li></ol>`;
   return `${link}${hc}<details class="inner"><summary>Or bring in a file by hand</summary>${byHand}</details>`;
 }
-// You › Training: Health's plan going out.
+// You › Training: Health's plan going out, in three steps. What the file holds is behind the evidence link.
 function ogPlanBlock() {
-  const P = prog(), p = S.profile, retired = new Set(Object.keys(P.days).flatMap(d => sessionPlan(shift(todayKey(), 1), d).retired)).size;
-  const sent = S.meta.ogplan, stale = ogPlanStale(), plan = ogPlan();
-  const nEx = plan.routines.reduce((a, r) => a + r.ex.length, 0), nSubs = plan.routines.reduce((a, r) => a + r.ex.reduce((b, e) => b + (e.subs?.length || 0), 0), 0);
-  const what = [esc(P.n), p.equip === 'home' ? 'dumbbells at home' : 'the gym', p.shoulder ? 'shoulder care' : '', retired ? `${plural(retired, 'exercise')} out after pain` : ''].filter(Boolean).join(', ');
-  const folder = NATIVE && OGF.folder;
-  return `${para(`Your plan as Health has it today: ${what}. In the file: ${plural(plan.routines.length, 'routine')} with ${plural(nEx, 'exercise')}, each with its rep range, next load, rest and notes, ${nSubs} backup exercises from openGym’s catalogue for a taken machine, a warm-up ramp before each session’s first big lift, and an ${OG_BLOCK_WEEKS}-week block that runs the routines in rotation at RPE ${OG_BLOCK_RPE}. openGym moves the loads by the same double progression Health uses.`)}
-    ${stale ? para(`Your plan has changed since the file made on ${dateLabel(sent.at)}. Make it again and import it in openGym.`, 'flag') : sent ? para(`Plan file made on ${dateLabel(sent.at)}; it still matches your plan. New loads alone need no new file.`) : ''}
-    <div class="rowb">${folder ? '<button class="solid" data-act="ogplan" data-v="folder">Put the plan in the openGym folder</button><button class="ghost" data-act="ogplan">Save it elsewhere</button>' : '<button class="solid" data-act="ogplan">Save the plan file</button>'}</div>
-    <ol class="sub steps"><li>In openGym: <b>Plan</b> › share icon (top right) › <b>Import a plan file</b>, and pick <b>${OG_PLAN_NAME}</b>${folder ? ` in ${esc(OGF.folder)}` : ''}.</li>
-      <li>Turn on <b>Use this weekly schedule</b>, then <b>Add to my plan</b>. The routines are named “(Health)”.</li>
-      <li>To train in rotation with the effort target: <b>Plan</b> › menu › <b>Programmes</b> › <b>${esc(plan.programmes[0].name)}</b> › <b>Start programme</b>.</li>
-      <li>Sending a newer version later? Delete the old “(Health)” routines and the old block in openGym first, so there are not two of each.</li></ol>
-    ${para(`Then in You › Data sources link openGym both ways, and what you lift comes back by itself. ${why('block', 'Why the block is set up this way')}`)}`;
+  const sent = S.meta.ogplan, stale = ogPlanStale(), plan = ogPlan(), folder = NATIVE && OGF.folder;
+  const status = stale ? para(`Your plan changed after the file of ${dateLabel(sent.at)}: send it again.`, 'flag') : sent ? para(`Sent ${dateLabel(sent.at)}, still current. New loads need no new file.`) : '';
+  return `${status}<ol class="steps num">
+      <li><b>${folder ? 'Put the plan in openGym’s folder' : 'Save the plan file'}</b>
+        <div class="rowb tight">${folder ? '<button class="solid" data-act="ogplan" data-v="folder">Put it there</button><button class="ghost" data-act="ogplan">Save elsewhere</button>' : '<button class="solid" data-act="ogplan">Save the plan file</button>'}</div></li>
+      <li><b>Import it in openGym</b><span class="sub">Plan › share icon › Import a plan file › ${OG_PLAN_NAME}. Turn on Use this weekly schedule, then Add to my plan.</span></li>
+      <li><b>Start the block</b><span class="sub">Plan › menu › Programmes › ${esc(plan.programmes[0].name)} › Start programme.</span></li></ol>
+    ${sent ? para('Sending a newer one? Delete the old “(Health)” routines and block in openGym first.', 'sub small') : ''}`;
 }
 function ogAct(a, el) {
   switch (a) {
