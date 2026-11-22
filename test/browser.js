@@ -28,7 +28,7 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await page.waitForTimeout(500);
   };
   let passed = 0, failed = 0;
-  const test = async (name, fn) => { try { await fn(); passed++; console.log('  ok  ', name); } catch (e) { failed++; console.log('  FAIL', name, '\n       ', e.message.split('\n')[0]); } };
+  const test = async (name, fn) => { if (process.env.ONLY && !process.env.ONLY.split('|').some(o => name.includes(o))) return; try { await fn(); passed++; console.log('  ok  ', name); } catch (e) { failed++; console.log('  FAIL', name, '\n       ', process.env.DEBUG ? e.message : e.message.split('\n')[0]); } };
   const go = async h => { await page.evaluate(x => { location.hash = x; }, h); await page.waitForTimeout(500); };
 
   for (const tab of ['today', 'recovery', 'review', 'me']) await test(`${tab}: a finger scrolls the page`, async () => {
@@ -82,6 +82,88 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     assert.ok(/^health-beats-.*\.csv$/.test(dl.suggestedFilename()));
     assert.ok(csv.includes('time_s,rr_ms') && csv.some(l => l.startsWith('# mark at 240 s: Moving')) && csv.filter(l => /^\d/.test(l)).length > 400);
   });
+  // A strap on the chest, as Bluetooth delivers it: one packet per beat through the app's own parser, with its time.
+  const feed = (from, to) => page.evaluate(([a, b]) => {
+    let t = Date.now() - a * 1000, i = 0;
+    const end = Date.now() - b * 1000;
+    while (t < end) { const rr = 1000 + 60 * Math.sin(i / 2.3) + (i % 7) * 3; t += rr; const v = new DataView(new ArrayBuffer(4)); v.setUint8(0, 16 | 4 | 2); v.setUint8(1, Math.round(60000 / rr)); v.setUint16(2, Math.round(rr * 1.024), true); hrData(v, Math.round(t + 60)); i++; }
+  }, [from, to]);
+  await test('the strap page: a morning check worn by someone else stays theirs, yours reaches the verdict, and both keep every beat', async () => {
+    await page.evaluate(() => { S.people = [{ id: 'pasha01', n: 'Asha', sex: 'f', by: 1990 }]; S.settings.hrvDur = 60; delete S.hrv[todayKey()]; save(); HR.beats = []; HR.pk = []; Object.assign(HR, { conn: 'on', name: 'Polar H9 TEST' }); });
+    await go('strap-live');
+    await feed(130, 125);
+    await page.tap('[data-act="stuwear"][data-v="pasha01"]');
+    assert.ok((await page.textContent('.wearnote')).includes('Recording for Asha'), 'whose it is, said plainly');
+    await page.tap('[data-act="sturun"][data-v="morning"]');
+    await page.tap('[data-act="hrmorning"]');
+    // The check began two minutes ago; the strap has been sending since.
+    await page.evaluate(() => { HR.t0 -= 125000; });
+    await feed(125, 0);
+    await page.evaluate(() => hrMorningDone());
+    await page.waitForTimeout(300);
+    const a = await page.evaluate(() => ({ hrv: S.hrv[todayKey()] || null, recs: recList({ who: 'pasha01' }).map(r => ({ kind: r.kind, n: r.ru.length, pk: r.pk.length, trim: r.edits?.trim, ref: r.ref || null })), card: document.querySelector('.result')?.textContent }));
+    assert.strictEqual(a.hrv, null, 'your morning check is untouched');
+    assert.strictEqual(a.recs.length, 1); assert.strictEqual(a.recs[0].kind, 'morning'); assert.strictEqual(a.recs[0].ref, null);
+    assert.ok(a.recs[0].n >= 120 && a.recs[0].pk === a.recs[0].n, `every beat and packet kept: ${a.recs[0].n} beats, ${a.recs[0].pk} packets`);
+    assert.ok(a.recs[0].trim && a.recs[0].trim[0] > 55 && a.recs[0].trim[0] < 70, 'the settling minute is set aside, not lost');
+    assert.ok(/saved for Asha/.test(a.card), a.card);
+    // Now you.
+    await page.tap('[data-act="hrresdone"]');
+    await page.evaluate(() => { HR.pk = []; HR.beats = []; });
+    await page.tap('[data-act="stuwear"][data-v="me"]');
+    await page.tap('[data-act="hrmorning"]');
+    await page.evaluate(() => { HR.t0 -= 125000; });
+    await feed(125, 0);
+    await page.evaluate(() => hrMorningDone());
+    await page.waitForTimeout(300);
+    const b = await page.evaluate(() => { const r = recList({ who: 'me' })[0]; return { hrv: S.hrv[todayKey()], ref: r.ref, id: r.id, rs: recRead(r).A.rmssd }; });
+    assert.ok(b.hrv && b.ref?.s === 'hrv', 'yours is the day\'s morning check, linked to its recording');
+    assert.ok(Math.abs(b.hrv.rmssd - b.rs) / b.rs < 0.08, `the same reading either way: ${b.hrv.rmssd} and ${b.rs}`);
+    // A live session elsewhere in the app stays in sight.
+    await page.evaluate(() => { HR.result = null; hrStart('morning'); });
+    await go('today');
+    assert.ok(await page.isVisible('#livepill'), 'the pill shows the running session');
+    await page.evaluate(() => { recDrop(); hrEnd(); render(); });
+    await page.waitForTimeout(200);
+    assert.ok(!(await page.isVisible('#livepill')), 'and goes when it ends');
+    await page.evaluate(() => { HR.beats = []; HR.pk = []; Object.assign(HR, { conn: 'idle', bpm: null }); WEAR.who = 'me'; });
+  });
+  await test('a session\'s page: a selected stretch is excluded and the verdict follows, undo restores it, and the files open again elsewhere', async () => {
+    const id = await page.evaluate(() => recList({ who: 'me', kind: 'morning' })[0].id);
+    await go(`rec-${id}`); await page.waitForTimeout(400);
+    const before = await page.evaluate(() => S.hrv[todayKey()].rmssd);
+    await page.tap('[data-act="bxmode"][data-v="select"]');
+    const box = await page.evaluate(() => { const r = document.getElementById('bxt').getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
+    await drag(box.x + box.w * 0.72, box.y + box.h / 2, box.x + box.w * 0.84, box.y + box.h / 2);
+    assert.ok(await page.isVisible('.selbar'), 'the stretch and what to do with it');
+    await page.tap('[data-act="bxselex"]');
+    await page.waitForTimeout(300);
+
+    const ex = await page.evaluate(() => [recGet(BX.key).edits?.ex, S.hrv[todayKey()].rmssd, S.hrv[todayKey()].rr?.length]);
+    assert.ok(ex[0]?.length === 1, 'kept as an edit'); assert.notStrictEqual(ex[1], before, 'the morning check follows the edit');
+    await page.tap('#toast button');
+    await page.waitForTimeout(300);
+    assert.strictEqual(await page.evaluate(() => S.hrv[todayKey()].rmssd), before, 'undone');
+    for (const p of ['minutes', 'time', 'signal', 'measures']) { await page.tap(`[data-act="stupanel"][data-v="${p}"]`); await page.waitForTimeout(150); }
+    assert.ok((await page.textContent('table.mt.wide')).includes('RMSSD'), 'every measure');
+    const [csv] = await Promise.all([page.waitForEvent('download'), page.tap('[data-act="stuxcsv"]')]);
+    const rows = fs.readFileSync(await csv.path(), 'utf8').split('\n');
+    assert.ok(rows.includes('beat,time_s,clock,rr_sent_ms,rr_ms,bpm,flag,included') && rows.filter(l => /^\d/.test(l)).length > 100, 'the beats, each with its clock time and flags');
+    const [rep] = await Promise.all([page.waitForEvent('download'), page.tap('[data-act="stuxrep"]')]);
+    assert.ok(/^<!doctype html>/.test(fs.readFileSync(await rep.path(), 'utf8')) && /\.html$/.test(rep.suggestedFilename()), 'a report page');
+    const [js] = await Promise.all([page.waitForEvent('download'), page.tap('[data-act="stuxjson"]')]);
+    const file = fs.readFileSync(await js.path(), 'utf8');
+    // Opened on another phone: the same recording, given to a new person.
+    await page.evaluate(id => { recDel(id); }, id);
+    await go('strap-sessions');
+    await page.setInputFiles('#stuimpf', { name: 'from-a-friend.json', mimeType: 'application/json', buffer: Buffer.from(file) });
+    await page.waitForSelector('[data-act="stuimpok"]');
+    await page.tap('[data-act="stuimpto"][data-v="pasha01"]');
+    await page.tap('[data-act="stuimpok"]');
+    await page.waitForTimeout(300);
+    const back = await page.evaluate(id => { const r = recGet(id); return r && { who: r.who, ref: r.ref || null, n: r.ru.length }; }, id);
+    assert.deepStrictEqual([back?.who, back?.ref], ['pasha01', null], 'imported to the person chosen, never into your own data');
+  });
   const shot = async name => { if (process.env.SHOTS) await page.screenshot({ path: path.join(process.env.SHOTS, `${name}.png`), fullPage: true }); };
   await test('the beat explorer: a finger reads beats, a pinch zooms, and the numbers follow the window', async () => {
     // A morning check with a missed beat in it, saved the way a recording is.
@@ -105,7 +187,7 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await drag(box.x + box.w * 0.3, box.y + box.h / 2, box.x + box.w * 0.6, box.y + box.h / 2);
     const read = await page.evaluate(() => document.getElementById('bxread').textContent);
     assert.ok(/Beat \d+/.test(read) && /ms/.test(read) && /bpm/.test(read), read);
-    assert.strictEqual(await page.evaluate(() => overlay?.type), 'beats', 'reading beats never swipes the page away');
+    assert.strictEqual(await page.evaluate(() => overlay?.type), 'rec', 'reading beats never swipes the page away');
     const before = await page.evaluate(() => [BX.v1 - BX.v0, document.getElementById('bxstats').textContent]);
     const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: cx - 30, y: cy, id: 1 }, { x: cx + 30, y: cy, id: 2 }] });
@@ -115,6 +197,7 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     const after = await page.evaluate(() => [BX.v1 - BX.v0, document.getElementById('bxstats').textContent]);
     assert.ok(after[0] < before[0] * 0.6, `pinch zoomed in: ${before[0]} → ${after[0]} s`);
     assert.notStrictEqual(after[1], before[1], 'the window’s numbers changed with it');
+    await page.evaluate(() => { STU.panel = 'signal'; renderView(); }); await page.waitForTimeout(300);
     await page.tap('[data-act="bxgo"]');
     assert.ok(/missed beat, split/.test(await page.evaluate(() => document.getElementById('bxread').textContent)), 'a correction can be gone to and read');
     await shot('beats-zoomed');

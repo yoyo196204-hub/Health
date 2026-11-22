@@ -292,6 +292,8 @@ function sanitize(raw) {
     custom: list(raw.custom, 300, e => cleanFood(e, false)), freq,
     // Your own plates: a meal saved under a name, logged again in one tap. Each item keeps its own numbers.
     plates: list(raw.plates, 40, cleanPlate),
+    // Other people who wear the strap (rec.js): their recordings never touch your own data.
+    people: typeof cleanPerson === 'function' ? list(raw.people, 40, cleanPerson) : [],
     meta: {
       exported: DATE.test(meta.exported) ? meta.exported : null, watch: DATE.test(meta.watch) ? meta.watch : null,
       sync: num(meta.sync, 1e12, 1e13), fresh: cleanFresh(meta.fresh), backup: DATE.test(meta.backup) ? meta.backup : null,

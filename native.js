@@ -215,7 +215,7 @@ const BACKUP = { folder: null };
 function backupInfo() { if (NATIVE) BACKUP.folder = parse(nat('backupStatus'))?.folder || null; }
 function autoBackup(force) {
   if (!NATIVE || !BACKUP.folder || (!force && S.meta.backup === todayKey())) return;
-  nat('backupWrite', JSON.stringify(S), !!force);
+  nat('backupWrite', backupText(), !!force);
 }
 NEV.backup = r => {
   if (r?.folder !== undefined) BACKUP.folder = r.folder;

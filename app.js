@@ -31,8 +31,9 @@ const VIEWS = { today: vToday, food: vFood, recovery: vRecovery, review: vReview
 const TABS = ['today', 'food', 'recovery', 'review'];
 const ALIAS = { heart: 'recovery', trend: 'review', insights: 'review', train: 'today', training: 'today', diary: 'food' };
 const POPS = { fedit: p => vFoodEdit(p.i), portion: p => vPortion(p), cedit: p => vCustomEdit(p), plate: p => vPlateSave(p), exinfo: p => vExInfo(p.id), cardioadd: () => vCardioAdd(), cardioinfo: p => vCardioInfo(p), sess: p => vSession(p), next: () => vNext(), train: () => vTrain(),
-  hrvinfo: p => vHrvInfo(p), labinfo: p => vLabInfo(p), recedit: p => vRecEdit(p), dayx: p => vDayDetail(p), log: p => vLog(p), weigh: p => vWeigh(p) };
-const PAGES = ['add', 'why', 'set', 'lab', 'beats', 'scan'];
+  hrvinfo: p => vHrvInfo(p), labinfo: p => vLabInfo(p), person: p => vPersonEdit(p), recmark: p => vRecMark(p), recedit: p => vRecEdit(p), dayx: p => vDayDetail(p), log: p => vLog(p), weigh: p => vWeigh(p) };
+const PAGES = ['add', 'why', 'set', 'lab', 'beats', 'scan', 'strap', 'rec', 'person'];
+const FULL = ['set', 'lab', 'beats', 'scan', 'strap', 'rec', 'person'];
 const scrollMem = {};
 const BUILD = (document.querySelector('script[src^="app.js"]')?.getAttribute('src').split('v=')[1]) || 'dev';
 
@@ -98,12 +99,12 @@ function render() {
   settleTargets();
   // An evidence sheet opened from a page keeps that page underneath it.
   const base = overlay?.type === 'why' ? overlay.under : overlay;
-  const adding = base?.type === 'add' && MEALS.some(m => m[0] === base.key), setting = base?.type === 'set' || base?.type === 'lab' || base?.type === 'beats' || base?.type === 'scan';
+  const adding = base?.type === 'add' && MEALS.some(m => m[0] === base.key), setting = FULL.includes(base?.type);
   const key = base ? `${base.type}-${base.key}` : tab + (tab === 'food' ? day : '');
   try {
     const banner = (loadNote ? `<p class="flag banner">${loadNote} <button class="link" data-act="dismissnote" data-dismiss>OK</button></p>` : '') + (saveFailed ? '<p class="flag banner">Storage is full or blocked: changes are not being kept. Export a backup from You › Backup and data.</p>' : '');
-    paint($('#view'), banner + (adding ? vAdd(base.key) : base?.type === 'lab' ? vLab(base.key) : base?.type === 'beats' ? vBeats(base.key) : base?.type === 'scan' ? vScan(base.key) : setting ? vSet(base.key) : VIEWS[tab]()), key !== screenKey);
-    paint($('#sheet'), pending ? (pending.type === 'halftone' ? vHalftone(pending) : pending.type === 'opengym' ? vOpenGym(pending) : vImport(pending)) : pop && POPS[pop.kind] ? part(POPS[pop.kind], pop) : overlay?.type === 'why' ? vWhy(overlay.key) : '', !$('#sheet .sheet'));
+    paint($('#view'), banner + (adding ? vAdd(base.key) : base?.type === 'lab' ? vLab(base.key) : base?.type === 'beats' ? vBeatsGone(base.key) : base?.type === 'strap' ? vStrap(base.key) : base?.type === 'rec' ? vRec(base.key) : base?.type === 'person' ? vPerson(base.key) : base?.type === 'scan' ? vScan(base.key) : setting ? vSet(base.key) : VIEWS[tab]()), key !== screenKey);
+    paint($('#sheet'), pending ? (pending.type === 'halftone' ? vHalftone(pending) : pending.type === 'opengym' ? vOpenGym(pending) : pending.type === 'strap' ? vStrapImport(pending) : vImport(pending)) : pop && POPS[pop.kind] ? part(POPS[pop.kind], pop) : overlay?.type === 'why' ? vWhy(overlay.key) : '', !$('#sheet .sheet'));
     screenKey = key;
   } catch (err) {
     console.error(err);
@@ -125,7 +126,7 @@ function render() {
   $('#tabs').style.setProperty('--on', TABS.includes(tab) ? 1 : 0);
   $('#tabs').style.setProperty('--tc', { today: 'var(--accent)', food: 'var(--fuel)', recovery: 'var(--heart)', review: 'var(--sleep)' }[tab] || 'var(--accent)');
   document.documentElement.classList.toggle('still', !motionOK());
-  sheetEntered(); sheetLift(); settle(); liveKick(); labKick(); bxKick();
+  sheetEntered(); sheetLift(); settle(); liveKick(); labKick(); bxKick(); stuKick();
 }
 // Renders caused by the watch or the strap wait until you have finished typing in a field.
 function renderSoft() {
@@ -142,6 +143,8 @@ function route() {
   const seq = ++routeSeq;
   let [a, b] = (location.hash.slice(1) || 'today').split('-');
   a = ALIAS[a] || a;
+  // The older beat-by-beat addresses open the recording's own page.
+  if (a === 'beats') { const r = bxRec(b || ''); if (r) { location.replace(`#rec-${r.id}`); return; } }
   const was = overlay, wasTab = tab;
   let next = null, nextTab = tab;
   if (PAGES.includes(a)) next = { type: a, key: b };
@@ -155,7 +158,7 @@ function route() {
   if (next?.type === 'why' && was) next.under = was.type === 'why' ? was.under : was;
   if (next?.type === 'add') { offLoad().catch(() => {}); wholeLoad().catch(() => {}); }
   if (next?.type === 'add' && was?.type !== 'add') { query = ''; cat = addNext && addNext !== 'find' ? addNext : 'usual'; ADDORDER.meal = null; }
-  const page = o => o && (o.type === 'add' || o.type === 'set' || o.type === 'lab' || o.type === 'beats' || o.type === 'scan');
+  const page = o => o && (o.type === 'add' || FULL.includes(o.type));
   let dir = null, top = false;
   if (next?.type === 'why' || was?.type === 'why') dir = null;
   else if (page(next) && was?.type === 'add' && next.type === 'add') { dir = null; }
@@ -264,11 +267,16 @@ const ACT = {
   },
   refresh: () => refreshAll(),
   install: () => { installEvt?.prompt(); installEvt = null; },
-  export: () => { S.meta.exported = todayKey(); save(); saveText(`health-${todayKey()}.json`, JSON.stringify(S)); render(); },
+  export: () => { S.meta.exported = todayKey(); save(); saveText(`health-${todayKey()}.json`, backupText()); render(); },
   import: () => $('#imp').click(),
   importok: () => {
     snapshot('Before importing a backup');
-    S = sanitize(pending.data); S.meta.welcomed = true; pending = null; save(); applyTheme(); buzz('done'); render();
+    const recs = pending.recs;
+    S = sanitize(pending.data); S.meta.welcomed = true; pending = null; save(); applyTheme(); buzz('done');
+    // The backup's recordings join the ones here: nothing here is removed, and a newer edit wins.
+    if (Array.isArray(recs)) recMerge(recs);
+    recMigrate();
+    render();
     toast('Imported', 7000, { label: 'Undo', fn: () => { restoreSnapshot(); applyTheme(); render(); toast('Import undone'); } });
     syncNow();
   },
@@ -312,7 +320,7 @@ document.addEventListener('click', e => {
   if (ACT[a]) return ACT[a](el);
   const ta = todayAct(a, el);
   if (ta === 'nav') { e.preventDefault(); return; }
-  if (ta || scanAct(a, el) || trainAct(a, el) || foodAct(a, el) || setAct(a, el) || ogAct(a, el) || labAct(a, el) || recAct(a, el) || bxAct(a, el) || checkAct(a, el)) return;
+  if (ta || scanAct(a, el) || trainAct(a, el) || foodAct(a, el) || setAct(a, el) || ogAct(a, el) || labAct(a, el) || stuAct(a, el) || recAct(a, el) || bxAct(a, el) || checkAct(a, el)) return;
   if (a.startsWith('hr')) return hrAct(a, el);
   if (a.startsWith('w')) return watchAct(a);
 });
@@ -373,6 +381,7 @@ document.addEventListener('change', e => {
     if (f.size > 30e6) { buzz('warn'); return toast('That file is too large to be a backup'); }
     f.text().then(txt => {
       // An openGym backup or spreadsheet picked here goes the openGym way: added, never replacing anything.
+      if (strapFileRead(txt, f.name)) return;
       const og = ogParse(txt);
       if (og && !og.error) return ogReceive(txt, f.name, '', false);
       const data = JSON.parse(txt), ht = halftoneProfiles(data);
@@ -382,7 +391,7 @@ document.addEventListener('change', e => {
         pending = { type: 'halftone', profiles: ht, pick, from: f.name };
       } else {
         if (!obj(data) || !data.profile || !data.food) throw new Error('bad file');
-        pending = { type: 'import', data: sanitize(data), from: f.name };
+        pending = { type: 'import', data: sanitize(data), from: f.name, recs: Array.isArray(data.recs) ? data.recs : null };
       }
       render();
     }).catch(() => { buzz('warn'); toast('That file is not a Health, Halftone or openGym backup'); });
@@ -406,6 +415,7 @@ dailyBackup();
 navigator.storage?.persist?.().catch(() => {});
 if (NATIVE) { document.documentElement.classList.add('native'); crashIn(); hcCheck(); backupInfo(); autoBackup(); ogInfo(); ogAuto(); remindStatus(); remindPlan(); strapAuto(); }
 if (recovered === 'mirror') save();
+recInit().catch(e => { logError(e); RSTORE.ready = true; });
 route();
 fresh('fwd');
 if (!NATIVE && 'serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');

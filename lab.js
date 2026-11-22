@@ -76,7 +76,7 @@ function labTick(now, el, silent, off) {
   // A Live session that loses the strap keeps what it has.
   if (K === 'live' && (silent || off) && el >= LIVE_MIN + 15) return labDone();
   if (K === 'live') liveStep(now, el);
-  if (needStrap && (silent || off)) { hrEnd(); HR.result = { type: K, ok: false, why: off ? 'The strap lost skin contact. Wet the electrodes and try again.' : 'Lost contact with the strap.' }; buzz('warn'); return render(); }
+  if (needStrap && (silent || off)) { const kept = recKeepFailed(K); hrEnd(); HR.result = { type: K, ok: false, why: (off ? 'The strap lost skin contact. Wet the electrodes and try again.' : 'Lost contact with the strap.') + kept }; buzz('warn'); return render(); }
   if (K === 'rf') {
     const seg = Math.min(RF_RATES.length - 1, Math.floor(el / RF_SEG));
     if (seg !== LAB.seg) { LAB.seg = seg; LAB.phases = breathPhases('rf', RF_RATES[seg]); LAB.cycle = LAB.phases.reduce((a, p) => a + p[1], 0); LAB.segT0 = HR.t0 + seg * RF_SEG * 1000; buzz('ok'); toast(`Now ${RF_RATES[seg]} breaths a minute`, 2200); }
@@ -157,8 +157,8 @@ function labDone() {
       // The largest heart-rate swing per breath decides; a near tie (within 1 bpm) goes to the stronger LF peak.
       const top = Math.max(...ok.map(x => x[1])), best = ok.filter(x => x[1] >= top - 1).sort((a, b) => (b[2] || 0) - (a[2] || 0))[0];
       rec = { kind: 'rf', t: t0, dur: Math.round(el), seg, best: best[0] };
-      S.meta.rf = { rate: best[0], at: k };
-      S.settings.brRate = best[0];
+      // Your resonance sets your pacer; someone else's is kept with their recording only.
+      if (WEAR.who === 'me') { S.meta.rf = { rate: best[0], at: k }; S.settings.brRate = best[0]; }
     } else why = 'Too few clean breaths at enough of the rates to compare them. Try again lying or sitting very still.';
   } else if (K === 'ortho') {
     const sup = hrvMetrics(rrSince(t0 + 30000, t0 + ORTHO_LIE * 1000)), std = hrvMetrics(rrSince(t0 + (ORTHO_LIE + 30) * 1000, end));
@@ -176,14 +176,21 @@ function labDone() {
     const r = liveRecord(t0, end);
     if (r.rec) rec = r.rec; else why = r.why;
   }
+  const me = WEAR.who === 'me';
   if (rec) {
     const c = cleanLab(rec);
-    if (c) { (S.lab[k] ||= []).push(c); S.lab[k] = S.lab[k].slice(-30); save(); buzz('done'); HR.result = { type: K, ok: true, k, i: S.lab[k].length - 1 }; }
-    else { HR.result = { type: K, ok: false, why: 'The session could not be saved.' }; buzz('warn'); }
-  } else { HR.result = { type: K, ok: false, why: why || 'Not enough data.' }; buzz('warn'); }
+    if (c) {
+      const x = Object.assign({}, c); delete x.rr; delete x.t;
+      const saved = recFinish({ mode: K, x, ...(me ? { ref: { s: 'lab', k, t: t0 } } : {}) });
+      if (me) { (S.lab[k] ||= []).push(c); S.lab[k] = S.lab[k].slice(-30); save(); }
+      buzz('done');
+      HR.result = { type: K, ok: true, k, i: me ? S.lab[k].length - 1 : null, rid: saved?.id, who: WEAR.who, rec: me ? null : c };
+    }
+    else { recKeepFailed(K); HR.result = { type: K, ok: false, why: 'The session could not be saved.' }; buzz('warn'); }
+  } else { const kept = K === 'breathe' ? (recDrop(), '') : recKeepFailed(K); HR.result = { type: K, ok: false, why: (why || 'Not enough data.') + kept }; buzz('warn'); }
   render();
 }
-function labCancel() { hrEnd(); HR.result = null; buzz('tick'); render(); }
+function labCancel() { recDrop(); hrEnd(); HR.result = null; buzz('tick'); render(); }
 
 // ---------- Live: an open-ended session ----------
 // Every 5 seconds a point for the chart (heart rate over those seconds, RMSSD of the last minute); every 10 seconds,
@@ -299,7 +306,8 @@ function labSummary(x) {
 }
 function labResult(K, rec) {
   const stampSvg = '<svg viewBox="0 0 48 48" class="stamp" aria-hidden="true"><circle cx="24" cy="24" r="21"/><path d="M14 25l7 7 13-15"/></svg>';
-  const prev = labHist(K, rec.t), done = '<button class="solid wide" data-act="hrresdone">Done</button>';
+  const prev = labHist(K, rec.t), rid = HR.result?.type === K && HR.result.rid && recGet(HR.result.rid) ? HR.result.rid : null;
+  const done = `<div class="rowb">${rid ? `<a class="ghost link" href="#rec-${rid}">Full analysis ›</a>` : ''}<span class="grow"></span><button class="solid" data-act="hrresdone">Done</button></div>`;
   if (K === 'breathe') {
     const V = rec.rsa != null ? versus(rec.rsa, prev.filter(x => x.rsa != null && x.pat === rec.pat).map(x => x.rsa)) : null;
     return `<div class="result ok">${stampSvg}<b>${dur(rec.dur / 60)} of ${BREATHS[rec.pat]?.n.toLowerCase() || 'breathing'} saved</b>
@@ -321,7 +329,7 @@ function labResult(K, rec) {
       ${para(`Heart rate rose ${Math.round(d)} bpm on standing${V.word ? `, <b>${V.word}</b> for you (usually ${Math.round(V.m)})` : ''}. ${Vs.word ? `Lying RMSSD was <b>${Vs.word}</b> against your previous tests.` : 'From the seventh test on, each one is read against your own.'} A bigger rise than your usual, or lower HRV in both positions, goes with accumulated fatigue; read it with the morning check, not alone. ${why('ortho', 'Evidence')}`)}${done}</div>`;
   }
   if (K === 'live') return `<div class="result ok">${stampSvg}<b>${dur(rec.dur / 60)} live saved</b>${liveBody(rec, prev)}
-    <div class="rowb">${rec.rr?.length >= 20 ? `<a class="ghost link" href="#beats-l${rec.t}">Explore beat by beat</a>` : ''}<button class="ghost" data-act="rrexp" data-k="${dk(new Date(rec.t))}" data-t="${rec.t}">Save as a file</button><span class="grow"></span><button class="solid" data-act="hrresdone">Done</button></div></div>`;
+    <div class="rowb">${HR.result?.rid ? `<a class="ghost link" href="#rec-${HR.result.rid}">Full analysis ›</a>` : rec.rr?.length >= 20 ? `<a class="ghost link" href="#beats-l${rec.t}">Explore beat by beat</a>` : ''}<button class="ghost" data-act="rrexp" data-k="${dk(new Date(rec.t))}" data-t="${rec.t}">Save as a file</button><span class="grow"></span><button class="solid" data-act="hrresdone">Done</button></div></div>`;
   const V = versus(Math.log(rec.rmssd), prev.filter(x => x.pos === rec.pos).map(x => Math.log(x.rmssd)));
   return `<div class="result ok">${stampSvg}<b>Spot check saved</b>
     ${stats([[r1(rec.rmssd), 'RMSSD, ms'], [Math.round(rec.hr), 'bpm'], [`${rec.q}%`, 'clean beats']])}
@@ -336,7 +344,7 @@ function vLab(kind) {
   const res = HR.result && HR.result.type === kind ? HR.result : null, running = HR.mode === kind, s = S.settings;
   const strapLine = HR.conn === 'on' && HR.bpm != null ? '' : L.strap ? strapIdle('lab') || '' : HR.conn === 'on' ? '' : `<div class="callout lite2"><span class="sub">The pacer works on its own. With the strap on, you also see your heart rate follow each breath.</span>${strapSupported() ? `<button class="ghost" data-act="hrconnect">${HR.conn === 'connecting' ? 'Connecting…' : 'Connect the strap'}</button>` : ''}</div>`;
   let body = '';
-  if (res) body = `<div data-swipe="hrresdone">${res.ok ? labResult(kind, S.lab[res.k][res.i]) : `<div class="result bad"><b>Not saved</b><p class="sub">${esc(res.why)}</p><button class="solid wide" data-act="hrresdone">Done</button></div>`}</div>`;
+  if (res) body = `<div data-swipe="hrresdone">${res.ok ? (res.who && res.who !== 'me' ? recResultCard(res) : labResult(kind, S.lab[res.k][res.i])) : `<div class="result bad"><b>Not saved</b><p class="sub">${esc(res.why)}</p><button class="solid wide" data-act="hrresdone">Done</button></div>`}</div>`;
   else if (kind === 'breathe' || kind === 'rf') {
     const ring = `<svg class="labring" viewBox="0 0 36 36" aria-hidden="true"><circle class="bg" cx="18" cy="18" r="17" pathLength="100"/><circle id="labring" class="fg" cx="18" cy="18" r="17" pathLength="100" stroke-dasharray="0 100"/></svg>`;
     body = `<div class="pacer ${running ? 'run' : ''}">${running ? ring : ''}<div class="orb" id="orb" data-ph="in"><i></i><i></i><i></i></div><p class="cue" id="cue">Follow the circle</p></div>
