@@ -26,11 +26,11 @@ let S = load();
 let tab = 'today', overlay = null, pending = null, day = todayKey(), lastToday = day;
 let cat = 'usual', query = '', installEvt = null, softQueued = false;
 
-// The five tabs, in the order a swipe moves through them. Me is reached from the face at the top of every tab.
-const VIEWS = { today: vToday, food: vFood, recovery: vRecovery, training: vTraining, review: vReview, me: vMe };
-const TABS = ['today', 'food', 'recovery', 'training', 'review'];
-const ALIAS = { heart: 'recovery', trend: 'review', insights: 'review', train: 'training', diary: 'food' };
-const POPS = { fedit: p => vFoodEdit(p.i), portion: p => vPortion(p), cedit: p => vCustomEdit(p), plate: p => vPlateSave(p), exinfo: p => vExInfo(p.id), cardioadd: () => vCardioAdd(), cardioinfo: p => vCardioInfo(p), sess: p => vSession(p),
+// The four tabs, in the order a swipe moves through them. Me is reached from the face at the top of every tab.
+const VIEWS = { today: vToday, food: vFood, recovery: vRecovery, review: vReview, me: vMe };
+const TABS = ['today', 'food', 'recovery', 'review'];
+const ALIAS = { heart: 'recovery', trend: 'review', insights: 'review', train: 'review', training: 'review', diary: 'food' };
+const POPS = { fedit: p => vFoodEdit(p.i), portion: p => vPortion(p), cedit: p => vCustomEdit(p), plate: p => vPlateSave(p), exinfo: p => vExInfo(p.id), cardioadd: () => vCardioAdd(), cardioinfo: p => vCardioInfo(p), sess: p => vSession(p), next: () => vNext(),
   hrvinfo: p => vHrvInfo(p), labinfo: p => vLabInfo(p), recedit: p => vRecEdit(p), dayx: p => vDayDetail(p), log: p => vLog(p), weigh: p => vWeigh(p) };
 const PAGES = ['add', 'why', 'set', 'lab', 'beats', 'scan'];
 const scrollMem = {};
@@ -120,9 +120,9 @@ function render() {
   $$('#tabs a').forEach(a => a.classList.toggle('on', !overlay && a.hash === '#' + tab));
   $('#tabs').style.setProperty('--i', Math.max(0, TABS.indexOf(tab)));
   $('#tabs').style.setProperty('--on', TABS.includes(tab) ? 1 : 0);
-  $('#tabs').style.setProperty('--tc', { today: 'var(--accent)', food: 'var(--fuel)', recovery: 'var(--heart)', training: 'var(--move)', review: 'var(--sleep)' }[tab] || 'var(--accent)');
+  $('#tabs').style.setProperty('--tc', { today: 'var(--accent)', food: 'var(--fuel)', recovery: 'var(--heart)', review: 'var(--sleep)' }[tab] || 'var(--accent)');
   document.documentElement.classList.toggle('still', !motionOK());
-  jumpbar(); sheetEntered(); sheetLift(); settle(); liveKick(); labKick(); bxKick(); scanKick();
+  jumpbar(); sheetEntered(); sheetLift(); settle(); liveKick(); labKick(); bxKick();
 }
 // Renders caused by the watch or the strap wait until you have finished typing in a field.
 function renderSoft() {
@@ -308,6 +308,7 @@ function customCheck() {
 document.addEventListener('input', e => {
   if (e.target.id === 'fg') { foodAct('fg', e.target); return; }
   if (['fqin', 'pqin', 'pg'].includes(e.target.id)) { foodAct(e.target.id, e.target); return; }
+  if (e.target.id === 'scancode') { scanTyped(e.target); return; }
   if (e.target.id === 'wgin') { todayAct('wgin', e.target); return; }
   if (/^c_/.test(e.target.id)) { customCheck(); return; }
   if (e.target.id !== 'q') return;

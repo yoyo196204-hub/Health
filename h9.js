@@ -408,7 +408,7 @@ function strapBlock(purpose) {
       <div class="eyebrow center" id="clock">${el < SETTLE ? `Settling · ${clock(SETTLE - el)}` : `Recording · ${clock(SETTLE + rec - el)}`}</div>
       <p class="sub center">Stay still, breathe normally, don't talk. The first minute settles, then ${dur(rec / 60)} is recorded: <b id="beats">0</b> beats so far.</p><button class="ghost wide" data-act="hrcancel">Cancel</button></div>`;
   }
-  if (HR.mode && HR.mode !== 'workout' && HR.mode !== 'morning') return `<div class="strap st-live">${liveHead()}<p class="sub center">${HR.mode === 'hrr' ? 'Measuring heart-rate recovery on Training.' : 'A Lab session is running.'} <a href="#${HR.mode === 'hrr' ? 'training' : 'lab-' + HR.mode}">Go to it</a></p></div>`;
+  if (HR.mode && HR.mode !== 'workout' && HR.mode !== 'morning') return `<div class="strap st-live">${liveHead()}<p class="sub center">${HR.mode === 'hrr' ? 'Measuring heart-rate recovery on Heart.' : 'A Lab session is running.'} <a href="#${HR.mode === 'hrr' ? 'recovery' : 'lab-' + HR.mode}">Go to it</a></p></div>`;
   if (purpose === 'morning') {
     const s = S.settings;
     return `<div class="strap st-live">${liveHead()}

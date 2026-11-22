@@ -114,7 +114,7 @@ function vRecovery() {
   return `${appbar('Heart', `Recovery · resting ${H.rest} · max ${H.max} bpm`, NATIVE ? syncPill() : '')}
     ${part(recoveryHero)}
     ${sec('Morning check', strapBlock('morning') + strapMsg(), { why: ['hrv', 'Why mornings'] })}
-    ${part(hrvSection)}${part(rhrSection)}${part(sleepSection)}${part(nightSection)}
+    ${part(hrvSection)}${part(cardioHeart)}${part(rhrSection)}${part(sleepSection)}${part(nightSection)}
     ${sec('Strap lab', `<p class="sub">More from the strap: breathing that trains the heart-rate reflex, your own resonance rate, how you handle standing up, and a full reading any time.</p>${labTiles()}`, { why: ['breathe', 'The evidence'] })}
     ${part(devicesSection)}`;
 }

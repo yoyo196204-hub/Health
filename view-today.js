@@ -47,9 +47,7 @@ function dueList() {
   if (S.weights[k] == null && h >= 5) out.push({ id: 'weight', t: 'Weigh in', s: 'After the toilet, before food or water: the same conditions each day are what make the trend honest.', field: 'weights' });
   const lastWaist = Object.keys(S.waist).sort().pop();
   if (!lastWaist || gapDays(lastWaist, k) >= 7) out.push({ id: 'waist', t: 'Waist, once a week', s: 'Tape level, midway between the lowest rib and the top of the hip bone, after breathing out. Same spot every time.', field: 'waist' });
-  const D = shoulderDue();
-  if (D) out.push({ id: 'sx', t: 'Shoulder check', s: `How did ${D.ids.length > 1 ? `${D.ids.length} exercises` : esc(exName(D.ids[0]))} feel on ${dateLabel(D.k, { weekday: 'long' })}? It decides the next loads.`, href: '#training' });
-  if (ogPlanStale()) out.push({ id: 'plan', t: 'Send your plan to openGym', s: 'It changed since the last file: a swap, an exercise out after pain, or a new programme.', href: '#set-train' });
+  // The shoulder check and a stale openGym plan are cards of their own on Today, not items here.
   if (NATIVE && BACKUP.folder && S.meta.backup && gapDays(S.meta.backup, k) >= 3) out.push({ id: 'bk', t: 'Backup has stopped', s: `Last written ${dateLabel(S.meta.backup)}. Choose the folder again.`, href: '#set-data' });
   return out;
 }
@@ -93,7 +91,7 @@ function todoStrip() {
     if (x.id === 'weight') items.push(['body', 'var(--body)', 'Weigh in', 'Before food or water', 'data-act="weigh" data-s="weights"']);
     else if (x.id === 'waist') items.push(['tape', 'var(--body)', 'Waist', 'Once a week', 'data-act="weigh" data-s="waist"']);
     else if (x.id === 'hrv') items.push(['heart', 'var(--heart)', 'Morning check', '1–5 min with the strap', `href="${x.href}"`]);
-    else items.push([x.id === 'sx' ? 'train' : x.id === 'plan' ? 'train' : 'check', x.id === 'bk' ? 'var(--bad)' : 'var(--move)', x.t, x.s.replace(/<[^>]+>/g, '').slice(0, 40), `href="${x.href}"`]);
+    else items.push(['check', x.id === 'bk' ? 'var(--bad)' : 'var(--move)', x.t, x.s.replace(/<[^>]+>/g, '').slice(0, 40), `href="${x.href}"`]);
   }
   if (!mt.n) items.splice(D[0]?.id === 'hrv' ? 1 : 0, 0, [MEAL_IC[m], 'var(--fuel)', `Log ${mealName(m).toLowerCase()}`, `${Math.max(0, Math.round(T.protein - totals(k).p))} g protein to go`, `data-act="addto" data-m="${m}"`]);
   if (!items.length) return '';
@@ -143,7 +141,7 @@ function bodyMove() {
       <span class="eyebrow">Weight ${w != null ? '· today' : '· trend'}</span>
       <span class="kpi"><b class="num">${r1(w ?? M.W ?? T.wt)}<i>kg</i></b><span class="sub">${rate != null ? `${sign(rate, 2)} kg a week` : 'trend after a week'}</span></span>${spark}
       <span class="sub">${w == null ? 'Tap to weigh in' : `Trend ${r1(M.W ?? T.wt)} kg`}</span></button>
-    <a class="card tap" href="#training">
+    <a class="card tap" href="#review">
       <span class="eyebrow">Move</span>
       <div class="dualrow">${ring('t-steps', st / T.stepGoal, { c: 'var(--move)', size: 58, stroke: 10, inner: `<b class="num">${Math.round(Math.min(999, st / T.stepGoal * 100))}</b>` })}<span class="kpi"><b class="num" style="font-size:22px">${fmt(st)}</b><span class="sub">of ${fmt(T.stepGoal)}</span></span></div>
       <span class="sub">${Math.round(A.who)} of 150 active min this week</span></a></div>`;
@@ -160,15 +158,15 @@ function nightCard() {
 function trainCard() {
   const k = todayKey(), did = nextDay(shift(k, 1)), plan = sessionPlan(shift(k, 1), did), R = readiness();
   if (!plan.lifts.length) return '';
-  return `<a class="card tap" href="#training">${cardHead(S.lifts[k] ? 'Done today · next' : 'Next in openGym', 'train', 'var(--move)', '<span class="chev">›</span>')}
+  return `<button class="card tap" data-act="nextgo" style="display:block;width:100%;text-align:left;font:inherit;color:inherit;border:0">${cardHead(S.lifts[k] ? 'Done today · next' : 'Next in openGym', 'train', 'var(--move)', '<span class="chev">›</span>')}
     <b style="display:block;font-size:17px;margin-top:2px">${esc(plan.name)}</b><span class="sub">${esc(plan.focus)}</span>
-    <p class="sub ease lv-${R.level}" style="margin:10px 0 0"><span class="dot"></span>${EASE[R.level][0]}</p></a>`;
+    <p class="sub ease lv-${R.level}" style="margin:10px 0 0"><span class="dot"></span>${EASE[R.level][0]}</p></button>`;
 }
 function vToday() {
   const h = new Date().getHours(), greet = h < 5 ? 'Late night' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   return `${appbar(greet, dateLabel(todayKey(), { weekday: 'long', day: 'numeric', month: 'long' }), syncPill())}
     ${welcome()}${needsSyncLine() ? syncLine() : ''}
-    ${part(trio)}${part(todoStrip)}${part(insightCard)}${part(fuelCard)}${part(bodyMove)}${part(nightCard)}${part(trainCard)}
+    ${part(trio)}${part(todoStrip)}${part(insightCard)}${part(fuelCard)}${part(bodyMove)}${part(nightCard)}${part(staleStrip)}${part(shoulderCard)}${part(trainCard)}
     ${S.profile.shoulder ? `<label class="card check" style="padding:12px 16px"><input type="checkbox" data-act="prehab" ${S.prehab[todayKey()] ? 'checked' : ''}><span>Shoulder routine: stretch and band work</span></label>` : ''}`;
 }
 
@@ -182,7 +180,7 @@ function vLog() {
   const strap = S.meta.h9 || Object.keys(S.hrv).length;
   return `${sheetTop(`Log · ${when}`, 'What happened?', 'log')}
     <div class="eyebrow qlabel">Food</div>
-    <div class="qgrid">${meals}${tile('bolt', 'var(--fuel)', 'Quick kcal', 'a meal out', `data-act="addto" data-m="${m}" data-k="${k}" data-c="quick"`)}${tile('copy', 'var(--fuel)', 'Plates', `${S.plates.length + THALI.length}`, `data-act="addto" data-m="${m}" data-k="${k}" data-c="thali"`)}${tile('search', 'var(--fuel)', 'Search', 'any food', `data-act="addto" data-m="${m}" data-k="${k}" data-c="find"`)}${tile('scan', 'var(--fuel)', 'Scan', 'a pack', `data-act="scango" data-m="${m}" data-k="${k}"`)}</div>
+    <div class="qgrid">${meals}${tile('bolt', 'var(--fuel)', 'Quick kcal', 'a meal out', `data-act="addto" data-m="${m}" data-k="${k}" data-c="quick"`)}${tile('copy', 'var(--fuel)', 'Plates', `${S.plates.length + THALI.length}`, `data-act="addto" data-m="${m}" data-k="${k}" data-c="thali"`)}${tile('search', 'var(--fuel)', 'Search', 'any food', `data-act="addto" data-m="${m}" data-k="${k}" data-c="find"`)}${tile('scan', 'var(--fuel)', 'Barcode', 'a pack', `data-act="scango" data-m="${m}" data-k="${k}"`)}</div>
     <div class="eyebrow qlabel">Body and heart</div>
     <div class="qgrid">${tile('body', 'var(--body)', 'Weight', S.weights[todayKey()] != null ? `${kg(S.weights[todayKey()])} kg` : '', 'data-act="weigh" data-s="weights"')}${tile('tape', 'var(--body)', 'Waist', '', 'data-act="weigh" data-s="waist"')}${tile('heart', 'var(--heart)', strap ? 'Morning check' : 'Strap', S.hrv[todayKey()] ? 'done' : '', 'href="#recovery" data-act="popnav"')}${tile('breathe', 'var(--pro)', 'Breathe', '', 'href="#lab-breathe" data-act="popnav"')}${tile('pulse', 'var(--heart)', 'Spot check', '', 'href="#lab-spot" data-act="popnav"')}${tile('move', 'var(--move)', 'Cardio', '', 'data-act="cardioadd"')}${tile('insight', 'var(--heart)', 'Live', '', 'href="#lab-live" data-act="popnav"')}${tile('sleep', 'var(--sleep)', 'Your day', '', `data-act="dayx" data-k="${todayKey()}"`)}</div></aside>`;
 }
