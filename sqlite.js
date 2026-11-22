@@ -2,7 +2,9 @@
 // Reading an SQLite database on the phone, read-only, with nothing installed: enough to scan whole tables, which is
 // what a Health Connect backup needs. The file format is SQLite's own documented one (sqlite.org/fileformat2.html):
 // a header, fixed-size pages, each table a B-tree of pages, each row a record of typed values, long rows continued on
-// overflow pages. Indexes are never needed: every table is read start to end, in rowid order.
+// overflow pages. Indexes are never needed: every table is read start to end, in key order. A table made WITHOUT
+// ROWID (Gadgetbridge makes every sample table so) is stored as an index B-tree keyed by its primary key: its rows are
+// read the same way, from the cells of every page.
 
 function sqliteErr(msg) { const e = new Error(msg); e.code = 'sqlite'; return e; }
 // A variable-length integer: up to 9 bytes, 7 bits each, the 9th byte whole. Returns [value, bytes used].
@@ -18,9 +20,10 @@ function sqliteOpen(u8) {
   const ps = dv.getUint16(16) === 1 ? 65536 : dv.getUint16(16), usable = ps - u8[20];
   if (dv.getUint32(56) !== 1) throw sqliteErr('This database is not stored as UTF-8 text.');
   const dec = new TextDecoder();
-  // A row's payload: what fits on its page, then the overflow pages in a chain.
-  function payload(at, size) {
-    const X = usable - 35;
+  // A row's payload: what fits on its page, then the overflow pages in a chain. A table page keeps more of a row on
+  // the page than an index page (which is how a WITHOUT ROWID table is stored) keeps of its key.
+  function payload(at, size, index) {
+    const X = index ? Math.floor((usable - 12) * 64 / 255) - 23 : usable - 35;
     if (size <= X) return u8.subarray(at, at + size);
     const M = Math.floor((usable - 12) * 32 / 255) - 23, K = M + (size - M) % (usable - 4), local = K <= X ? K : M;
     const out = new Uint8Array(size);
@@ -31,6 +34,7 @@ function sqliteOpen(u8) {
       out.set(u8.subarray(base + 4, base + 4 + n), got); got += n;
       next = dv.getUint32(base);
     }
+    if (got < size) throw sqliteErr('The database is damaged or cut short.');
     return out;
   }
   // A record: a header of serial types, then the values. Text is decoded; blobs stay bytes.
@@ -58,11 +62,13 @@ function sqliteOpen(u8) {
   function scan(root, fn) {
     try { walk(root, fn); } catch (e) { throw e?.name === 'RangeError' ? sqliteErr('The database is damaged or cut short.') : e; }
   }
-  // Interior pages are walked left to right.
+  // Interior pages are walked left to right. In an index B-tree the interior cells hold rows too, each between the
+  // pages to its left and right.
   function walk(root, fn) {
     const stack = [root], seen = new Set();
     while (stack.length) {
       const pg = stack.pop();
+      if (typeof pg !== 'number') { fn(0, record(pg.rec)); continue; }
       if (seen.has(pg) || pg < 1 || pg * ps > u8.length) throw sqliteErr('The database is damaged or cut short.');
       seen.add(pg);
       const base = (pg - 1) * ps, h = base + (pg === 1 ? 100 : 0), type = u8[h], cells = dv.getUint16(h + 3);
@@ -76,13 +82,27 @@ function sqliteOpen(u8) {
           let at = base + dv.getUint16(h + 8 + 2 * i);
           const [size, a] = sqliteVarint(u8, at); at += a;
           const [rowid, b] = sqliteVarint(u8, at); at += b;
-          fn(rowid, record(payload(at, size)));
+          fn(rowid, record(payload(at, size, false)));
         }
-      } else throw sqliteErr('The database is damaged or cut short.'); // a table's pages are only ever these two kinds
+      } else if (type === 0x02) {
+        stack.push(dv.getUint32(h + 8));
+        for (let i = cells - 1; i >= 0; i--) {
+          let at = base + dv.getUint16(h + 12 + 2 * i);
+          const kid = dv.getUint32(at); at += 4;
+          const [size, a] = sqliteVarint(u8, at);
+          stack.push({ rec: payload(at + a, size, true) }, kid);
+        }
+      } else if (type === 0x0a) {
+        for (let i = 0; i < cells; i++) {
+          const at = base + dv.getUint16(h + 8 + 2 * i), [size, a] = sqliteVarint(u8, at);
+          fn(0, record(payload(at + a, size, true)));
+        }
+      } else throw sqliteErr('The database is damaged or cut short.'); // a table's pages are only ever these four kinds
     }
   }
-  // The schema: each table's root page and its columns, in order; an INTEGER PRIMARY KEY column is the rowid.
-  const tables = {};
+  // The schema: each table's root page and its columns, in order; an INTEGER PRIMARY KEY column is the rowid. A
+  // WITHOUT ROWID table stores its primary key's columns first, then the others in order.
+  const tables = {}, colName = c => c.match(/^["`[]?([^"`\]\s]+)/)[1].toLowerCase();
   scan(1, (rid, r) => {
     if (r[0] !== 'table' || typeof r[4] !== 'string') return;
     const body = r[4].slice(r[4].indexOf('(') + 1, r[4].lastIndexOf(')')), cols = [];
@@ -92,19 +112,26 @@ function sqliteOpen(u8) {
       if (ch === ')') depth--;
       if (ch === ',' && depth === 0) { cols.push(cur.trim()); cur = ''; } else cur += ch;
     }
-    const defs = cols.filter(c => c && !/^(PRIMARY\s+KEY|FOREIGN\s+KEY|UNIQUE|CHECK|CONSTRAINT)\b/i.test(c));
+    const isCons = c => /^(PRIMARY\s+KEY|FOREIGN\s+KEY|UNIQUE|CHECK|CONSTRAINT)\b/i.test(c);
+    const defs = cols.filter(c => c && !isCons(c)), names = defs.map(colName), noRowid = /\)\s*WITHOUT\s+ROWID\s*;?\s*$/i.test(r[4]);
     // A computed column ("x AS (expr)", virtual unless STORED) is not in the record, so the ones after it move up.
-    let at = 0;
-    const slot = defs.map(c => /\bAS\s*\(/i.test(c) && !/\bSTORED\b/i.test(c) ? -1 : at++);
-    tables[r[1]] = { root: r[3], cols: defs.map(c => c.match(/^["`[]?([^"`\]\s]+)/)[1].toLowerCase()), slot, rowidCol: defs.findIndex(c => /^\S+\s+INTEGER\s+PRIMARY\s+KEY/i.test(c)), noRowid: /WITHOUT\s+ROWID/i.test(r[4]) };
+    const virt = defs.map(c => /\bAS\s*\(/i.test(c) && !/\bSTORED\b/i.test(c));
+    let slot;
+    if (noRowid) {
+      const pc = cols.find(c => /^(CONSTRAINT\s+\S+\s+)?PRIMARY\s+KEY\s*\(/i.test(c));
+      const pk = pc ? pc.slice(pc.indexOf('(') + 1, pc.lastIndexOf(')')).split(',').map(x => colName(x.trim())) : names.filter((n, i) => /\bPRIMARY\s+KEY\b/i.test(defs[i]));
+      const order = [...new Set(pk), ...names.filter((n, i) => !pk.includes(n) && !virt[i])];
+      slot = names.map((n, i) => virt[i] ? -1 : order.indexOf(n));
+    } else { let at = 0; slot = virt.map(v => v ? -1 : at++); }
+    tables[r[1]] = { root: r[3], cols: names, slot, rowidCol: noRowid ? -1 : defs.findIndex(c => /^\S+\s+INTEGER\s+PRIMARY\s+KEY/i.test(c)), noRowid };
   });
   return {
     tables,
-    has: name => !!tables[name] && !tables[name].noRowid,
+    has: name => !!tables[name],
     // Rows as objects keyed by column name. A missing table gives no rows rather than an error.
     each(name, fn) {
       const t = tables[name];
-      if (!t || t.noRowid) return 0;
+      if (!t) return 0;
       let n = 0;
       scan(t.root, (rid, vals) => {
         const o = {};

@@ -413,7 +413,7 @@ function ogSourcesBlock() {
       <ol class="sub steps"><li>In openGym: Settings › Data &amp; backup › turn on <b>Auto-backup on changes</b>.</li><li>Here: tap <b>Link openGym’s folder</b> and choose <b>Documents › openGym</b>, or the backup folder you picked in openGym.</li></ol>
       <div class="rowb"><button class="solid" data-act="oglink">Link openGym’s folder</button></div>`;
   const hc = `<h3>Through Health Connect</h3>${para('openGym writes each finished workout to Health Connect, where Health reads it with the heart rate your watch saved during it. The session shows in Today › History straight away; its sets arrive with openGym’s next backup.')}
-    <ol class="sub steps"><li>In openGym: Settings › Integrations › <b>Health Connect</b> › turn on <b>Workouts</b>, <b>Heart rate from your watch</b> and <b>Weigh-ins from other apps</b>.</li><li>In Zepp: Profile › Health Connect › allow heart rate, so openGym and Health both get it.</li></ol>`;
+    <ol class="sub steps"><li>In openGym: Settings › Integrations › <b>Health Connect</b> › turn on <b>Workouts</b>, <b>Heart rate from your watch</b> and <b>Weigh-ins from other apps</b>.</li><li>${watchApp() === 'Gadgetbridge' ? 'In Gadgetbridge: Settings › External integrations › Health Connect › allow heart rate' : 'In Zepp: Profile › Health Connect › allow heart rate'}, so openGym and Health both get it.</li></ol>`;
   return `${link}${hc}<details class="inner"><summary>Or bring in a file by hand</summary>${byHand}</details>`;
 }
 // You › Training: Health's plan going out, in three steps. What the file holds is behind the evidence link.

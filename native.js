@@ -42,14 +42,21 @@ function syncNow(days) {
   paintSync();
 }
 // Reading the last few days costs well under a second, so the app reads again whenever it comes back to the front
-// after two minutes, and every five minutes while it stays open on screen. Zepp itself only passes data to Health
-// Connect when its own app syncs with the watch, so after "Open Zepp" the next return reads at once, and again a
-// little later, because Zepp writes to Health Connect a few seconds after its own sync finishes.
+// after two minutes, and every five minutes while it stays open on screen. The watch's app (Zepp or Gadgetbridge)
+// only passes data to Health Connect when it syncs with the watch, so after "Open Zepp" the next return reads at once,
+// and again a little later, because the watch app writes to Health Connect a few seconds after its own sync.
 function autoSync(force) {
   if (!NATIVE || !SYNC.status?.granted?.length) return;
   if (force || !S.meta.sync || Date.now() - S.meta.sync > 2 * 6e4) syncNow();
 }
-function openZepp() { SYNC.zepp = Date.now(); nat('openZepp'); }
+// The watch's own app: the one that last passed data to Health Connect, else whichever is on this phone.
+function watchApp() {
+  const w = S.meta.fresh?.watch;
+  if (w === 'Gadgetbridge' || w === 'Zepp') return w;
+  return APP?.gb && !APP?.zepp ? 'Gadgetbridge' : 'Zepp';
+}
+const watchAppHere = () => !!(watchApp() === 'Gadgetbridge' ? APP?.gb : APP?.zepp);
+function openZepp() { SYNC.zepp = Date.now(); nat(watchApp() === 'Gadgetbridge' ? 'openGadgetbridge' : 'openZepp'); }
 function zeppBack() {
   if (!SYNC.zepp || Date.now() - SYNC.zepp > 30 * 6e4) return false;
   SYNC.zepp = 0;

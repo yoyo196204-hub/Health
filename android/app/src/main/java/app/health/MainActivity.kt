@@ -212,9 +212,13 @@ class MainActivity : ComponentActivity() {
     }
 
     fun zeppIntent(): Intent? = packageManager.getLaunchIntentForPackage(ZEPP)
+    fun gadgetbridgeIntent(): Intent? = packageManager.getLaunchIntentForPackage(GADGETBRIDGE) ?: packageManager.getLaunchIntentForPackage(GADGETBRIDGE_NIGHTLY)
 
     companion object {
         const val HOST = "appassets.androidplatform.net"
         const val ZEPP = "com.huami.watch.hmwatchmanager"
+        // Gadgetbridge, the open-source app that runs an Amazfit watch without Zepp, and its nightly build.
+        const val GADGETBRIDGE = "nodomain.freeyourgadget.gadgetbridge"
+        const val GADGETBRIDGE_NIGHTLY = "nodomain.freeyourgadget.gadgetbridge.nightly"
     }
 }

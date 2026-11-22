@@ -22,7 +22,7 @@ Amazfit and Polar H9 data that decides how hard each day should be.
   arrive as notifications, only when the thing is still undone. A daily backup can go to a folder you choose. The app has
   **no internet permission**, so nothing in it can leave the phone.
 - **In Chrome** (`index.html`, served by GitHub Pages): the same screens, with the H9 over Web Bluetooth and
-  Amazfit data from the Zepp export. "Move my data to the app" in You hands everything to the Android app
+  Amazfit data from a Gadgetbridge or Zepp export. "Move my data to the app" in You hands everything to the Android app
   in one step.
 
 ## Installing and updating, from the phone
@@ -120,12 +120,17 @@ between tabs reuses what was already worked out from the data; anything that cha
 
 ## How the numbers are made
 
-- **Watch data, and how fresh it is**: Zepp passes the watch's data to Health Connect only when the Zepp app syncs with the
-  watch, so Today shows two times: when Zepp last wrote to Health Connect, and when Health last read it. Health reads
-  Health Connect on opening (after two minutes away), every five minutes while open, on pull-down, and twice on coming
-  back from "Open Zepp". Steps, distance, sleep, resting heart rate, HRV and heart samples come from the watch app's own
-  records on any day it wrote them, so they match Zepp rather than Health Connect's merge of every app (on Android 14+
-  the phone counts steps too); the merged step count is kept beside it and Data checks lists days where they differ.
+- **Watch data, and how fresh it is**: the watch's app (Zepp, or Gadgetbridge, the open-source app that runs an
+  Amazfit watch without Zepp) passes the watch's data to Health Connect only when it syncs with the watch, so Today shows
+  two times: when the watch app last wrote to Health Connect, and when Health last read it. Health reads Health Connect
+  on opening (after two minutes away), every five minutes while open, on pull-down, and twice on coming back from
+  "Open Zepp" or "Open Gadgetbridge". Steps, distance, sleep, resting heart rate, HRV and heart samples come from the
+  watch app's own records on any day it wrote them, so they match the watch rather than Health Connect's merge of every
+  app (on Android 14+ the phone counts steps too); the merged step count is kept beside it and Data checks lists days
+  where they differ. On a day two watch apps wrote (the day you move from Zepp to Gadgetbridge), the one with more of
+  that day counts; the one named on screen is the one still writing.
+  In Gadgetbridge: Settings › External integrations › Health Connect, turn it on, allow every type, and turn on Sync
+  after device sync.
 - **Food**: every food carries protein, available carbohydrate, fat and fibre, and the grams in its household unit, so a
   portion can be weighed. Home dishes are recipe estimates; packaged foods come from their label panels (Open Food Facts,
   barcode given), or only what the maker states when that is all there is (carbs and fat then stay unknown, never
@@ -195,15 +200,42 @@ between tabs reuses what was already worked out from the data; anything that cha
   swaps the exercise next time, pain twice takes it out of the plan until you bring it back.
 - **Volume**: one set counts 1 for the muscle an exercise is for and 0.5 for one it trains on the way.
 
-## Your older history (Zepp export or Health Connect backup)
+## Your older history (Gadgetbridge, Zepp export or Health Connect backup)
 
-Health Connect brings the recent weeks from Zepp by itself, but only as far back as Zepp has been writing to it, and
-the app reads at most 120 days of it. Zepp's own export fills in everything before that: steps, every night with its
-stages and times, heart rate through the day (a resting estimate for each day), and a Zepp scale's weight and body fat.
+Health Connect brings the recent weeks from the watch app by itself, but only as far back as it has been writing to it,
+and the app reads at most 120 days of it. A file fills in everything before that. In Health: You (the face at the top)
+› Data sources › History files › **Choose a file**. The file is recognised by what is in it, not by its name.
+
+### Gadgetbridge
+
+Gadgetbridge keeps every minute the watch sends in one SQLite database. Data management › **Export zip** (the database
+is inside as `database/Gadgetbridge`), or **Export Data** for the database alone (a file called just `Gadgetbridge`);
+Auto export writes one every day. Pick either. Read on the phone by `gadgetbridge.js`:
+
+- Each minute's steps and heart rate (`HUAMI_EXTENDED_ACTIVITY_SAMPLE` for Zepp OS watches such as the Bip 5 and Bip 6;
+  `MI_BAND_ACTIVITY_SAMPLE` for older Amazfit and Mi Band watches). When two watches cover one day, the one worn more of
+  it (minutes with a step or a heart rate) is that day's, so steps are never counted twice and two sensors never mixed.
+- Each night from the watch's own sleep report, decoded as Gadgetbridge decodes it: the stages (light, deep, REM, awake)
+  minute by minute, filed under the morning; a later report of the same night replaces the earlier one, and a second
+  sleep that day is a nap.
+- The day's resting heart rate (stamped with the watch's zone), overnight HRV (only the readings inside the night's
+  sleep), blood oxygen, breathing rate in sleep, a paired scale's weight, and each workout's summary with its own
+  watch's heart rate.
+- Sleep, heart rate and workouts then go through the same code as a Health Connect backup (`hcbNight`, `hcbSleep`,
+  `hcbHeart`), so an imported day and a synced day agree.
+
+Gadgetbridge's sample tables are `WITHOUT ROWID` tables, which SQLite stores as index B-trees; `sqlite.js` reads those
+too (interior cells hold rows, index pages keep less of a row before its overflow pages).
+Tests: `python3 test/make-gb-fixture.py` writes `test/fixtures/gadgetbridge.zip`, 40 made-up days of a Bip 6 and an
+older Bip in Gadgetbridge's exact table layout; the engine tests check the reader against Python's sqlite3.
+
+### Zepp export
+
+Zepp's own export brings steps, every night with its stages and times, heart rate through the day (a resting estimate
+for each day), and a Zepp scale's weight and body fat.
 
 1. Zepp › Profile › Settings › Account › Export data. Zepp emails a zip and shows its password.
-2. In Health: You (the face at the top) › Data sources › History files › **Choose a Zepp or Health Connect zip**, and
-   pick the zip itself; there is no need to unzip it. The password is asked for in the app.
+2. Pick the zip itself; there is no need to unzip it. The password is asked for in the app.
 3. Everything is read on the phone, file by file and line by line, so a large export does not run out of memory. Files
    are recognised by their columns, so a renamed folder or a newer layout still works; workouts, minute-by-minute steps
    and the profile are left aside.
@@ -278,7 +310,8 @@ Plain JavaScript, no build step. Scripts load in this order:
 | `beats.js` | The beat explorer |
 | `lab.js` | The Lab: breathing pacer, resonance finder, orthostatic test, spot check, Live sessions and the beat export |
 | `zip.js` | Reading a zip on the phone: its table of contents, the PKWARE and WinZip AES locks, inflating with the browser's own DecompressionStream, line by line |
-| `watch.js` | The Zepp export (the zip as emailed, or its CSV files): each file recognised by its columns, reduced to days, previewed, merged |
+| `watch.js` | History files: the Zepp export (the zip as emailed, or its CSV files, each recognised by its columns), and databases in or out of a zip, each reduced to days, previewed, merged |
+| `sqlite.js`, `hcbackup.js`, `gadgetbridge.js` | Reading an SQLite file on the phone (rowid and WITHOUT ROWID tables); a Health Connect backup and a Gadgetbridge database made into days by the sync's rules |
 | `opengym.js` | openGym: its backup and CSV coming in, the folder link, Health's plan as an openGym plan file with backups and the block |
 | `view-*.js` | One file per screen; `view-food.js` is the diary and everything about adding and changing food, `view-review.js` is Insights, `view-recovery.js` is Heart, `view-records.js` is all your data and a day in detail, `view-checks.js` the data checks |
 | `scan.js` | Packs by barcode: the offline lookup, and what a pack says per 100 kcal |

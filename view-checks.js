@@ -159,7 +159,7 @@ function runChecks() {
       const W = watchWrote(), F = S.meta.fresh;
       out.push(chk('sync', 'Sources', 'Watch data is current', !F ? 'na' : watchLagging() ? 'look' : F.err?.length ? 'look' : 'ok',
         !F ? 'Not read from Health Connect yet.' : `${W ? `${esc(W.src)} last passed data to Health Connect ${ago(W.w)}` : 'Nothing from a watch app yet'}; Health read it ${ago(F.read)}.${F.apps?.length ? ` Apps writing: ${F.apps.map(esc).join(', ')}.` : ''}`,
-        (F?.err || []).map(e => ({ t: esc(e) })), 'Zepp passes the watch’s data to Health Connect only when its own app syncs with the watch. Health reads Health Connect when it opens, every five minutes while open, and when you pull down.'));
+        (F?.err || []).map(e => ({ t: esc(e) })), `${watchApp()} passes the watch’s data to Health Connect only when it syncs with the watch. Health reads Health Connect when it opens, every five minutes while open, and when you pull down.`));
     }
     return out;
   });

@@ -31,7 +31,7 @@ function vMe() {
       ${navrow('#set-goal', 'Goal and targets', `${PACE[S.settings.pace][0]}${PACE[S.settings.pace][1] ? ` · ${PACE[S.settings.pace][1]}% a week` : ''} · protein ${S.settings.protein === 'high' ? 'higher' : 'standard'}`, ICON.goal)}
       ${navrow('#set-train', 'Training', `${esc(P.short)} · ${p.equip === 'home' ? 'home' : 'gym'}${p.shoulder ? ' · shoulder care' : ''}${ogPlanStale() ? ' · plan changed: send it to openGym' : ''}`, ICON.lift)}
       ${navrow('#set-profile', 'Profile', `${p.sex === 'm' ? 'Male' : 'Female'} · ${p.h} cm · started at ${p.w0} kg`, ICON.person)}
-      ${navrow('#set-sources', 'Data sources', (NATIVE ? (SYNC.status?.granted?.length ? `Health Connect · synced ${S.meta.sync ? ago(S.meta.sync) : 'not yet'}` : 'Health Connect not connected') : 'Zepp files, H9') + (OGF.folder || S.meta.og ? ' · openGym' : ''), ICON.link)}
+      ${navrow('#set-sources', 'Data sources', (NATIVE ? (SYNC.status?.granted?.length ? `Health Connect · synced ${S.meta.sync ? ago(S.meta.sync) : 'not yet'}` : 'Health Connect not connected') : 'Watch files, H9') + (OGF.folder || S.meta.og ? ' · openGym' : ''), ICON.link)}
       ${navrow('#set-records', 'All your data', 'See, change or delete any record', ICON.list)}
       ${navrow('#set-checks', 'Data checks', checkLine(), ICON.check)}
       ${navrow('#set-data', 'Backup and data', bk, ICON.box)}
@@ -114,6 +114,12 @@ function vSetFeel() {
 }
 
 // ---------- data sources ----------
+// Where each watch app turns on its Health Connect link: the apps on this phone, or both when neither is.
+function watchSetup() {
+  const gb = para('In Gadgetbridge: Settings › External integrations › Health Connect. Turn it on, allow every type, and turn on Sync after device sync.');
+  const zepp = para('In Zepp: Profile › Health Connect (under third-party access). Turn on every type, so steps, sleep, heart rate, workouts and weight all flow through.');
+  return APP?.gb && !APP?.zepp ? gb : APP?.zepp && !APP?.gb ? zepp : watchApp() === 'Gadgetbridge' ? gb + zepp : zepp + gb;
+}
 function sourcesSection() {
   const n = o => Object.keys(o).filter(k => gapDays(k, todayKey()) < 30).length;
   const got = `Last 30 days in the app: steps ${n(S.steps)} · sleep ${n(S.sleep)} · resting heart rate ${n(S.rhr)} · watch workouts ${n(S.ex)} · weigh-ins ${n(S.weights)}`;
@@ -125,22 +131,29 @@ function sourcesSection() {
       : `${para(granted ? `${granted} of ${st.all} data types allowed${st.history ? ', including history older than 30 days' : ''}. ${S.meta.sync ? `Synced ${ago(S.meta.sync)}.` : 'Not synced yet.'} The app syncs by itself each time you open it.` : 'Not connected yet. Allow access and the app fills itself in each time you open it.')}
         ${para(got)}
         <div class="rowb">${granted ? `<button class="solid" data-act="sync" ${SYNC.busy ? 'disabled' : ''}>${SYNC.busy ? 'Syncing…' : 'Sync now'}</button><button class="ghost" data-act="fullsync">Re-read 90 days</button>` : ''}<button class="${granted ? 'ghost' : 'solid'}" data-act="hcask">${granted ? 'Permissions' : 'Allow access'}</button></div>
-        ${para('In Zepp: Profile › Health Connect (under third-party access). Turn on every type, so steps, sleep, heart rate, workouts and weight all flow through.')}`;
+        ${watchSetup()}`;
   } else {
-    hc = `${para('Inside the Android app, steps, sleep, heart rate, workouts and weight arrive by themselves from Health Connect, and the H9 reconnects on its own. In Chrome, use the Zepp export below.')}
+    hc = `${para('Inside the Android app, steps, sleep, heart rate, workouts and weight arrive by themselves from Health Connect, and the H9 reconnects on its own. In Chrome, import a file below.')}
       <div class="rowb"><a class="solid link" href="${APK}" download>Get the Android app</a><button class="ghost" data-act="move">Move my data to the app</button></div>
       ${para('Install the app first, then tap Move. Everything here is handed over in one step, and nothing is deleted from Chrome.')}`;
   }
   const strap = S.meta.h9 && NATIVE ? `${para(`${esc(S.meta.h9.name)} is remembered and reconnects with one tap${HR.battery != null ? `; battery ${HR.battery}%` : ''}.`)}<button class="ghost" data-act="hrforget">Forget this strap</button>`
-    : para(`Connect from Train or Recovery. ${NATIVE ? 'The app remembers it after the first time.' : ''}`);
-  // Zepp's export: the zip as it arrives (password and all), or the CSV files from inside it. In the app, Health
-  // Connect covers the recent weeks; this is for the history before them.
-  const zepp = watchPreview ? watchPreviewBlock() : WZIP.busy || WZIP.need || WZIP.err ? watchZipBlock() : `<details class="inner" ${NATIVE ? '' : 'open'}><summary>${NATIVE ? 'Bring in your older history' : 'Import a Zepp export or a Health Connect backup'}</summary><ol class="sub steps"><li>Zepp › Profile › Settings › Account › Export data. Choose everything, or at least activity, sleep, heart rate and body.</li><li>Zepp emails a zip and shows its password. Download the zip; there is no need to unzip it.</li><li>Tap below and pick the zip. The password is asked for here, and everything is read on this phone.</li></ol>
-      ${NATIVE ? para('Health Connect only reaches back as far as Zepp has been writing to it, and this app reads at most 120 days of it. The export fills in everything before: longer baselines for resting heart rate and sleep, and more days for the links in your data.') : ''}
-      ${para('A Health Connect backup works too: in Health Connect’s own settings (Settings › Security and privacy › Health Connect › Export), the “Health Connect.zip” it writes holds every app’s data, as far back as Health Connect has it. Pick that zip the same way.')}
-      <button class="ghost" data-act="wpick">Choose a Zepp or Health Connect zip</button></details>`;
-  return `<h3>Health Connect ${NATIVE ? '' : '<span class="src">in the app</span>'}</h3>${hc}<h3>openGym</h3>${part(ogSourcesBlock)}<h3>Polar H9</h3>${strap}<h3>History files</h3>${zepp}
-    <input type="file" id="wfile" accept=".zip,.csv,application/zip,application/x-zip-compressed,text/csv,text/comma-separated-values" multiple hidden>`;
+    : para(`Connect it from any strap tool: the log button’s “Heart, with the strap”, or the morning check.${NATIVE ? ' The app remembers it after the first time.' : ''}`);
+  // History from files, read on this phone: Gadgetbridge's database or its export zip, Zepp's export (the zip as it
+  // arrives, password and all, or the CSV files inside it), or a Health Connect backup. In the app, Health Connect
+  // covers the recent weeks; these bring the history before them.
+  const how = {
+    Gadgetbridge: '<b>Gadgetbridge.</b> Data management › Export zip, or Export Data for the database alone. Every minute it kept comes in: steps, nights in stages, heart rate, HRV, blood oxygen and workouts.',
+    Zepp: '<b>Zepp.</b> Profile › Settings › Account › Export data. Zepp emails a zip and shows its password: pick the zip as it is, and type the password here.',
+  };
+  const order = watchApp() === 'Gadgetbridge' ? ['Gadgetbridge', 'Zepp'] : ['Zepp', 'Gadgetbridge'];
+  const files = watchPreview ? watchPreviewBlock() : WZIP.busy || WZIP.need || WZIP.err ? watchZipBlock() : `<details class="inner" ${NATIVE ? '' : 'open'}><summary>${NATIVE ? 'Bring in your older history' : 'Import from Gadgetbridge, Zepp or a Health Connect backup'}</summary>
+      ${order.map(k => para(how[k])).join('')}
+      ${para('<b>Health Connect backup.</b> Health Connect’s own settings › Export: the “Health Connect.zip” holds every app’s data, as far back as Health Connect has it.')}
+      ${para(`${NATIVE ? 'The daily sync reads at most 120 days; these fill in everything before, for longer baselines and more days for the links in your data. ' : ''}Everything is read on this phone, and days you typed yourself are kept.`)}
+      <button class="ghost" data-act="wpick">Choose a file</button></details>`;
+  return `<h3>Health Connect ${NATIVE ? '' : '<span class="src">in the app</span>'}</h3>${hc}<h3>openGym</h3>${part(ogSourcesBlock)}<h3>Polar H9</h3>${strap}<h3>History files</h3>${files}
+    <input type="file" id="wfile" multiple hidden>`;
 }
 
 // ---------- backup and data ----------

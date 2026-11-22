@@ -120,31 +120,63 @@ async function watchRead(files) {
   if (zip) return zipImport(zip);
   const found = [];
   for (const f of list) {
-    if (f.size > 150e6) { found.push({ name: f.name, kind: null, note: 'too large' }); continue; }
-    // A zip renamed or picked without its extension is still a zip.
-    const sig = new Uint8Array(await f.slice(0, 4).arrayBuffer());
+    // A zip renamed or picked without its extension is still a zip, and a database is known by its first bytes: the
+    // file Gadgetbridge exports is called just "Gadgetbridge".
+    const sig = new Uint8Array(await f.slice(0, 16).arrayBuffer());
     if (sig[0] === 0x50 && sig[1] === 0x4b && sig[2] === 3 && sig[3] === 4) return zipImport(f);
+    if (new TextDecoder().decode(sig) === 'SQLite format 3\0') return dbImport(f);
+    if (f.size > 150e6) { found.push({ name: f.name, kind: null, note: 'too large' }); continue; }
     try { found.push(parseWatch(f.name, await f.text())); } catch (e) { found.push({ name: f.name, kind: null, note: 'could not be read' }); }
   }
   watchPreview = found;
   render();
 }
-// What a Health Connect backup holds, for the preview: one line per kind, with how many days and from when to when.
+// What a database holds, for the preview: one line per kind, with how many days and from when to when.
 const HCB_STEP = { steps_record_table: 'steps', distance_record_table: 'distance', active_calories_burned_record_table: 'active energy', total_calories_burned_record_table: 'total energy',
   sleep_stages_table: 'sleep stages', sleep_session_record_table: 'nights', resting_heart_rate_record_table: 'resting heart rate', heart_rate_variability_rmssd_record_table: 'overnight HRV',
   oxygen_saturation_record_table: 'blood oxygen', respiratory_rate_record_table: 'breathing rate', weight_record_table: 'weight', body_fat_record_table: 'body fat', vo2_max_record_table: 'VO2max',
   exercise_session_record_table: 'workouts', heart_rate_record_table: 'heart rate', heart_rate_record_series_table: 'heart rate' };
-function hcPreview(H) {
-  const ks = Object.keys(H.days).sort(), span = f => { const k = ks.filter(d => f(H.days[d])); return k.length ? `${k.length} days, ${dateLabel(k[0], { day: 'numeric', month: 'short', year: 'numeric' })} to ${dateLabel(k[k.length - 1], { day: 'numeric', month: 'short', year: 'numeric' })}` : null; };
-  const lines = [['Steps', span(d => d.st != null)], ['Sleep', span(d => d.sl)], ['Heart rate', span(d => d.rh != null || d.rp != null)], ['Overnight HRV', span(d => d.hv != null)],
+function dbLines(H) {
+  const D = k => dateLabel(k, { day: 'numeric', month: 'short', year: 'numeric' });
+  const ks = Object.keys(H.days).sort(), span = f => { const k = ks.filter(d => f(H.days[d])); return !k.length ? null : k.length === 1 ? `1 day, ${D(k[0])}` : `${k.length} days, ${D(k[0])} to ${D(k[k.length - 1])}`; };
+  return [['Steps', span(d => d.st != null)], ['Sleep', span(d => d.sl)], ['Heart rate', span(d => d.rh != null || d.rp != null)], ['Overnight HRV', span(d => d.hv != null)],
     ['Breathing in sleep', span(d => d.br != null)], ['Blood oxygen', span(d => d.o2 != null)], ['Weight', span(d => d.wt != null)], ['Body fat', span(d => d.bf != null)],
     ['Workouts', H.ex.length ? `${H.ex.length}` : null]].filter(x => x[1]);
-  return { name: `Health Connect backup${H.watch ? ` · watch: ${H.watch}` : ''}`, kind: 'Health Connect backup', P: { days: H.days }, ex: H.ex, lines, apps: H.apps };
+}
+function hcPreview(H) {
+  return { name: `Health Connect backup${H.watch ? ` · watch: ${H.watch}` : ''}`, kind: 'Health Connect backup', P: { days: H.days }, ex: H.ex, lines: dbLines(H), why: 'a Health Connect backup',
+    intro: `Written by ${H.apps.map(esc).join(', ')}.`, note: 'Where the watch and another app both wrote the same kind of data, the watch’s figures are used, exactly as the daily sync does.' };
+}
+function gbPreview(G) {
+  return { name: 'Gadgetbridge database', kind: 'Gadgetbridge database', P: { days: G.days }, ex: G.ex, lines: dbLines(G), why: 'a Gadgetbridge database',
+    intro: G.apps.length ? `From ${G.apps.map(esc).join(' and ')}.` : 'No watch data in it yet: connect the watch in Gadgetbridge and let it sync first.',
+    note: G.apps.length > 1 ? 'On a day two watches were worn, the one worn longer that day counts, so no steps are counted twice.' : '' };
+}
+// A database: a Gadgetbridge export or a Health Connect backup, known by its tables.
+async function dbPreview(bytes) {
+  const db = sqliteOpen(bytes), step = name => { WZIP.msg = `Reading ${GB_STEP[name] || HCB_STEP[name] || 'the database'}…`; wzipPaint(); };
+  if (gbIs(db)) return gbPreview(await gbRead(db, step));
+  if (db.has('application_info_table')) return hcPreview(await hcBackup(db, step));
+  throw zipErr('db', 'This database is not one the app reads: pick a Gadgetbridge export or a Health Connect backup.');
+}
+async function dbImport(file) {
+  Object.assign(WZIP, { file, busy: true, need: false, err: '', msg: 'Opening the database…' });
+  watchPreview = null; render();
+  try {
+    if (file.size > 600e6) throw zipErr('big', 'That file is over 600 MB.');
+    watchPreview = [await dbPreview(new Uint8Array(await file.arrayBuffer()))];
+    Object.assign(WZIP, { file: null, busy: false, msg: '' }); buzz('ok');
+  } catch (err) {
+    console.error(err);
+    Object.assign(WZIP, { file: null, busy: false, err: err.code === 'sqlite' || err.code === 'db' ? err.message : 'The database could not be read.' });
+    buzz('warn');
+  }
+  render();
 }
 // Every CSV in an export, read and recognised: what it found, and what it left aside.
 async function zipParse(u8, pw, progress = () => {}) {
   const all = zipEntries(u8).filter(e => !e.dir && /\.csv$/i.test(e.name));
-  if (!all.length) throw zipErr('nocsv', 'There are no CSV files in this zip. Is it the Zepp export?');
+  if (!all.length) throw zipErr('nocsv', 'There is nothing the app reads in this zip. Is it a Zepp, Gadgetbridge or Health Connect export?');
   const pwb = pw ? new TextEncoder().encode(pw) : null, total = all.reduce((a, e) => a + e.csize, 0) || 1, found = [], other = [];
   let doneB = 0;
   for (const e of all) {
@@ -163,17 +195,18 @@ async function zipImport(file, pw = null) {
   Object.assign(WZIP, { file, busy: true, need: false, err: '', msg: 'Opening the export…' });
   watchPreview = null; render();
   try {
-    if (file.size > 600e6) throw zipErr('big', 'That file is over 600 MB: export a shorter period from Zepp.');
+    if (file.size > 600e6) throw zipErr('big', 'That file is over 600 MB: export a shorter period, or from Gadgetbridge the database alone (Data management › Export Data).');
     let u8 = new Uint8Array(await file.arrayBuffer());
-    const dbe = zipEntries(u8).find(e => /(^|\/)health_connect_export\.db$/i.test(e.name));
+    // A database inside: Android's Health Connect backup, or Gadgetbridge's "Export zip".
+    const dbe = zipEntries(u8).find(e => /(^|\/)health_connect_export\.db$/i.test(e.name) || /(^|\/)Gadgetbridge$/.test(e.name));
     if (dbe) {
       if (dbe.encrypted && !pw) { Object.assign(WZIP, { busy: false, need: true }); return render(); }
-      WZIP.msg = 'Unpacking the Health Connect backup…'; wzipPaint();
-      let bytes = await zipBytes(u8, dbe, pw ? new TextEncoder().encode(pw) : null, f => { WZIP.msg = `Unpacking the Health Connect backup · ${Math.round(f * 100)}%`; wzipPaint(); });
+      const what = /Gadgetbridge$/.test(dbe.name) ? 'the Gadgetbridge database' : 'the Health Connect backup';
+      WZIP.msg = `Unpacking ${what}…`; wzipPaint();
+      let bytes = await zipBytes(u8, dbe, pw ? new TextEncoder().encode(pw) : null, f => { WZIP.msg = `Unpacking ${what} · ${Math.round(f * 100)}%`; wzipPaint(); });
       u8 = null;
-      const H = await hcBackup(sqliteOpen(bytes), name => { WZIP.msg = `Reading ${HCB_STEP[name] || 'the backup'}…`; wzipPaint(); });
+      watchPreview = [await dbPreview(bytes)];
       bytes = null;
-      watchPreview = [hcPreview(H)];
       Object.assign(WZIP, { file: null, busy: false, msg: '' }); buzz('ok');
       return render();
     }
@@ -205,7 +238,8 @@ function watchAct(a) {
     for (const f of watchPreview) if (f.kind) for (const [k, d] of Object.entries(f.P.days)) Object.assign(days[k] ||= {}, d);
     // One sync takes at most 400 days, so years of history go in as several, oldest first.
     const keys = Object.keys(days).sort(), got = { days: 0 };
-    snapshot(watchPreview.some(f => f.lines) ? 'Before importing a Health Connect backup' : 'Before importing Zepp history');
+    const db = watchPreview.find(f => f.lines);
+    snapshot(db ? `Before importing ${db.why}` : 'Before importing Zepp history');
     for (let i = 0; i < keys.length; i += 400) got.days += mergeSync({ days: Object.fromEntries(keys.slice(i, i + 400).map(k => [k, days[k]])) }).days;
     if (keys.length && (!S.meta.watch || keys[keys.length - 1] > S.meta.watch)) S.meta.watch = keys[keys.length - 1];
     let wk = 0;
@@ -220,11 +254,12 @@ function watchAct(a) {
   }
 }
 function watchPreviewBlock() {
-  const span = d => { const k = Object.keys(d).sort(); return k.length ? `${k.length} days, ${dateLabel(k[0], { day: 'numeric', month: 'short', year: 'numeric' })} to ${dateLabel(k[k.length - 1], { day: 'numeric', month: 'short', year: 'numeric' })}` : 'no usable rows'; };
+  const D = k => dateLabel(k, { day: 'numeric', month: 'short', year: 'numeric' });
+  const span = d => { const k = Object.keys(d).sort(); return !k.length ? 'no usable rows' : k.length === 1 ? `1 day, ${D(k[0])}` : `${k.length} days, ${D(k[0])} to ${D(k[k.length - 1])}`; };
   const hc = watchPreview.find(f => f.lines);
-  if (hc) return `<p class="sub">${esc(hc.name)}. Written by ${hc.apps.map(esc).join(', ')}.</p><ul class="list">${hc.lines.map(([k, v]) => `<li><span class="grow"><span class="nm">${k}</span><span class="sub">${v}</span></span></li>`).join('')}</ul>
-    <p class="sub">Where the watch and another app both wrote the same kind of data, the watch's figures are used, exactly as the daily sync does. Days you typed in yourself are kept as they are, workouts already here are not replaced, and a copy is kept first so the import can be undone.</p>
-    <div class="rowb"><button class="solid" data-act="wsave">Import</button><button class="ghost" data-act="wcancel">Cancel</button></div>`;
+  if (hc) return `<p class="sub">${esc(hc.name)}. ${hc.intro}</p>${hc.lines.length ? `<ul class="list">${hc.lines.map(([k, v]) => `<li><span class="grow"><span class="nm">${k}</span><span class="sub">${v}</span></span></li>`).join('')}</ul>
+    <p class="sub">${hc.note ? hc.note + ' ' : ''}Days you typed in yourself are kept as they are, workouts already here are not replaced, and a copy is kept first so the import can be undone.</p>` : ''}
+    <div class="rowb">${hc.lines.length ? '<button class="solid" data-act="wsave">Import</button>' : ''}<button class="ghost" data-act="wcancel">Cancel</button></div>`;
   return `<ul class="list">${watchPreview.map(f => `<li><span class="grow"><span class="nm">${f.kind ? f.kind.replace(/^./, c => c.toUpperCase()) : esc(f.name)}</span><span class="sub">${f.kind ? `${span(f.P.days)} · ${esc(f.name)}` : `not used${f.note ? ', ' + esc(f.note) : ''}`}</span></span></li>`).join('')}</ul>
     <p class="sub">Days you typed in yourself are kept as they are, and a copy is kept first so the import can be undone.</p>
     <div class="rowb">${watchPreview.some(f => f.kind) ? '<button class="solid" data-act="wsave">Import</button>' : ''}<button class="ghost" data-act="wcancel">Cancel</button></div>`;

@@ -13,7 +13,7 @@ function basis(R, short) {
   if (short) return s.strap && s.night ? 'strap + watch' : s.strap ? 'strap' : s.night ? (s.week ? 'watch + strap week' : 'watch standing in') : s.week ? 'strap week' : '';
   if (!strap && !watch) return '';
   const am = new Date().getHours() < 11;
-  return `Based on ${[strap, watch].filter(Boolean).join(' and ')}.${s.strap ? '' : s.night ? ` No morning check today, so the watch stands in: it can advise care, and a strap reading is what settles it.${am ? ' There is still time for one.' : ''}` : ''}${s.night ? '' : ' No night from the watch yet: open Zepp so it syncs.'}`;
+  return `Based on ${[strap, watch].filter(Boolean).join(' and ')}.${s.strap ? '' : s.night ? ` No morning check today, so the watch stands in: it can advise care, and a strap reading is what settles it.${am ? ' There is still time for one.' : ''}` : ''}${s.night ? '' : ` No night from the watch yet: open ${watchApp()} so it syncs.`}`;
 }
 // Recovery as one number, in its zone, with every part it is made of: each part against your own normal, the dot
 // left of centre when it counts against today. Tap a part for its section.

@@ -337,6 +337,22 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await page.tap('#toast button'); await page.waitForTimeout(400);
     assert.deepStrictEqual(await page.evaluate(() => [Object.keys(S.steps).length, Object.keys(S.ex).length]), before, 'and undo takes them out');
   });
+  await test('a Gadgetbridge export comes in the same way: the Bip 6 named, its minutes made days, imported, and undone', async () => {
+    await go('set-sources');
+    const before = await page.evaluate(() => [Object.keys(S.steps).length, Object.keys(S.sleepx).length]);
+    await page.setInputFiles('#wfile', { name: 'Gadgetbridge_20260701.zip', mimeType: 'application/zip', buffer: fs.readFileSync(path.join(__dirname, 'fixtures', 'gadgetbridge.zip')) });
+    await page.waitForSelector('[data-act="wsave"]', { timeout: 15000 });
+    const text = await page.textContent('#view');
+    assert.match(text, /Gadgetbridge database\. From Amazfit Bip 6 and Amazfit Bip\./);
+    assert.match(text, /Steps40 days, 22 May 2026 to 30 Jun 2026/);
+    assert.match(text, /the one worn longer that day counts/);
+    await shot('gb-preview');
+    await page.tap('[data-act="wsave"]'); await page.waitForTimeout(500);
+    assert.match(await page.textContent('#toast'), /Imported 40 days and 4 workouts/);
+    assert.ok(await page.evaluate(() => S.sleepx['2026-06-21']?.nap === 45 && S.steps['2026-06-03'] === 8400), 'nights and steps are in, the old watch’s steps not added');
+    await page.tap('#toast button'); await page.waitForTimeout(400);
+    assert.deepStrictEqual(await page.evaluate(() => [Object.keys(S.steps).length, Object.keys(S.sleepx).length]), before, 'and undo takes them out');
+  });
   await test('a sheet is dragged down from its middle, the page sinking behind it until it goes', async () => {
     await go('today'); await page.evaluate(() => scrollTo(0, 0));
     await page.tap('#fab'); await page.waitForTimeout(700);

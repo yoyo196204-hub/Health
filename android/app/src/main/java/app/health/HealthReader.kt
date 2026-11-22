@@ -104,6 +104,8 @@ class HealthReader(private val a: MainActivity) {
     // from "this app has not read it yet"; the read time alone says nothing about how fresh the data is.
     private var wrote = HashMap<String, Pair<Long, String>>()
     private var origins = HashSet<String>()
+    // When each app last wrote anything: the watch app named on screen is the one still writing.
+    private var seen = HashMap<String, Long>()
     private val keyOf: Map<KClass<out Record>, String> = types.entries.associate { it.value to it.key }
 
     private suspend fun <T : Record> readAll(c: HealthConnectClient, type: KClass<T>, range: TimeRangeFilter, each: (T) -> Unit) {
@@ -116,10 +118,9 @@ class HealthReader(private val a: MainActivity) {
                 val pkg = r.metadata.dataOrigin.packageName
                 if (pkg != a.packageName) {
                     origins += pkg
-                    if (key != null) {
-                        val w = r.metadata.lastModifiedTime.toEpochMilli()
-                        if (w > (wrote[key]?.first ?: 0L)) wrote[key] = w to pkg
-                    }
+                    val w = r.metadata.lastModifiedTime.toEpochMilli()
+                    if (w > (seen[pkg] ?: 0L)) seen[pkg] = w
+                    if (key != null && w > (wrote[key]?.first ?: 0L)) wrote[key] = w to pkg
                 }
                 each(r)
             }
@@ -151,7 +152,7 @@ class HealthReader(private val a: MainActivity) {
                 g.result[metric]?.let { v -> val x = value(v); if (x > 0) day(g.startTime.toLocalDate())?.put(key, Math.round(x * 10) / 10.0) }
             }
         }
-        wrote = HashMap(); origins = HashSet()
+        wrote = HashMap(); origins = HashSet(); seen = HashMap()
         daily("steps", "st", StepsRecord.COUNT_TOTAL) { it.toDouble() }
         daily("distance", "di", DistanceRecord.DISTANCE_TOTAL) { it.inMeters }
         daily("active", "ak", ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL) { it.inKilocalories }
@@ -231,20 +232,23 @@ class HealthReader(private val a: MainActivity) {
                 if (d + l + r >= 15) nights.getOrPut(s.endTime.atZone(s.endZoneOffset ?: zone).toLocalDate()) { ArrayList() }.add(Night(s.startTime, s.endTime, d, l, r, w, seg, s.metadata.dataOrigin.packageName))
             }
         }
-        // The watch app: the first of the known wearable apps that wrote anything. Its own figures win wherever another
-        // app (the phone's step counter, a phone sleep tracker) wrote the same kind of data for the same day.
-        val watch = WATCH.firstOrNull { it in origins }
+        // The watch apps: the known wearable apps that wrote anything. Their own figures win wherever another app (the
+        // phone's step counter, a phone sleep tracker) wrote the same kind of data for the same day; on a day two of
+        // them wrote (the day you move from Zepp to Gadgetbridge), the one with more of it. The one named on screen is
+        // the one that wrote last.
+        val watches = WATCH.filter { it in origins }.toSet()
+        val watch = watches.maxByOrNull { seen[it] ?: 0L }
         for ((d, by) in stepBy) {
             val o = day(d) ?: continue
-            val w = watch?.let { by[it] } ?: continue
+            val w = by.filterKeys { it in watches }.values.maxOrNull() ?: continue
             if (w < 1) continue
             o.optDouble("st").takeIf { !it.isNaN() && Math.abs(it - w) >= 1 }?.let { o.put("sa", Math.round(it).toDouble()) }
             o.put("st", Math.round(w).toDouble())
         }
-        for ((d, by) in distBy) { val o = day(d) ?: continue; watch?.let { by[it] }?.takeIf { it > 0 }?.let { o.put("di", Math.round(it * 10) / 10.0) } }
+        for ((d, by) in distBy) { val o = day(d) ?: continue; by.filterKeys { it in watches }.values.maxOrNull()?.takeIf { it > 0 }?.let { o.put("di", Math.round(it * 10) / 10.0) } }
         val mainSleep = HashMap<LocalDate, Night>()
         for ((date, all) in nights) {
-            val list = all.filter { it.pkg == watch }.ifEmpty { all }
+            val list = all.filter { it.pkg in watches }.ifEmpty { all }
             val m = list.maxByOrNull { it.d + it.l + it.r } ?: continue
             val o = day(date) ?: continue
             mainSleep[date] = m
@@ -256,10 +260,10 @@ class HealthReader(private val a: MainActivity) {
         }
 
         // Point readings: daily average, or the morning value for weight and body fat.
-        safe("resting") { avg(c, watch, RestingHeartRateRecord::class, instants, { dateOf(it.time) }, { it.beatsPerMinute.toDouble() }) { d, v -> day(d)?.put("rh", v.roundToInt()) } }
-        safe("hrv") { avg(c, watch, HeartRateVariabilityRmssdRecord::class, instants, { dateOf(it.time) }, { it.heartRateVariabilityMillis }) { d, v -> day(d)?.put("hv", Math.round(v * 10) / 10.0) } }
-        safe("spo2") { avg(c, watch, OxygenSaturationRecord::class, instants, { dateOf(it.time) }, { it.percentage.value }) { d, v -> day(d)?.put("o2", Math.round(v * 10) / 10.0) } }
-        safe("breathing") { avg(c, watch, RespiratoryRateRecord::class, instants, { dateOf(it.time) }, { it.rate }) { d, v -> day(d)?.put("br", Math.round(v * 10) / 10.0) } }
+        safe("resting") { avg(c, watches, RestingHeartRateRecord::class, instants, { dateOf(it.time) }, { it.beatsPerMinute.toDouble() }) { d, v -> day(d)?.put("rh", v.roundToInt()) } }
+        safe("hrv") { avg(c, watches, HeartRateVariabilityRmssdRecord::class, instants, { dateOf(it.time) }, { it.heartRateVariabilityMillis }) { d, v -> day(d)?.put("hv", Math.round(v * 10) / 10.0) } }
+        safe("spo2") { avg(c, watches, OxygenSaturationRecord::class, instants, { dateOf(it.time) }, { it.percentage.value }) { d, v -> day(d)?.put("o2", Math.round(v * 10) / 10.0) } }
+        safe("breathing") { avg(c, watches, RespiratoryRateRecord::class, instants, { dateOf(it.time) }, { it.rate }) { d, v -> day(d)?.put("br", Math.round(v * 10) / 10.0) } }
         safe("weight") { first(c, WeightRecord::class, instants, { it.time }) { r -> day(dateOf(r.time))?.put("wt", Math.round(r.weight.inKilograms * 10) / 10.0) } }
         safe("bodyfat") { first(c, BodyFatRecord::class, instants, { it.time }) { r -> day(dateOf(r.time))?.put("bf", Math.round(r.percentage.value * 10) / 10.0) } }
         safe("vo2") { first(c, Vo2MaxRecord::class, instants, { it.time }, latest = true) { r -> day(dateOf(r.time))?.put("vo", Math.round(r.vo2MillilitersPerMinuteKilogram * 10) / 10.0) } }
@@ -286,15 +290,18 @@ class HealthReader(private val a: MainActivity) {
         // Heart-rate samples, sorted by time, used four ways below.
         var hrT = LongArray(0); var hrB = IntArray(0); var hrEnd = 0L
         safe("heart") {
-            val t = ArrayList<Long>(); val b = ArrayList<Int>(); val fromWatch = ArrayList<Boolean>()
+            val t = ArrayList<Long>(); val b = ArrayList<Int>(); val src = ArrayList<String>()
             readAll(c, HeartRateRecord::class, instants) { r ->
-                val w = r.metadata.dataOrigin.packageName == watch
-                if (t.size < 600_000) for (x in r.samples) if (x.beatsPerMinute in 30..230) { t += x.time.toEpochMilli(); b += x.beatsPerMinute.toInt(); fromWatch += w }
+                val p = r.metadata.dataOrigin.packageName
+                if (t.size < 600_000) for (x in r.samples) if (x.beatsPerMinute in 30..230) { t += x.time.toEpochMilli(); b += x.beatsPerMinute.toInt(); src += p }
             }
-            // A second device's samples on a day the watch covered would double-count minutes and mix two sensors.
-            val watchDays = HashSet<LocalDate>()
-            for (i in t.indices) if (fromWatch[i]) watchDays += dateOf(Instant.ofEpochMilli(t[i]))
-            val order = t.indices.filter { fromWatch[it] || dateOf(Instant.ofEpochMilli(t[it])) !in watchDays }.sortedBy { t[it] }
+            // A second device's samples on a day a watch covered would double-count minutes and mix two sensors: on
+            // such a day only the samples of the watch app with the most of them are kept.
+            val dates = t.map { dateOf(Instant.ofEpochMilli(it)) }
+            val count = HashMap<LocalDate, HashMap<String, Int>>()
+            for (i in t.indices) if (src[i] in watches) count.getOrPut(dates[i]) { HashMap() }.merge(src[i], 1) { x, y -> x + y }
+            val dayWatch = count.mapValues { (_, m) -> m.maxByOrNull { it.value }?.key }
+            val order = t.indices.filter { i -> dayWatch[dates[i]].let { it == null || it == src[i] } }.sortedBy { t[it] }
             hrT = LongArray(order.size) { t[order[it]] }; hrB = IntArray(order.size) { b[order[it]] }
             if (hrT.isNotEmpty()) hrEnd = hrT.last()
         }
@@ -375,13 +382,13 @@ class HealthReader(private val a: MainActivity) {
         return o
     }
 
-    // The day's average, from the watch app alone on days it wrote any: two devices' readings are not averaged together.
-    private suspend fun <T : Record> avg(c: HealthConnectClient, watch: String?, type: KClass<T>, range: TimeRangeFilter, date: (T) -> LocalDate, v: (T) -> Double, put: (LocalDate, Double) -> Unit) {
+    // The day's average, from the watch apps alone on days they wrote any: a watch's and a phone's readings are not averaged together.
+    private suspend fun <T : Record> avg(c: HealthConnectClient, watches: Set<String>, type: KClass<T>, range: TimeRangeFilter, date: (T) -> LocalDate, v: (T) -> Double, put: (LocalDate, Double) -> Unit) {
         val sums = HashMap<LocalDate, DoubleArray>()
         val mine = HashMap<LocalDate, DoubleArray>()
         readAll(c, type, range) { r ->
             sums.getOrPut(date(r)) { DoubleArray(2) }.let { it[0] += v(r); it[1]++ }
-            if (r.metadata.dataOrigin.packageName == watch) mine.getOrPut(date(r)) { DoubleArray(2) }.let { it[0] += v(r); it[1]++ }
+            if (r.metadata.dataOrigin.packageName in watches) mine.getOrPut(date(r)) { DoubleArray(2) }.let { it[0] += v(r); it[1]++ }
         }
         for ((d, s) in sums) { val m = mine[d]; put(d, if (m != null) m[0] / m[1] else s[0] / s[1]) }
     }
@@ -396,11 +403,12 @@ class HealthReader(private val a: MainActivity) {
         pick.values.forEach(put)
     }
 
-    private val WATCH = listOf(MainActivity.ZEPP, "com.mi.health", "com.xiaomi.wearable", "fi.polar.polarflow",
+    private val WATCH = listOf(MainActivity.ZEPP, MainActivity.GADGETBRIDGE, MainActivity.GADGETBRIDGE_NIGHTLY, "com.mi.health", "com.xiaomi.wearable", "fi.polar.polarflow",
         "com.garmin.android.apps.connectmobile", "com.fitbit.FitbitMobile", "com.samsung.android.wear.shealth")
 
     private fun appName(pkg: String) = when (pkg) {
         MainActivity.ZEPP -> "Zepp"
+        MainActivity.GADGETBRIDGE, MainActivity.GADGETBRIDGE_NIGHTLY -> "Gadgetbridge"
         "com.google.android.apps.fitness" -> "Google Fit"
         "com.sec.android.app.shealth" -> "Samsung Health"
         "com.mi.health", "com.xiaomi.wearable" -> "Mi Fitness"
