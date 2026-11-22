@@ -174,6 +174,11 @@ function runChecks() {
       out.push(chk('sync', 'Sources', 'Watch data is current', !F ? 'na' : watchLagging() ? 'look' : F.err?.length ? 'look' : 'ok',
         !F ? 'Not read from Health Connect yet.' : `${W ? `${esc(W.src)} last passed data to Health Connect ${ago(W.w)}` : 'Nothing from a watch app yet'}; Health read it ${ago(F.read)}.${F.apps?.length ? ` Apps writing: ${F.apps.map(esc).join(', ')}.` : ''}`,
         (F?.err || []).map(e => ({ t: esc(e) })), `${watchApp()} passes the watch’s data to Health Connect only when it syncs with the watch. Health reads Health Connect when it opens, every five minutes while open, and when you pull down.`));
+      const B = S.meta.back, hist = SYNC.status?.history;
+      if (F) out.push(chk('back', 'Sources', 'History read from Health Connect', B?.done ? 'ok' : 'na',
+        B ? `${B.done ? 'All of it' : 'So far'}: back to ${dateLabel(B.to, { day: 'numeric', month: 'short', year: 'numeric' })}.${B.done ? '' : ' 90 more days after each sync.'}` : 'Starts after the next sync, 90 days at a time.',
+        hist === false ? [{ t: 'Health Connect gives only the 30 days before access was allowed. To read further back, allow access to past data for Health in Health Connect’s settings.' }] : [],
+        'Everything Health Connect holds is read once, back to its oldest day, and merged like any sync; days you typed keep what you typed.'));
     }
     return out;
   });
@@ -201,11 +206,28 @@ function vChecks() {
     ${groups.map(g => sec(g, `<ul class="checks">${C.filter(c => c.group === g).sort((a, b) => order[a.status] - order[b.status]).map(c => `<li class="ck ${c.status}">
       <details ${c.status === 'bad' ? 'open' : ''}><summary><i class="ckdot" aria-hidden="true"></i><span class="grow"><b>${c.title}</b><span class="sub">${c.result}</span></span><span class="ckw">${CHECKW[c.status]}</span></summary>
       ${c.items.length ? `<ul class="ckitems">${c.items.map(item).join('')}${c.more ? `<li class="sub">and ${c.more} more</li>` : ''}</ul>` : ''}
-      ${c.why ? `<p class="sub small">${c.why}</p>` : ''}</details></li>`).join('')}</ul>`)).join('')}`;
+      ${c.why ? `<p class="sub small">${c.why}</p>` : ''}</details></li>`).join('')}</ul>`)).join('')}
+    ${vErrors()}`;
+}
+// The error log (errlog.js): what went wrong in the app itself, newest first. Copy puts it on the clipboard as text;
+// nothing is sent anywhere.
+function vErrors() {
+  const L = errList();
+  return sec('Errors on this phone', !L.length ? para('None recorded. If something goes wrong, it is kept here (the last 50) for you to copy.') :
+    `${para(`The last ${plural(L.length, 'error')}, kept only on this phone.`)}
+    <ul class="ckitems errs">${L.map(e => `<li><span class="grow"><b>${esc(e.m)}${e.n > 1 ? ` <span class="rep">×${e.n}</span>` : ''}</b><span class="sub">${esc(e.at || 'place unknown')} · ${esc(e.s)} · ${ago(e.t)} · ${esc(e.v)}</span></span></li>`).join('')}</ul>`,
+    { right: L.length ? '<button class="mini" data-act="errcopy">Copy</button><button class="mini" data-act="errclear">Clear</button>' : '' });
+}
+function errCopy() {
+  const text = errText();
+  if (NATIVE) { nat('copy', text); return toast('Copied'); }
+  (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(() => toast('Copied'), () => toast('Could not copy here'));
 }
 SETPAGES.checks = ['Data checks', vChecks];
 function checkAct(a, el) {
   if (a === 'checkday') { const k = el.dataset.k; if (!DATE.test(k)) return true; day = k; location.hash = 'today'; return true; }
+  if (a === 'errcopy') { errCopy(); return true; }
+  if (a === 'errclear') { errClear(); render(); return true; }
   if (a === 'checkrec') { if (DATE.test(el.dataset.k) && S[el.dataset.s]) openPop({ kind: 'recedit', s: el.dataset.s, k: el.dataset.k }); return true; }
   return false;
 }

@@ -281,10 +281,105 @@ function readiness(k = todayKey()) {
     else if (!V.now && WH.z != null && WH.z <= -1.5) why.push([1, `No morning check today, and the watch's overnight HRV last night (${Math.round(WH.now)} ms) is well below its usual ${Math.round(WH.base)}`, 'night']);
     // Breathing rate during sleep rises with fever and infection, often before you feel it (Natarajan 2020).
     if (BR.now != null && BR.base != null && BR.now - BR.base >= Math.max(1, 2 * BR.sd)) why.push([1, `Breathing rate in sleep ${r1(BR.now)} a minute, ${r1(BR.now - BR.base)} above your usual ${r1(BR.base)}`, 'night']);
+    // Skin temperature in sleep raised above your own usual: like breathing rate, a nudge only (Smarr 2020).
+    const SK = skinDev(k);
+    if (SK?.up) why.push([1, `Skin temperature in sleep ${sign(SK.dev, 1)} °C from your usual`, 'night']);
     const score = why.reduce((a, w) => a + w[0], 0), known = V.state || WH.state || R.delta != null || sl != null;
     const level = !known ? 'unknown' : score >= 3 ? 'easy' : score >= 1 ? 'care' : 'go';
     const src = { strap: !!V.now, week: !!V.state, night: sl != null || !!sx || !!S.wx[k] };
     return { level, why: why.sort((a, b) => b[0] - a[0]), V, R, WH, BR, src };
+  });
+}
+
+// ---------- skin temperature in sleep ----------
+// The wrist's temperature through the main sleep, as a change from your own usual: it rises with fever and infection,
+// often before symptoms (Smarr 2020, Mason 2022). Wrist temperature is not body temperature, so it is only ever read
+// against itself: one series per night (the absolute figure where the watch app gives one, otherwise its change from
+// the device's baseline, never the two mixed), the four weeks before the last week as the usual, at least 14 nights,
+// each with 2 or more readings inside the sleep and the watch worn through. Raised: 0.5 °C or more and 1.5 SD above.
+const SK_BASE = 14, SK_UP = 0.5;
+function skinOn(d, f) { const x = S.wx[d]; return x?.[f] != null && (x.skc || 0) >= 2 && nightWorn(d) !== false ? x[f] : null; }
+function skinDev(d, ref = shift(d, -1)) {
+  return cached(`SK${d}${ref}`, () => {
+    const f = S.wx[d]?.sk != null ? 'sk' : S.wx[d]?.skd != null ? 'skd' : null, v = f ? skinOn(d, f) : null;
+    if (v == null) return null;
+    const base = range(28, shift(ref, -7)).map(x => skinOn(x, f)).filter(x => x != null);
+    if (base.length < SK_BASE) return { v, need: SK_BASE - base.length };
+    const m = mean(base), s = sd(base), dev = v - m;
+    return { v, m, s, dev, up: dev >= Math.max(SK_UP, 1.5 * s) };
+  });
+}
+
+// ---------- early illness ----------
+// Resting heart rate clearly above your own usual AND HRV below your own normal range, both on each of the last two
+// nights, is the pattern wearables have seen a day or more before symptoms of infection (Mishra 2020: resting heart
+// rate; Radin 2020: resting heart rate across a population; Hirten 2021: HRV). It is only a reason to take it easy,
+// never a diagnosis, and it is only read when both signals have a baseline of their own: 14 values from the four
+// weeks before the last week. Each signal is read against values from the same source only (strap with strap,
+// watch with watch), and the watch's overnight HRV only from nights it was worn through.
+const ILL_BASE = 14;
+function illBase(vals) { return vals.length < ILL_BASE ? null : { m: mean(vals), s: sd(vals), n: vals.length }; }
+function illRhr(d, ref) {
+  const r = restingHR(d);
+  if (!r) return null;
+  const B = illBase(range(28, shift(ref, -7)).map(x => restingHR(x)).filter(x => x && x.src === r.src).map(x => x.v));
+  if (!B) return { v: r.v, src: r.src, need: ILL_BASE - range(28, shift(ref, -7)).map(x => restingHR(x)).filter(x => x && x.src === r.src).length };
+  const up = r.v - B.m >= Math.max(3, 1.5 * B.s);
+  return { v: r.v, src: r.src, m: B.m, s: B.s, up };
+}
+function illHrv(d, ref) {
+  const base = range(28, shift(ref, -7));
+  const strap = () => { const B = illBase(base.filter(x => S.hrv[x]).map(x => Math.log(S.hrv[x].rmssd))); return B && S.hrv[d] ? [S.hrv[d].rmssd, B, 'strap'] : null; };
+  const watch = () => {
+    const ok = x => S.wx[x]?.hv != null && nightWorn(x) !== false, B = illBase(base.filter(ok).map(x => Math.log(S.wx[x].hv)));
+    return B && ok(d) ? [S.wx[d].hv, B, 'watch'] : null;
+  };
+  const got = strap() || watch();
+  if (!got) {
+    const have = Math.max(base.filter(x => S.hrv[x]).length, base.filter(x => S.wx[x]?.hv != null && nightWorn(x) !== false).length);
+    return { need: Math.max(0, ILL_BASE - have), none: !S.hrv[d] && !(S.wx[d]?.hv != null && nightWorn(d) !== false) };
+  }
+  const [v, B, src] = got, lo = Math.exp(B.m - B.s), hi = Math.exp(B.m + B.s);
+  return { v, src, lo, hi, low: Math.log(v) < B.m - B.s };
+}
+function illness(k = todayKey()) {
+  return cached('ILL' + k, () => {
+    const ref = shift(k, -1), nights = [ref, k].map(d => ({ k: d, rhr: illRhr(d, ref), hrv: illHrv(d, ref), skin: skinDev(d, ref) }));
+    const out = { on: false, nights, missing: [] };
+    for (const n of nights) {
+      const when = n.k === k ? 'last night' : 'the night before';
+      if (!n.rhr) out.missing.push(`no resting heart rate for ${when}`);
+      else if (n.rhr.need) out.missing.push(`resting heart rate needs ${plural(n.rhr.need, 'more day')} of baseline`);
+      if (n.hrv?.need != null) out.missing.push(n.hrv.need ? `HRV needs ${plural(n.hrv.need, 'more night')} of baseline` : `no HRV for ${when}`);
+    }
+    out.missing = [...new Set(out.missing)];
+    out.ready = !out.missing.length;
+    out.on = out.ready && nights.every(n => n.rhr.up && n.hrv.low);
+    // Skin temperature is not part of the rule; raised on both nights, it is one more reason shown with it.
+    out.skinUp = nights.every(n => n.skin?.up);
+    return out;
+  });
+}
+
+// ---------- low blood oxygen in sleep ----------
+// Repeated nights whose blood oxygen in sleep averages under about 92% are worth mentioning to a doctor (in healthy
+// adults it stays around 95–98% through the night; a mean under 92% is uncommon without a breathing or lung problem).
+// Wrist SpO2 is not medical grade: it reads several points off, and low with a loose strap, cold hands or lying on the
+// arm, so one night means nothing. Read only from nights with at least 3 readings inside the main sleep and the watch
+// worn through, over the last 14 days; said only with 5 such nights, and only when 3 or more of them are under 92%.
+const O2_LOW = 92, O2_READS = 3, O2_NIGHTS = 5, O2_REPEAT = 3;
+function spo2Nights(k = todayKey()) {
+  return cached('O2' + k, () => {
+    const days = range(14, k), nights = [], left = [];
+    for (const d of days) {
+      const x = S.wx[d];
+      if (x?.o2n == null) continue;
+      if ((x.o2c || 0) < O2_READS) left.push([d, `${plural(x.o2c || 0, 'reading')}`]);
+      else if (nightWorn(d) === false) left.push([d, 'watch off during the night']);
+      else nights.push({ k: d, v: x.o2n, n: x.o2c, lo: x.o2l ?? null });
+    }
+    const low = nights.filter(n => n.v < O2_LOW), ready = nights.length >= O2_NIGHTS;
+    return { nights, low, left, ready, need: Math.max(0, O2_NIGHTS - nights.length), on: ready && low.length >= O2_REPEAT };
   });
 }
 

@@ -12,6 +12,21 @@ You lift in [openGym](https://github.com/DuarteSantos8/openGym); Health plans th
 goes to openGym as one file, the sets come back through openGym's backup folder and Health Connect, and they join the
 Amazfit and Polar H9 data that decides how hard each day should be.
 
+## What is captured from Health Connect
+
+Steps, distance, active and total energy, sleep with stages, heart rate, resting heart rate, HRV, weight, body fat,
+workouts, blood oxygen (the day's and, apart, inside the main sleep), breathing rate, VO2max, skin temperature in sleep
+(where the phone's Health Connect has it), metres and floors climbed, step cadence (minutes at 100+ steps a minute, also
+from short step records), and body temperature from a thermometer app. After each sync the app reads 90 more days back
+through history until Health Connect has nothing older (with "access past data" allowed, everything it holds; without
+it, the 30 days before access was given); Data checks says how far back it has read.
+
+How each is used: skin temperature in sleep, against your own usual only (4 weeks, at least 14 nights, one series), is
+a nudge to the day's recovery when 0.5 °C or more above it, and a reason listed beside the early-illness notice (Smarr
+2020, Mason 2022), never the notice alone. Brisk minutes, climbing, stress, PAI and body temperature are shown in a day
+in detail against your own usual and decide nothing. Not read yet from a Health Connect backup file: skin temperature,
+climbing and cadence (their tables there are not checked against a real backup).
+
 ## Two ways to run it
 
 - **Android app**: the full experience. Download `health.apk` from the
@@ -19,7 +34,7 @@ Amazfit and Polar H9 data that decides how hard each day should be.
   by themselves from Health Connect each time the app opens, and again whenever you pull down on any tab. The Polar H9
   connects over the phone's own Bluetooth and is remembered. Haptics come from the phone's vibration engine (composed
   clicks where the phone supports them). Reminders for the morning check, the weekly waist and the evening food log
-  arrive as notifications, only when the thing is still undone. A daily backup can go to a folder you choose. The app has
+  arrive as notifications, only when the thing is still undone. A home-screen widget shows today's recovery, food left and sleep as three rings with the kcal left; it updates when you leave the app and after each sync, and a tap opens Today. Long-press the app icon for three shortcuts: Log food (the meal due now), Weigh in, and Morning check. A daily backup can go to a folder you choose. The app has
   **no internet permission**, so nothing in it can leave the phone.
 - **In Chrome** (`index.html`, served by GitHub Pages): the same screens, with the H9 over Web Bluetooth and
   Amazfit data from a Gadgetbridge or Zepp export. "Move my data to the app" in You hands everything to the Android app
@@ -92,7 +107,7 @@ you log in openGym arrives with its name and the muscles it trains, from `opengy
 
 | Tab | What it is for |
 | --- | --- |
-| Today | Three rings: recovery (0–100, in its green/yellow/red zone), calories left, and last night's sleep; what is due today as a row of one-tap actions (weigh in, the morning check, the next meal); the one thing your data most wants you to know; Fuel: eaten against the target, protein, carbs, fat and fibre, the four meals as tiles (kcal and protein in each, the one due now lit, one tap to add), and one concrete suggestion; weight trend and steps; last night with its stages, heart rate asleep and regularity; the shoulder check after an openGym session; training as one card with two buttons: Session (the next openGym session as a sheet: its exercises, loads, today's recovery guidance and the shoulder routine) and History (the week against the WHO, training load against the usual week, the sessions with their sets and watch heart rate, strength per lift, the muscle map); a line when the plan in openGym is out of date |
+| Today | Three rings: recovery (0–100, in its green/yellow/red zone), calories left, and last night's sleep; what is due today as a row of one-tap actions (weigh in, the morning check, the next meal); the one thing your data most wants you to know; Fuel: eaten against the target, protein, carbs, fat and fibre, the four meals as tiles (kcal and protein in each, the one due now lit, one tap to add), and one concrete suggestion; weight trend and steps; last night with its stages, heart rate asleep and regularity; the shoulder check after an openGym session; training as one card with two buttons: Session (the next openGym session as a sheet: its exercises, loads, today's recovery guidance and the shoulder routine) and History (the week against the WHO, training load against the usual week, the sessions with their sets and watch heart rate, strength per lift, the muscle map); a line when the plan in openGym is out of date. When resting heart rate is clearly above your usual and HRV below your normal range on two nights in a row, each against your own baseline (Mishra 2020, Radin 2020, Hirten 2021), a gentle "Take it easy today" with its reasons; never a diagnosis, and only read once both have 14 baseline values (Heart › Recovery says which are missing). When blood oxygen in sleep averages under 92% on 3 or more of the last two weeks' nights (at least 5 measured, each with 3+ readings inside the main sleep and the watch on), "worth mentioning to a doctor", noting wrist SpO2 is not medical grade (Gries 1996, Pipek 2021) |
 | Food | The diary. The week as a strip of rings (green within 10% of target, red over it, saffron under); swipe across the page for the day before or after. What is left as a ring, with eaten, target and the burn the model has learned; the four macros; a suggestion. Each meal as a card: tap an entry to change it, hold it, or swipe it left to remove it (with undo); an empty meal offers "same as yesterday" and your usual foods, one tap each. Then where the day's protein and energy went, meal by meal, and the week as bars against the target |
 | Heart | One part at a time, picked at the top. **Recovery**: recovery as one number, with each part it is made of (HRV, resting heart rate, sleep, breathing) drawn against your own normal (tap one to go to it); the H9 morning check (1–5 minutes, lying or sitting) with live beats, skin contact and signal quality, and a result with its tachogram, Poincaré plot and every measure; morning HRV against your normal range; resting and sleeping heart rate. **Sleep**: 14 nights as a chart and one line (length, regularity, and the one thing to change), night by night (each opening a day in detail), and the watch's overnight HRV and breathing rate against their own baselines. **Cardio**: cardio with the H9 (live trace, zones, α1), the cardio of the last 14 days, the aerobic threshold it gives, and watch-vs-strap agreement |
 | Insights | One part at a time, picked at the top (the headlines are Today's insight deck). **Energy**: the burn learned from your scale and log, its 95% interval over time against what you ate, what this week's balance means in kilograms, and how you eat across the week (logging, consistency, weekdays against weekends, protein at each meal). **Body**: weigh-ins with the filtered trend, body fat from your waist, strength, and where the trend leads, each date with its 95% range. **Long game**: one line each for fitness, steps, resting heart rate, waist ÷ height, sleep length and regularity, social jetlag, strength and active minutes, read against the cohort studies (tap one for its study), with the one change worth the most named first. **Links**: only the links that are real in your own data, each with its effect in real units, its interval drawn around zero, and how to test it; the rest behind one line |
@@ -102,7 +117,7 @@ you log in openGym arrives with its name and the muscles it trains, from `opengy
 | Lab (from the log button) | Breathe (resonance, cyclic sighing, box; with or without the strap, haptic cues per breath), the resonance finder, the orthostatic test, spot checks, and Live: an open-ended session with RMSSD, SDNN, pNN50, SD1/SD2, breathing rate and α1 moving as you watch, marks for what you are doing, each marked stretch read on its own and against your earlier ones, and the beats saved as a CSV file for other HRV software; every session kept |
 | A day in detail (tap a night, or Your day) | The watch's heart rate across 24 hours with sleep and workouts marked, the night stage by stage, and every number against your previous four weeks |
 | Beat by beat (from any morning check or Lab session) | The recording beat by beat: one finger reads each beat (time to the millisecond, RR, bpm, change from the last, and what correction it needed), a pinch zooms, the strip below moves the window; RMSSD, SDNN, pNN50, SD1/SD2, the Poincaré plot and the spectrum are worked out again for the stretch on screen |
-| Data checks (You, and a line on Insights when something needs a look) | About twenty fixed-rule checks across every dataset: food energy against its own macros, sleep stages against the night's total, watch resting and workout heart rate against the strap (Bland–Altman), saved RMSSD against its own beats, steps against distance, active against total energy, duplicate workouts, load typos, wear time, and how fresh the watch data is. Each gives its numbers and lists the records that failed |
+| Data checks (You, and a line on Insights when something needs a look) | About twenty fixed-rule checks across every dataset: food energy against its own macros, sleep stages against the night's total, watch resting and workout heart rate against the strap (Bland–Altman), saved RMSSD against its own beats, steps against distance, active against total energy, duplicate workouts, load typos, wear time, and how fresh the watch data is. Each gives its numbers and lists the records that failed. Below them, the last 50 errors in the app itself, with Copy; kept only on the phone |
 | Pack by barcode (the log button, or the barcode button in Add food's search) | Type the number under the bars; as soon as it is whole the pack is looked up on the phone in 16,000 packaged foods from Open Food Facts (every Indian product with a nutrition panel, and the most-scanned ones worldwide) and in your own foods. It shows the panel per 100 g, and three things that matter on a fixed budget: protein per 100 kcal, energy density, and the share of energy from sugars, with ultra-processing (NOVA 4) said plainly; then what one serving is of what is left today. Choose amount opens the usual amount sheet. A pack that is not in the list is entered once from its label with its barcode, and is known from then on. Packs also come up by name in the food search, under their own heading. Fling the card away for the next |
 | Adding food | A switch between the four meals at the top; search that understands Marathi, Hindi and English names (roti, chawal, anda, chaas, aloo, kombdi…) and forgives a typo; chips for Usual, Recent (exactly as you last logged it), Plates (yours first), Quick add, Mine, and every group from home food to Pune street food, pizza and Chinese, bakery and Irani café, and upvas. Tap adds one (the list keeps its order while you add, so nothing jumps from under your finger); hold any food, or swipe it right, for any amount: steppers, a ruler you drag (a light detent each quarter; a flick keeps it rolling), or by weight, into any meal. The bar at the bottom shows the meal and the day as you go |
 | A logged food (tap it) | Type any amount, step it, or drag its ruler, weigh it, change the meal, change its own numbers (it then becomes your own entry and the library food stays as it was), move or copy it to another day, or save it as your own food |
@@ -239,8 +254,12 @@ Auto export writes one every day. Pick either. Read on the phone by `gadgetbridg
   minute by minute, filed under the morning; a later report of the same night replaces the earlier one, and a second
   sleep that day is a nap.
 - The day's resting heart rate (stamped with the watch's zone), overnight HRV (only the readings inside the night's
-  sleep), blood oxygen, breathing rate in sleep, a paired scale's weight, and each workout's summary with its own
+  sleep), blood oxygen (the day's average, and separately the readings inside the main sleep: mean, count, lowest), breathing rate in sleep, a paired scale's weight, and each workout's summary with its own
   watch's heart rate.
+- Minutes at 100 steps a minute or more from the day's watch (moderate-intensity walking, Tudor-Locke 2018); the
+  watch's own stress (day's mean) and PAI (7-day total and today's), shown as its own scores and never used to decide
+  anything; wrist temperature readings inside the main sleep (`GENERIC_TEMPERATURE_SAMPLE`), read only as a change from
+  your own usual.
 - Sleep, heart rate and workouts then go through the same code as a Health Connect backup (`hcbNight`, `hcbSleep`,
   `hcbHeart`), so an imported day and a synced day agree.
 
@@ -310,6 +329,7 @@ Plain JavaScript, no build step. Scripts load in this order:
 | File | Holds |
 | --- | --- |
 | `lib.js` | Dates, formatting, statistics (Theil–Sen, Bland–Altman agreement) |
+| `errlog.js` | The error log: the last 50 errors on this phone (message, file:line, screen, time, version), loaded second so a failure while loading is caught too; a crash in the Kotlin code (`Crash.kt`) joins it the next time the app opens |
 | `hrv.js` | Beat-to-beat analysis: artefact correction, every HRV measure, the spectrum, breathing rate, RSA, reading a value against your own |
 | `data.js` | Foods, goal paces, the evidence library |
 | `exercises.js` | The exercise library, programmes, home substitutes, shoulder rules, warm-up |

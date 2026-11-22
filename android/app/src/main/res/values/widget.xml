@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_bg">#FFFFFF</color>
+    <color name="widget_soft">#6B675F</color>
+    <string name="widget_name">Today</string>
+    <string name="widget_desc">Recovery, food left and sleep, with the kcal left</string>
+</resources>

@@ -3,10 +3,17 @@
 // Health Connect, Bluetooth and file pickers are used directly. In Chrome it is absent and web fallbacks run.
 const NATIVE = window.HealthNative || null;
 const NEV = {};
-window.__fromNative = (ev, data) => { try { NEV[ev]?.(data); } catch (e) { console.error(e); } };
-function nat(method, ...args) { try { return NATIVE?.[method]?.(...args) ?? null; } catch (e) { console.error(e); return null; } }
+window.__fromNative = (ev, data) => { try { NEV[ev]?.(data); } catch (e) { console.error(e); logError(e); } };
+function nat(method, ...args) { try { return NATIVE?.[method]?.(...args) ?? null; } catch (e) { console.error(e); logError(e); return null; } }
 function parse(s) { try { return JSON.parse(s); } catch (e) { return null; } }
 const APP = NATIVE ? parse(nat('info')) || {} : null;
+// A crash in the app's Kotlin code during the last run goes into the error log (errlog.js).
+function crashIn() {
+  const t = nat('crashTake');
+  if (!t) return;
+  const [ms, at, ...m] = String(t).split('\n');
+  logError(`App closed by a crash: ${m.join(' ')}`, { at, t: +ms || Date.now(), s: 'native' });
+}
 const HERE = location.origin + location.pathname.replace(/[^/]*$/, '');
 // Every build is published, signed with the app's permanent key, on the repository's Releases page.
 const APK = 'https://github.com/yoyo196204-hub/Health/releases/latest/download/health.apk';
@@ -68,6 +75,7 @@ if (NATIVE) setInterval(() => { if (!document.hidden && !SYNC.busy && S.meta.syn
 NEV['hc-status'] = st => { SYNC.status = st; autoSync(); renderSoft(); };
 NEV['hc-data'] = P => {
   SYNC.busy = false; clearTimeout(SYNC.timer);
+  if (P && !P.error && DATE.test(P.to) && P.to < todayKey()) return backIn(P);
   if (!P || P.error) SYNC.err = P?.error || 'Health Connect did not answer.';
   else {
     SYNC.got = mergeSync(P); S.meta.sync = Date.now();
@@ -75,11 +83,46 @@ NEV['hc-data'] = P => {
     const f = cleanFresh(Object.assign({}, obj(P.fresh) || {}, { read: num(P.read, 1e12, 1e13) || Date.now(), err: Array.isArray(P.errors) ? P.errors : [] }));
     if (f) S.meta.fresh = f;
     save();
+    widgetPush();
+    setTimeout(backStep, 1500);
   }
   renderSoft();
 };
+// ---------- reading back through history ----------
+// A sync reads the last few days. After it, the app walks back through everything Health Connect holds, 90 days at a
+// time, one chunk after each sync, until two chunks in a row come back empty (with the history permission Health
+// Connect holds data from before the app was allowed; without it, only the 30 days before). Days already here keep
+// what you typed; the rest is merged exactly as a sync merges it.
+const BACK_DAYS = 90;
+function backStep() {
+  if (!NATIVE || SYNC.busy || !SYNC.status?.granted?.length) return;
+  const B = S.meta.back;
+  if (B?.done) return;
+  const oldest = B?.to ? shift(B.to, -1) : shift(todayKey(), -30);
+  const end = gapDays(oldest, todayKey());
+  if (end > 3650) { S.meta.back = { ...B, done: true }; return save(); }
+  Object.assign(SYNC, { busy: true, err: '', at: Date.now() });
+  clearTimeout(SYNC.timer);
+  SYNC.timer = setTimeout(() => { if (SYNC.busy) SYNC.busy = false; }, SYNC_WAIT * 2);
+  nat('hcRead', JSON.stringify({ days: BACK_DAYS, end, windows: [] }));
+}
+function backIn(P) {
+  const got = mergeSync(P, true), empty = got.days || got.workouts ? 0 : (S.meta.back?.empty || 0) + 1;
+  S.meta.back = { to: P.from, empty, done: empty >= 2, at: Date.now() };
+  save();
+  renderSoft();
+  if (!S.meta.back.done) setTimeout(() => { if (!document.hidden) backStep(); }, 3000);
+}
 NEV.resume = () => { rollDay(); strapAuto(); if (!zeppBack()) autoSync(); autoBackup(); ogAuto(); renderSoft(); };
-NEV.pause = () => { remindPlan(); flushMirror(); };
+NEV.pause = () => { remindPlan(); flushMirror(); widgetPush(); };
+// The home-screen widget (TodayWidget.kt) shows today's three rings and the kcal left. The page hands it plain
+// values when the app goes to the background and after each sync; the widget does no sums of its own.
+function widgetPush() {
+  if (!NATIVE || typeof NATIVE.widget !== 'function') return;
+  // Figures remembered from before midnight must not reach the widget as today's.
+  if (typeof memoDay !== 'undefined' && memoDay !== todayKey()) memo.clear();
+  try { nat('widget', JSON.stringify(widgetData())); } catch (e) { logError(e); }
+}
 // ---------- how fresh the watch data really is ----------
 // The newest moment any record from the watch app was written into Health Connect. That, not when this app last
 // read, says whether the watch's data has come through yet.
@@ -111,7 +154,7 @@ function paintSync() { const el = $('#syncline'); if (el) el.outerHTML = syncLin
 
 // One merge for every outside source: Health Connect, a Zepp export, or the old sync app.
 // Days you typed by hand are never overwritten; clearing your entry hands the day back to the watch.
-function mergeSync(P) {
+function mergeSync(P, back = false) {
   const today = todayKey(), got = { days: 0, steps: 0, sleep: 0, rhr: 0, weight: 0, workouts: 0, pairs: 0 };
   let last = S.meta.watch || '';
   const days = obj(P.days) || {}, G = S.gone, no = (s, k) => !!G[s]?.[k];
@@ -135,11 +178,13 @@ function mergeSync(P) {
     if (Array.isArray(d.hd) && d.hd.length === 288 && !no('hrd', k)) { const h = d.hd.map(v => Math.round(num(v, 25, 230) || 0)); if (h.filter(Boolean).length >= 12) S.hrd[k] = h; }
     if (any) { got.days++; if (k > last) last = k; }
   }
-  // Workouts: the synced range is replaced as a whole, so a workout deleted in Zepp disappears here too.
+  // Workouts: the synced range is replaced as a whole, so a workout deleted in Zepp disappears here too. Reading back
+  // through history only fills days that have none, so workouts from an imported file are never taken away.
   if (Array.isArray(P.ex) && DATE.test(P.from)) {
     const by = {};
     for (const e of P.ex.slice(0, 600)) { const c = cleanEx(e); if (c && !no('ex', String(c.s))) (by[dk(new Date(c.s))] ||= []).push(c); }
-    for (let k = P.from; k <= today; k = shift(k, 1)) { if (by[k]) { S.ex[k] = by[k].slice(0, 20); got.workouts += by[k].length; } else delete S.ex[k]; }
+    const to = DATE.test(P.to) && P.to < today ? P.to : today;
+    for (let k = P.from; k <= to; k = shift(k, 1)) { if (by[k]) { if (!(back && S.ex[k]?.length)) { S.ex[k] = by[k].slice(0, 20); got.workouts += by[k].length; } } else if (!back) delete S.ex[k]; }
   }
   if (Array.isArray(P.win)) for (const w of P.win.slice(0, 200)) {
     const s = num(w?.s, 1e12, 1e13), a = num(w?.a, 30, 230), n = num(w?.n, 1, 1e6);
@@ -242,6 +287,7 @@ function remindOn() { return ['remAm', 'remWk', 'remPm'].some(k => S.settings[k]
 const REMIND = { allowed: null };
 function remindStatus() { if (NATIVE && typeof NATIVE.remindAllowed === 'function') REMIND.allowed = nat('remindAllowed') === true; }
 NEV.remind = r => { REMIND.allowed = !!r?.allowed; if (!REMIND.allowed) toast('Notifications are off for Health in the phone’s settings', 5000); remindPlan(); renderSoft(); };
+NEV.shortcut = r => { if (['food', 'weigh', 'check'].includes(r?.to)) shortcut(r.to); };
 NEV.goto = r => { if (r?.hash && /^[a-z-]+$/.test(r.hash)) location.hash = r.hash; };
 
 // ---------- moving data from Chrome into the app ----------

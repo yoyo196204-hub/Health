@@ -14,7 +14,7 @@ function sandbox() {
   };
   ctx.self = ctx;
   vm.createContext(ctx);
-  for (const f of ['lib.js', 'hrv.js', 'data.js', 'exercises.js', 'opengym-ids.js', 'body-data.js', 'store.js', 'model.js', 'energy.js', 'insights.js', 'train.js', 'markers.js'])
+  for (const f of ['lib.js', 'errlog.js', 'hrv.js', 'data.js', 'exercises.js', 'opengym-ids.js', 'body-data.js', 'store.js', 'model.js', 'energy.js', 'insights.js', 'train.js', 'markers.js'])
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
   // What native.js would define outside the app, then the openGym link, which uses it.
   ctx.window = ctx; ctx.location = { origin: 'https://x', pathname: '/' };
@@ -867,8 +867,13 @@ atest('moving from Zepp to Gadgetbridge: each day takes the watch app that wrote
   T.sleep_session_record_table[2].start_time = at('2026-06-09', 22); T.sleep_stages_table[2].stage_start_time = at('2026-06-09', 22);   // the phone's longer guess
   const beats = (app, k, h, n, bpm) => { id++; T.heart_rate_record_table.push({ row_id: id, app_info_id: app, last_modified_time: at(k, 21) }); for (let i = 0; i < n; i++) T.heart_rate_record_series_table.push({ parent_key: id, epoch_millis: at(k, h) + i * 60000, beats_per_minute: bpm }); };
   beats(1, '2026-06-09', 8, 300, 60); beats(2, '2026-06-10', 8, 300, 62); beats(4, '2026-06-10', 12, 40, 140);
+  // Blood oxygen: three watch readings in the night, one at midday, and the phone's 80% in the night.
+  T.oxygen_saturation_record_table = [[2, 3, 93], [2, 4, 91], [2, 5, 95], [2, 14, 99], [3, 4, 80]].map(([app, h, v]) => ({ app_info_id: app, time: at('2026-06-10', h), zone_offset: 0, percentage: v }));
   c.T = T;
   const H = JSON.parse(JSON.stringify(await vm.runInContext('hcBackup({ each: (n, fn) => (T[n] || []).forEach(fn) || (T[n] || []).length })', c)));
+  const d10 = H.days['2026-06-10'];
+  assert.deepStrictEqual([d10.o2n, d10.o2c, d10.o2l, d10.o2], [93, 3, 91, 94.5], 'the night’s own readings, the watch’s alone; the midday one only in the day’s average');
+  assert.strictEqual(H.days['2026-06-09'].o2n, undefined);
   assert.strictEqual(H.watch, 'Gadgetbridge', 'the watch app still writing is the one named');
   assert.deepStrictEqual([H.days['2026-06-09'].st, H.days['2026-06-10'].st], [7000, 6000], 'each day the watch app that wrote it, not the phone');
   assert.deepStrictEqual([H.days['2026-06-09'].sl.l, H.days['2026-06-10'].sl.l], [420, 420], 'the watch’s night, not the phone’s longer guess');
@@ -891,7 +896,7 @@ atest('the database reader reads tables made WITHOUT ROWID, as Gadgetbridge make
   c.raw = await gbRaw(c);
   run(c, 'db = sqliteOpen(raw)');
   // The counts and sums Python's sqlite3 gives for the same file.
-  assert.deepStrictEqual(run(c, 'Object.fromEntries(Object.keys(db.tables).sort().map(t => [t, db.each(t, () => {})]))'), { BASE_ACTIVITY_SUMMARY: 4, DEVICE: 2, GENERIC_HRV_VALUE_SAMPLE: 624,
+  assert.deepStrictEqual(run(c, 'Object.fromEntries(Object.keys(db.tables).sort().map(t => [t, db.each(t, () => {})]))'), { BASE_ACTIVITY_SUMMARY: 4, DEVICE: 2, GENERIC_HRV_VALUE_SAMPLE: 624, GENERIC_TEMPERATURE_SAMPLE: 117, HUAMI_PAI_SAMPLE: 80,
     GENERIC_WEIGHT_SAMPLE: 2, HUAMI_EXTENDED_ACTIVITY_SAMPLE: 57600, HUAMI_HEART_RATE_RESTING_SAMPLE: 40, HUAMI_SLEEP_RESPIRATORY_RATE_SAMPLE: 40, HUAMI_SLEEP_SESSION_SAMPLE: 41,
     HUAMI_SPO2_SAMPLE: 40, HUAMI_STRESS_SAMPLE: 40, MI_BAND_ACTIVITY_SAMPLE: 720, USER: 1, android_metadata: 1, sqlite_sequence: 3 });
   assert.deepStrictEqual(run(c, '(() => { let a = 0, b = 0, s = 0, k = 0; db.each("HUAMI_EXTENDED_ACTIVITY_SAMPLE", r => { a += r.heart_rate; b += r.timestamp % 1000003; s += r.steps; k += r.raw_kind; }); return [a, b, s, k]; })()'),
@@ -921,6 +926,12 @@ atest('a Gadgetbridge database becomes days exactly as the daily sync makes them
   // HRV from the readings inside the night only: 40–42 overnight, not the 20s at noon; none on the day with no night.
   assert.deepStrictEqual([D['2026-06-01'].hv, D['2026-05-22'].hv], [40.9, undefined]);
   assert.deepStrictEqual([D['2026-05-22'].o2, D['2026-05-23'].o2, D['2026-05-22'].br, D['2026-05-23'].br], [96, 97, 14, 15]);
+  // The watch's own scores: stress as the day's mean, PAI as the day's last reading, wrist temperature only in the night.
+  assert.deepStrictEqual([D['2026-06-01'].ss, D['2026-06-01'].pai, D['2026-06-01'].pat], [30, Math.round(62.5 + 10), 6 + 10 % 3]);
+  assert.deepStrictEqual([D['2026-06-01'].sk, D['2026-06-01'].skc, D['2026-05-22'].sk], [Math.round((33.5 + 0.2 + 33.7 + 0.2) / 2 * 100) / 100, 2, undefined]);
+  assert.strictEqual(D['2026-06-01'].bm, undefined, 'ten steps a minute is not brisk');
+  // The 03:00 reading falls in the night on days with one, and becomes that night's blood oxygen in sleep.
+  assert.deepStrictEqual([D['2026-06-01'].o2n, D['2026-06-01'].o2c, D['2026-05-22'].o2n], [D['2026-06-01'].o2, 1, undefined]);
   assert.strictEqual(D['2026-06-30'].wt, 81.4, 'the morning weigh-in, not the evening one');
   // Heart rate: the 24-hour curve, with the hour the watch was off left empty.
   assert.deepStrictEqual([D['2026-06-01'].hd.filter(Boolean).length, D['2026-05-27'].hd.filter(Boolean).length], [288, 276]);
@@ -1314,6 +1325,205 @@ test('every file the app loads later is in the version stamp, so none can be ser
 test('a script that fails to load is caught before the app starts', () => {
   const t = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
   assert.ok(t.indexOf('(function boot()') >= 0 && t.indexOf('(function boot()') < t.indexOf('let S = load()'));
+});
+
+test('error log: message, file:line, screen, time and version; the last 50 kept, a repeat counted, nothing else touched', c => {
+  run(c, "var tab = 'food', overlay = null, pop = null, BUILD = 'abc123'");
+  const data = run(c, 'localStorage.getItem(KEY)');
+  run(c, "logError({ message: 'x is undefined', stack: 'TypeError: x is undefined\\n    at vFood (https://h/view-food.js?v=abc123:42:7)\\n    at render (https://h/app.js?v=abc123:100:3)' })");
+  let L = run(c, 'errList()');
+  assert.strictEqual(L.length, 1);
+  assert.deepStrictEqual([L[0].m, L[0].at, L[0].s, L[0].v], ['x is undefined', 'view-food.js:42', 'food', 'abc123']);
+  assert.ok(Math.abs(L[0].t - Date.now()) < 5000);
+  // An ErrorEvent's own file and line win over the stack; the same error straight after is counted, not repeated.
+  run(c, "logError('boom', { file: 'https://h/model.js?v=abc123', line: 7 }); logError('boom', { file: 'https://h/model.js?v=abc123', line: 7 })");
+  L = run(c, 'errList()');
+  assert.deepStrictEqual([L.length, L[0].at, L[0].n], [2, 'model.js:7', 2]);
+  run(c, "overlay = { type: 'set', key: 'checks' }; for (let i = 0; i < 60; i++) logError('e' + i)");
+  L = run(c, 'errList()');
+  assert.strictEqual(L.length, 50);
+  assert.deepStrictEqual([L[0].m, L[0].s, L[49].m], ['e59', 'set-checks', 'e10']);
+  // Copy gives one line an error, newest first; a broken log reads as empty; the user's data is a different key.
+  const text = run(c, 'errText()').split('\n');
+  assert.strictEqual(text.length, 50);
+  assert.ok(/\| abc123 \| set-checks \| \? \| e59$/.test(text[0]), text[0]);
+  assert.strictEqual(run(c, 'localStorage.getItem(KEY)'), data);
+  run(c, "localStorage.setItem(ERRKEY, '{oops')");
+  assert.deepStrictEqual(run(c, 'errList()'), []);
+  run(c, "logError(undefined); errClear()");
+  assert.deepStrictEqual(run(c, 'errList()'), []);
+  // A Kotlin crash: its file:line kept as sent.
+  run(c, "logError('App closed by a crash: IllegalStateException', { at: 'Strap.kt:88', s: 'native' })");
+  assert.deepStrictEqual(run(c, '[errList()[0].at, errList()[0].s]'), ['Strap.kt:88', 'native']);
+});
+test('error log: caught failures in a screen part and in a native event are logged, and it loads before every other script', () => {
+  const ui = fs.readFileSync(path.join(root, 'ui.js'), 'utf8'), nat = fs.readFileSync(path.join(root, 'native.js'), 'utf8'), app = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+  assert.ok(/function part\([^]*?logError\(e\)/.test(ui.split('\n').find(l => l.startsWith('function part('))));
+  assert.ok(/__fromNative[^\n]*logError\(e\)/.test(nat) && /function nat\([^\n]*logError\(e\)/.test(nat));
+  assert.ok(/catch \(err\) \{\s*console\.error\(err\);\s*logError\(err\)/.test(app));
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8'), order = [...html.matchAll(/<script src="([a-z0-9-]+\.js)/g)].map(m => m[1]);
+  assert.deepStrictEqual(order.slice(0, 2), ['lib.js', 'errlog.js']);
+  assert.ok(fs.readFileSync(path.join(root, 'sw.js'), 'utf8').includes("'errlog.js'"));
+});
+
+test('widget: the same three numbers as Today, as plain values, with kcal left or over and no night said as such', c => {
+  const k = run(c, 'todayKey()');
+  run(c, `S.food['${k}'] = [{ id: 'a', n: 'Rice', u: '1', k: 600, p: 12, m: 'lunch', q: 1 }]; for (let i = 1; i <= 28; i++) S.sleep[shift('${k}', -i)] = 8; S.sleep['${k}'] = 7.25; memo.clear()`);
+  const W = run(c, 'widgetData()'), D = run(c, 'trioData()'), T = run(c, 'targets()');
+  assert.strictEqual(W.day, k);
+  assert.deepStrictEqual([D.fuel.eaten, D.fuel.target, D.fuel.left], [600, T.kcal, T.kcal - 600]);
+  assert.strictEqual(W.fuel.u, 'left'); assert.strictEqual(W.fuel.over, false);
+  assert.ok(Math.abs(W.fuel.f - 600 / T.kcal) < 1e-9);
+  assert.strictEqual(W.line, `${run(c, `fmt(${T.kcal - 600})`)} kcal left · 600 of ${run(c, `fmt(${T.kcal})`)}`);
+  assert.deepStrictEqual([W.sleep.v, W.sleep.u, W.sleep.l], ['7:15', 'hours', 'A little short']);
+  assert.ok(Math.abs(W.sleep.f - 7.25 / 8) < 1e-9);
+  assert.strictEqual(W.rec.z, D.rec.level);
+  assert.strictEqual(W.rec.v, D.rec.score != null ? String(D.rec.score) : '–');
+  // Over the target, and no night yet.
+  run(c, `S.food['${k}'][0].k = ${T.kcal + 250}; delete S.sleep['${k}']; memo.clear()`);
+  const O = run(c, 'widgetData()');
+  assert.deepStrictEqual([O.fuel.u, O.fuel.over, O.fuel.v, O.sleep.v, O.sleep.u, O.sleep.f], ['over', true, '250', '–', 'no night', 0]);
+  assert.ok(/^250 kcal over · /.test(O.line));
+  assert.ok(JSON.stringify(O).length < 4000, 'fits what the widget accepts');
+  // Handed over when the app goes to the background and after each sync.
+  const nat = fs.readFileSync(path.join(root, 'native.js'), 'utf8');
+  assert.ok(/NEV\.pause = \(\) => \{[^\n]*widgetPush\(\)/.test(nat));
+  assert.ok(/NEV\['hc-data'\][^]*?save\(\);\s*widgetPush\(\);/.test(nat));
+  assert.ok(fs.readFileSync(path.join(root, 'android/app/src/main/AndroidManifest.xml'), 'utf8').includes('android:name=".TodayWidget"'));
+});
+
+test('shortcuts: the three the phone offers are exactly the three the page opens', () => {
+  const kt = fs.readFileSync(path.join(root, 'android/app/src/main/java/app/health/MainActivity.kt'), 'utf8');
+  const nat = fs.readFileSync(path.join(root, 'native.js'), 'utf8');
+  const set = JSON.parse('[' + kt.match(/SHORTCUTS = setOf\(([^)]*)\)/)[1] + ']');
+  const js = JSON.parse(nat.match(/NEV\.shortcut = r => \{ if \((\[[^\]]*\])/)[1].replace(/'/g, '"'));
+  assert.deepStrictEqual(set, ['food', 'weigh', 'check']);
+  assert.deepStrictEqual(js, set);
+  for (const id of set) assert.ok(kt.includes(`Triple("${id}", `), id);
+  for (const d of ['sc_food', 'sc_weigh', 'sc_check']) assert.ok(fs.existsSync(path.join(root, `android/app/src/main/res/drawable/${d}.xml`)), d);
+});
+
+test('early illness: resting HR up AND HRV down on both of the last two nights, each against its own baseline, never on less', c => {
+  const t = run(c, 'todayKey()');
+  // Five weeks of the watch: resting heart rate 54–56, overnight HRV 45–55 ms.
+  const seed = (days = 40) => run(c, `S.rhr = {}; S.wx = {}; S.hrv = {}; for (let i = 0; i < ${days}; i++) { const d = shift('${t}', -i); S.rhr[d] = 54 + (i % 3); S.wx[d] = { hv: 45 + (i % 5) * 2.5 }; } memo.clear()`);
+  const set = (i, rhr, hv) => run(c, `S.rhr[shift('${t}', -${i})] = ${rhr}; S.wx[shift('${t}', -${i})] = { hv: ${hv} }; memo.clear()`);
+  seed();
+  let I = run(c, 'illness()');
+  assert.deepStrictEqual([I.ready, I.on, I.missing], [true, false, []]);
+  set(0, 63, 36); set(1, 62, 37);
+  I = run(c, 'illness()');
+  assert.ok(I.on, JSON.stringify(I.nights));
+  assert.deepStrictEqual(I.nights.map(n => [n.rhr.src, n.hrv.src, n.rhr.up, n.hrv.low]), [['watch', 'watch', true, true], ['watch', 'watch', true, true]]);
+  assert.ok(Math.abs(I.nights[1].rhr.m - 55) < 0.2);
+  // One night only, or one signal only: nothing.
+  set(1, 55, 50); assert.strictEqual(run(c, 'illness().on'), false, 'one night is not a pattern');
+  set(1, 62, 50); assert.strictEqual(run(c, 'illness().on'), false, 'HRV normal the night before');
+  set(1, 62, 37); set(0, 56, 36); assert.strictEqual(run(c, 'illness().on'), false, 'resting HR within 3 bpm');
+  // A night the watch was off the wrist does not count for HRV, and is said so.
+  set(0, 63, 36);
+  run(c, `S.sleepx['${t}'] = { on: -60, off: 420, d: 60, l: 300, r: 60, w: 20 }; S.hrd['${t}'] = Array(288).fill(0); S.hrd[shift('${t}', -1)] = Array(288).fill(60); memo.clear()`);
+  I = run(c, 'illness()');
+  assert.deepStrictEqual([I.on, I.ready, I.missing], [false, false, ['no HRV for last night']]);
+  run(c, `delete S.sleepx['${t}']; delete S.hrd['${t}']; delete S.hrd[shift('${t}', -1)]; memo.clear()`);
+  // Too little baseline: not read, and what is missing is said.
+  seed(20); set(0, 63, 36); set(1, 62, 37);
+  I = run(c, 'illness()');
+  assert.strictEqual(I.on, false);
+  assert.deepStrictEqual(I.missing, ['resting heart rate needs 2 more days of baseline', 'HRV needs 2 more nights of baseline']);
+});
+test('early illness: a strap reading is never read against the watch baseline', c => {
+  const t = run(c, 'todayKey()');
+  run(c, `for (let i = 0; i < 40; i++) { const d = shift('${t}', -i); S.rhr[d] = 55; S.wx[d] = { hv: 50 + (i % 4) }; } S.rhr[shift('${t}', -3)] = 57; memo.clear()`);
+  // Two strap mornings, heart rate 65 and HRV 30, with no strap baseline: HRV falls back to the watch; resting HR is the strap's and has no baseline.
+  run(c, `S.hrv['${t}'] = { rmssd: 30, hr: 65, q: 95 }; S.hrv[shift('${t}', -1)] = { rmssd: 30, hr: 65, q: 95 }; memo.clear()`);
+  const I = run(c, 'illness()');
+  const mode = run(c, 'rhrMode()');
+  if (mode === 'strap') assert.ok(I.missing.some(m => /resting heart rate needs/.test(m)), JSON.stringify(I.missing));
+  assert.strictEqual(I.on, false);
+  assert.deepStrictEqual(I.nights.map(n => n.hrv.src), ['watch', 'watch']);
+});
+
+test('low blood oxygen in sleep: only from nights with enough readings and the watch on, only with 5 nights, only when 3 are under 92%', c => {
+  const t = run(c, 'todayKey()');
+  const night = (i, v, n = 6, lo = v - 2) => run(c, `S.wx[shift('${t}', -${i})] = cleanWx({ o2n: ${v}, o2c: ${n}, o2l: ${lo} }); memo.clear()`);
+  for (let i = 0; i < 4; i++) night(i, i < 3 ? 90.5 : 96);
+  let O = run(c, 'spo2Nights()');
+  assert.deepStrictEqual([O.on, O.ready, O.need, O.low.length], [false, false, 1, 3], 'four nights are not enough');
+  night(5, 96);
+  O = run(c, 'spo2Nights()');
+  assert.deepStrictEqual([O.on, O.ready, O.low.length, O.nights.length], [true, true, 3, 5]);
+  night(1, 96); assert.strictEqual(run(c, 'spo2Nights().on'), false, 'two low nights are not repeated enough');
+  // A night with two readings, or with the watch off, is left out and said so.
+  night(1, 89, 2);
+  O = run(c, 'spo2Nights()');
+  assert.deepStrictEqual([O.on, O.left.map(x => x[1])], [false, ['2 readings']]);
+  night(1, 89);
+  run(c, `S.sleepx['${t}'] = { on: -60, off: 420, d: 60, l: 300, r: 60, w: 20 }; S.hrd['${t}'] = Array(288).fill(0); S.hrd[shift('${t}', -1)] = Array(288).fill(60); memo.clear()`);
+  O = run(c, 'spo2Nights()');
+  assert.deepStrictEqual([O.on, O.low.length, O.left.map(x => x[1])], [false, 2, ['watch off during the night']]);
+  // The day's average (o2), with daytime spot checks in it, is never read for this.
+  run(c, `for (let i = 0; i < 14; i++) S.wx[shift('${t}', -i)] = { o2: 85 }; memo.clear()`);
+  assert.deepStrictEqual(run(c, '[spo2Nights().on, spo2Nights().nights.length]'), [false, 0]);
+  assert.deepStrictEqual(run(c, 'cleanWx({ o2n: 60, o2c: 0, o2l: 40 })'), null, 'impossible values are not kept');
+});
+
+test('history: a chunk read back fills older days, never takes away a workout already here, and stops after two empty chunks', c => {
+  run(c, 'var renderSoft = () => {}, paintSync = () => {}, widgetPush = () => {}');
+  const t = run(c, 'todayKey()'), d = n => run(c, `shift('${t}', -${n})`);
+  run(c, `S.ex['${d(100)}'] = [{ s: Date.parse('${d(100)}T08:00'), e: Date.parse('${d(100)}T09:00'), k: 'Run', src: 'Zepp', h: [] }]; S.ex['${d(105)}'] = [{ s: Date.parse('${d(105)}T08:00'), e: Date.parse('${d(105)}T09:00'), k: 'Walk', src: 'Zepp', h: [] }]`);
+  run(c, 'S.meta.sync = Date.now() - 6e4; S.meta.fresh = null');
+  const before = run(c, 'S.meta.sync');
+  c.P = { from: d(120), to: d(31), days: { [d(100)]: { st: 9000 }, [d(110)]: { st: 7000, rh: 55 } }, ex: [{ s: Date.parse(`${d(110)}T07:00`), e: Date.parse(`${d(110)}T07:40`), k: 'Walk', src: 'Gadgetbridge', h: [] }, { s: Date.parse(`${d(100)}T18:00`), e: Date.parse(`${d(100)}T18:30`), k: 'Walk', src: 'Gadgetbridge', h: [] }], win: [], read: Date.now() };
+  run(c, `NEV['hc-data'](P)`);
+  assert.deepStrictEqual(run(c, `[S.steps['${d(100)}'], S.steps['${d(110)}'], S.rhr['${d(110)}']]`), [9000, 7000, 55]);
+  assert.deepStrictEqual(run(c, `S.ex['${d(100)}'].map(x => x.k)`), ['Run'], 'a day with a workout keeps it');
+  assert.deepStrictEqual(run(c, `S.ex['${d(105)}'].map(x => x.k)`), ['Walk'], 'a day the chunk has nothing for keeps its own');
+  assert.deepStrictEqual(run(c, `S.ex['${d(110)}'].map(x => x.k)`), ['Walk'], 'an empty day is filled');
+  assert.deepStrictEqual(run(c, 'S.meta.back'), { to: d(120), empty: 0, done: false, at: run(c, 'S.meta.back.at') });
+  assert.strictEqual(run(c, 'S.meta.sync'), before, 'a chunk from the past is not a sync');
+  assert.strictEqual(run(c, 'S.meta.fresh'), null, 'and says nothing about how fresh the watch data is');
+  c.E = { from: d(210), to: d(121), days: {}, ex: [], win: [] };
+  run(c, `NEV['hc-data'](E)`); assert.deepStrictEqual(run(c, '[S.meta.back.empty, S.meta.back.done]'), [1, false]);
+  c.E2 = { from: d(300), to: d(211), days: {}, ex: [], win: [] };
+  run(c, `NEV['hc-data'](E2)`); assert.deepStrictEqual(run(c, '[S.meta.back.empty, S.meta.back.done, S.meta.back.to]'), [2, true, d(300)]);
+  // It survives a reload, and a normal sync still replaces its own range of workouts as before.
+  assert.deepStrictEqual(run(c, 'sanitize(JSON.parse(JSON.stringify(S))).meta.back.done'), true);
+  c.N = { from: d(2), to: t, days: {}, ex: [], win: [] };
+  run(c, `S.ex['${d(1)}'] = [{ s: Date.parse('${d(1)}T08:00'), e: Date.parse('${d(1)}T09:00'), k: 'Run', src: 'Zepp', h: [] }]; NEV['hc-data'](N)`);
+  assert.strictEqual(run(c, `S.ex['${d(1)}']`), undefined, 'a workout deleted in the watch app goes in a normal sync');
+  const kt = fs.readFileSync(path.join(root, 'android/app/src/main/java/app/health/HealthReader.kt'), 'utf8');
+  assert.ok(/optInt\("end", 0\)/.test(kt) && /LocalDate\.now\(zone\)\.minusDays\(end\.toLong\(\)\)/.test(kt), 'the reader can read a window ending in the past');
+});
+
+atest('Gadgetbridge: minutes at 100 steps a minute or more are counted for the day, from that day’s watch only', async c => {
+  gbBox(c);
+  c.raw = await gbRaw(c);
+  // Half an hour of brisk walking on 1 June from the Bip 6, and the old Bip's 50 a minute stays not brisk.
+  const G = JSON.parse(JSON.stringify(await vm.runInContext(`(() => { const db = sqliteOpen(raw), s = Date.UTC(2026, 5, 1, 8) / 1000;
+    return gbRead({ has: n => db.has(n), tables: db.tables, each: (n, fn) => db.each(n, n === 'HUAMI_EXTENDED_ACTIVITY_SAMPLE' ? r => fn(r.timestamp >= s && r.timestamp < s + 1800 ? Object.assign({}, r, { steps: 112 }) : r) : fn) }); })()`, c)));
+  assert.deepStrictEqual([G.days['2026-06-01'].bm, G.days['2026-06-02'].bm], [30, undefined]);
+});
+
+test('skin temperature in sleep: read only against its own series, a nudge to readiness and a reason beside the illness notice, never the notice alone', c => {
+  const t = run(c, 'todayKey()');
+  run(c, `S.rhr = {}; S.wx = {}; for (let i = 0; i < 40; i++) { const d = shift('${t}', -i); S.rhr[d] = 54 + (i % 3); S.wx[d] = { hv: 45 + (i % 5) * 2.5, sk: 33.4 + (i % 3) * 0.1, skc: 30 }; } memo.clear()`);
+  let K = run(c, 'skinDev(todayKey())');
+  assert.ok(Math.abs(K.m - 33.5) < 0.02 && K.up === false, JSON.stringify(K));
+  run(c, `S.wx['${t}'].sk = 34.3; memo.clear()`);
+  K = run(c, 'skinDev(todayKey())');
+  assert.ok(K.up && Math.abs(K.dev - 0.8) < 0.05);
+  assert.ok(run(c, 'readiness().why').some(w => w[1] === 'Skin temperature in sleep +0.8 °C from your usual'), 'a nudge to the day');
+  // Raised on both nights with HRV and resting HR normal: no illness notice.
+  run(c, `S.wx[shift('${t}', -1)].sk = 34.2; memo.clear()`);
+  assert.deepStrictEqual(run(c, '[illness().on, illness().skinUp]'), [false, true]);
+  // With the pattern, it is one more reason; the absolute and the change-from-baseline series are never mixed.
+  run(c, `S.rhr['${t}'] = 63; S.rhr[shift('${t}', -1)] = 62; S.wx['${t}'].hv = 36; S.wx[shift('${t}', -1)].hv = 37; memo.clear()`);
+  assert.ok(run(c, 'illness().on'));
+  run(c, `S.wx['${t}'] = { hv: 36, skd: 0.9, skc: 30 }; memo.clear()`);
+  assert.deepStrictEqual(run(c, 'skinDev(todayKey())'), { v: 0.9, need: 14 }, 'a change-from-baseline night is not read against absolute nights');
+  run(c, `S.wx['${t}'] = { hv: 36, sk: 34.3, skc: 1 }; memo.clear()`);
+  assert.strictEqual(run(c, 'skinDev(todayKey())'), null, 'one reading is not a night');
 });
 
 (async () => {

@@ -6,15 +6,20 @@ import androidx.health.connect.client.aggregate.AggregateMetric
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.BodyFatRecord
+import androidx.health.connect.client.records.BodyTemperatureRecord
 import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.ElevationGainedRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.FloorsClimbedRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
 import androidx.health.connect.client.records.OxygenSaturationRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.RespiratoryRateRecord
 import androidx.health.connect.client.records.RestingHeartRateRecord
+import androidx.health.connect.client.records.SkinTemperatureRecord
 import androidx.health.connect.client.records.SleepSessionRecord
+import androidx.health.connect.client.records.StepsCadenceRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.Vo2MaxRecord
@@ -49,6 +54,8 @@ class HealthReader(private val a: MainActivity) {
         "hrv" to HeartRateVariabilityRmssdRecord::class, "weight" to WeightRecord::class, "bodyfat" to BodyFatRecord::class,
         "exercise" to ExerciseSessionRecord::class, "spo2" to OxygenSaturationRecord::class,
         "breathing" to RespiratoryRateRecord::class, "vo2" to Vo2MaxRecord::class,
+        "skin" to SkinTemperatureRecord::class, "elevation" to ElevationGainedRecord::class, "floors" to FloorsClimbedRecord::class,
+        "cadence" to StepsCadenceRecord::class, "bodytemp" to BodyTemperatureRecord::class,
     )
     private val perm = types.mapValues { HealthPermission.getReadPermission(it.value) }
 
@@ -58,6 +65,10 @@ class HealthReader(private val a: MainActivity) {
         else -> "none"
     }
     private fun client() = HealthConnectClient.getOrCreate(a)
+    // Skin temperature is a newer kind: asked for only where this phone's Health Connect has it.
+    private fun skinAvailable(c: HealthConnectClient) = try {
+        c.features.getFeatureStatus(HealthConnectFeatures.FEATURE_SKIN_TEMPERATURE) == HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
+    } catch (e: Throwable) { false }
     private fun historyAvailable(c: HealthConnectClient) = try {
         c.features.getFeatureStatus(HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_HISTORY) == HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
     } catch (e: Throwable) { false }
@@ -80,6 +91,7 @@ class HealthReader(private val a: MainActivity) {
         when (sdk()) {
             "ok" -> {
                 val want = perm.values.toMutableSet()
+                if (!skinAvailable(client())) want -= perm.getValue("skin")
                 if (historyAvailable(client())) want += HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
                 try { a.healthPermissions.launch(want) } catch (e: Exception) { status() }
             }
@@ -90,9 +102,11 @@ class HealthReader(private val a: MainActivity) {
     fun read(json: String) {
         val req = try { JSONObject(json) } catch (e: Exception) { JSONObject() }
         val days = req.optInt("days", 30).coerceIn(1, 120)
+        // How many days before today the read ends: 0 for a normal sync, more when the page walks back through history.
+        val end = req.optInt("end", 0).coerceIn(0, 3650)
         val windows = req.optJSONArray("windows") ?: JSONArray()
         a.lifecycleScope.launch(Dispatchers.IO) {
-            val out = try { collect(days, windows) } catch (e: Throwable) {
+            val out = try { collect(days, windows, end) } catch (e: Throwable) {
                 JSONObject().put("error", "Could not read Health Connect: ${e.message ?: e.javaClass.simpleName}")
             }
             a.emit("hc-data", out.toString())
@@ -128,12 +142,13 @@ class HealthReader(private val a: MainActivity) {
         } while (token != null && ++pages < 300)
     }
 
-    private suspend fun collect(n: Int, windows: JSONArray): JSONObject {
+    private suspend fun collect(n: Int, windows: JSONArray, end: Int = 0): JSONObject {
         val c = client()
         val granted = c.permissionController.getGrantedPermissions()
         fun has(t: String) = perm[t] in granted
         val zone = ZoneId.systemDefault()
-        val today = LocalDate.now(zone)
+        // "today" is the last day read: today itself for a sync, an earlier day when reading back through history.
+        val today = LocalDate.now(zone).minusDays(end.toLong())
         val from = today.minusDays(n - 1L)
         val days = TreeMap<LocalDate, JSONObject>()
         fun day(d: LocalDate): JSONObject? = if (d < from || d > today) null else days.getOrPut(d) { JSONObject() }
@@ -174,6 +189,7 @@ class HealthReader(private val a: MainActivity) {
             }
         }
         val stepBy = HashMap<LocalDate, HashMap<String, Double>>()
+        val briskBy = HashMap<LocalDate, HashMap<String, Double>>()
         val distBy = HashMap<LocalDate, HashMap<String, Double>>()
         var stepEnd = 0L
         safe("steps") {
@@ -181,6 +197,9 @@ class HealthReader(private val a: MainActivity) {
                 val pkg = r.metadata.dataOrigin.packageName
                 if (r.endTime.toEpochMilli() > stepEnd) stepEnd = r.endTime.toEpochMilli()
                 spread(r.startTime, r.endTime, r.count.toDouble()) { d, v -> stepBy.getOrPut(d) { HashMap() }.merge(pkg, v) { x, y -> x + y } }
+                // A short record (a minute or two, as watch apps write them) at 100 steps a minute or more is brisk walking.
+                val sec = Duration.between(r.startTime, r.endTime).seconds
+                if (sec in 30..180 && r.count * 60.0 / sec >= 100) briskBy.getOrPut(dateOf(r.startTime)) { HashMap() }.merge(pkg, sec / 60.0) { x, y -> x + y }
             }
         }
         safe("distance") {
@@ -262,7 +281,72 @@ class HealthReader(private val a: MainActivity) {
         // Point readings: daily average, or the morning value for weight and body fat.
         safe("resting") { avg(c, watches, RestingHeartRateRecord::class, instants, { dateOf(it.time) }, { it.beatsPerMinute.toDouble() }) { d, v -> day(d)?.put("rh", v.roundToInt()) } }
         safe("hrv") { avg(c, watches, HeartRateVariabilityRmssdRecord::class, instants, { dateOf(it.time) }, { it.heartRateVariabilityMillis }) { d, v -> day(d)?.put("hv", Math.round(v * 10) / 10.0) } }
-        safe("spo2") { avg(c, watches, OxygenSaturationRecord::class, instants, { dateOf(it.time) }, { it.percentage.value }) { d, v -> day(d)?.put("o2", Math.round(v * 10) / 10.0) } }
+        safe("spo2") {
+            avg(c, watches, OxygenSaturationRecord::class, instants, { dateOf(it.time) }, { it.percentage.value }) { d, v -> day(d)?.put("o2", Math.round(v * 10) / 10.0) }
+            // Blood oxygen in the night's main sleep (filed under the morning it ends): mean, count and lowest, the
+            // watch's own readings wherever it wrote any. A daytime spot check never enters the night's figure.
+            val all = HashMap<LocalDate, ArrayList<Double>>(); val mine = HashMap<LocalDate, ArrayList<Double>>()
+            readAll(c, OxygenSaturationRecord::class, instants) { r ->
+                val v = r.percentage.value
+                if (v < 70 || v > 100) return@readAll
+                val d0 = dateOf(r.time)
+                val n = listOf(d0, d0.plusDays(1)).firstOrNull { d -> mainSleep[d]?.let { r.time >= it.start && r.time <= it.end } == true } ?: return@readAll
+                all.getOrPut(n) { ArrayList() }.add(v)
+                if (r.metadata.dataOrigin.packageName in watches) mine.getOrPut(n) { ArrayList() }.add(v)
+            }
+            for ((d, a) in all) {
+                val v = mine[d] ?: a
+                day(d)?.put("o2n", Math.round(v.average() * 10) / 10.0)?.put("o2c", v.size)?.put("o2l", Math.round(v.min() * 10) / 10.0)
+            }
+        }
+        // Minutes at 100 steps a minute or more (moderate-intensity walking, Tudor-Locke 2018): from short step
+        // records, or from the cadence the watch app wrote, whichever has more; the watch apps' own where they wrote any.
+        safe("cadence") {
+            readAll(c, StepsCadenceRecord::class, instants) { r ->
+                val pkg = r.metadata.dataOrigin.packageName
+                val mins = HashMap<LocalDate, HashSet<Long>>()
+                for (x in r.samples) if (x.rate >= 100) mins.getOrPut(dateOf(x.time)) { HashSet() }.add(x.time.epochSecond / 60)
+                for ((d, m) in mins) briskBy.getOrPut(d) { HashMap() }.merge("cadence:" + pkg, m.size.toDouble()) { x, y -> x + y }
+            }
+        }
+        for ((d, by) in briskBy) {
+            val o = day(d) ?: continue
+            val own = by.filterKeys { it in watches || it.removePrefix("cadence:") in watches }.ifEmpty { by }
+            own.values.maxOrNull()?.let { if (it >= 1) o.put("bm", Math.round(it).toInt().coerceAtMost(1440)) }
+        }
+        // Skin temperature in the night's main sleep: the absolute figure where the app gives its baseline, otherwise
+        // the change from the device's own baseline. Read as a change from your own usual, never as a fever reading.
+        safe("skin") {
+            val abs = HashMap<LocalDate, ArrayList<Double>>(); val rel = HashMap<LocalDate, ArrayList<Double>>()
+            readAll(c, SkinTemperatureRecord::class, instants) { r ->
+                val base = r.baseline?.inCelsius
+                for (x in r.deltas) {
+                    val d0 = dateOf(x.time)
+                    val n = listOf(d0, d0.plusDays(1)).firstOrNull { d -> mainSleep[d]?.let { x.time >= it.start && x.time <= it.end } == true } ?: continue
+                    val dc = x.delta.inCelsius
+                    if (base != null) abs.getOrPut(n) { ArrayList() }.add(base + dc) else rel.getOrPut(n) { ArrayList() }.add(dc)
+                }
+            }
+            for ((d, v) in abs) day(d)?.put("sk", Math.round(v.average() * 100) / 100.0)?.put("skc", v.size)
+            for ((d, v) in rel) if (abs[d] == null) day(d)?.put("skd", Math.round(v.average() * 100) / 100.0)?.put("skc", v.size)
+        }
+        // Climbing, a day at a time: the watch apps' own where they wrote any.
+        safe("elevation") {
+            val by = HashMap<LocalDate, HashMap<String, Double>>()
+            readAll(c, ElevationGainedRecord::class, instants) { r -> by.getOrPut(dateOf(r.startTime)) { HashMap() }.merge(r.metadata.dataOrigin.packageName, r.elevation.inMeters) { x, y -> x + y } }
+            for ((d, m) in by) { val v = m.filterKeys { it in watches }.ifEmpty { m }.values.maxOrNull() ?: continue; if (v > 0) day(d)?.put("el", Math.round(v).toInt()) }
+        }
+        safe("floors") {
+            val by = HashMap<LocalDate, HashMap<String, Double>>()
+            readAll(c, FloorsClimbedRecord::class, instants) { r -> by.getOrPut(dateOf(r.startTime)) { HashMap() }.merge(r.metadata.dataOrigin.packageName, r.floors) { x, y -> x + y } }
+            for ((d, m) in by) { val v = m.filterKeys { it in watches }.ifEmpty { m }.values.maxOrNull() ?: continue; if (v > 0) day(d)?.put("fl", Math.round(v).toInt()) }
+        }
+        // Body temperature from a thermometer app: the day's highest.
+        safe("bodytemp") {
+            val hi = HashMap<LocalDate, Double>()
+            readAll(c, BodyTemperatureRecord::class, instants) { r -> val v = r.temperature.inCelsius; if (v in 34.0..43.0) hi.merge(dateOf(r.time), v) { x, y -> maxOf(x, y) } }
+            for ((d, v) in hi) day(d)?.put("bt", Math.round(v * 10) / 10.0)
+        }
         safe("breathing") { avg(c, watches, RespiratoryRateRecord::class, instants, { dateOf(it.time) }, { it.rate }) { d, v -> day(d)?.put("br", Math.round(v * 10) / 10.0) } }
         safe("weight") { first(c, WeightRecord::class, instants, { it.time }) { r -> day(dateOf(r.time))?.put("wt", Math.round(r.weight.inKilograms * 10) / 10.0) } }
         safe("bodyfat") { first(c, BodyFatRecord::class, instants, { it.time }) { r -> day(dateOf(r.time))?.put("bf", Math.round(r.percentage.value * 10) / 10.0) } }

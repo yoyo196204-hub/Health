@@ -15,7 +15,7 @@ function trow(a, b, cls = '') { return `<tr class="${cls}"><td>${a}</td><td>${b}
 function table(rows) { return `<table>${rows.join('')}</table>`; }
 function para(text, cls = 'sub') { return `<p class="${cls}">${text}</p>`; }
 // One part of a screen that fails shows a line instead of taking the whole screen with it.
-function part(fn, ...a) { try { return fn(...a); } catch (e) { console.error(e); return `<p class="flag">This part could not be shown (${esc(e.message)}). Your data is untouched.</p>`; } }
+function part(fn, ...a) { try { return fn(...a); } catch (e) { console.error(e); logError(e); return `<p class="flag">This part could not be shown (${esc(e.message)}). Your data is untouched.</p>`; } }
 // A row of choices, one on. act gets data-v.
 function seg(act, items, cur, cls = '') { return `<div class="seg ${cls}">${items.map(([v, label]) => `<button class="${String(v) === String(cur) ? 'on' : ''}" data-act="${act}" data-v="${v}">${label}</button>`).join('')}</div>`; }
 // A settings row that opens a page.

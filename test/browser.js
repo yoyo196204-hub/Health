@@ -131,6 +131,118 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     assert.ok(await page.evaluate(() => !!document.querySelector('.ckbanner.bad')), 'Review says something does not add up');
     await page.evaluate(() => { S.food[todayKey()] = S.food[todayKey()].filter(e => e.id !== 'qt'); save(); });
   });
+  await test('error log: an error anywhere is kept with its place, screen and version, shown in Data checks, and copied', async () => {
+    await go('food');
+    await page.evaluate(() => {
+      const err = new Error('Planted failure');
+      dispatchEvent(new ErrorEvent('error', { message: err.message, filename: location.origin + '/view-food.js?v=' + BUILD, lineno: 42, error: err }));
+      part(() => { throw new Error('A part that fails'); });
+    });
+    await go('set-checks');
+    const r = await page.evaluate(() => [...document.querySelectorAll('.errs li')].map(li => [...li.querySelectorAll('b, .sub')].map(x => x.textContent.trim()).join(' | ')));
+    assert.strictEqual(r.length, 2, JSON.stringify(r));
+    assert.ok(/A part that fails/.test(r[0]) && /^Planted failure \| view-food\.js:42 · food · just now · /.test(r[1]), JSON.stringify(r));
+    assert.ok(r[1].endsWith(await page.evaluate(() => BUILD)));
+    await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(url).origin });
+    await page.tap('[data-act="errcopy"]'); await page.waitForTimeout(200);
+    const clip = await page.evaluate(() => navigator.clipboard.readText());
+    assert.ok(/\| food \| view-food\.js:42 \| Planted failure$/.test(clip.split('\n')[1]), clip);
+    await page.evaluate(() => scrollTo(0, 1e6)); await shot('errors');
+    await page.tap('[data-act="errclear"]'); await page.waitForTimeout(300);
+    assert.ok(/None recorded/.test(await page.textContent('#view')));
+    await go('today');
+  });
+  await test('widget: it gets exactly the numbers Today shows', async () => {
+    await go('today'); await page.waitForTimeout(300);
+    const r = await page.evaluate(() => {
+      const W = widgetData();
+      const tri = [...document.querySelectorAll('.trio .tri')].map(a => a.querySelector('.num, b')?.textContent.trim());
+      return { tri, w: [W.rec.v, W.fuel.v, W.sleep.v] };
+    });
+    assert.deepStrictEqual(r.tri, r.w, JSON.stringify(r));
+  });
+  await test('shortcuts: Log food opens the meal due now, Weigh in its sheet over Today, Morning check the strap part of Heart', async () => {
+    await go('review');
+    await page.evaluate(() => __fromNative('shortcut', { to: 'food' })); await page.waitForTimeout(600);
+    const f = await page.evaluate(() => [overlay?.type, overlay?.key === nextMeal(), day === todayKey()]);
+    assert.deepStrictEqual(f, ['add', true, true]);
+    await page.evaluate(() => __fromNative('shortcut', { to: 'weigh' })); await page.waitForTimeout(700);
+    assert.deepStrictEqual(await page.evaluate(() => [location.hash, tab, overlay, pop?.kind]), ['#today', 'today', null, 'weigh']);
+    await page.evaluate(() => closePop()); await page.waitForTimeout(400);
+    await page.evaluate(() => __fromNative('shortcut', { to: 'weigh' })); await page.waitForTimeout(500);
+    assert.strictEqual(await page.evaluate(() => pop?.kind), 'weigh', 'from Today itself too');
+    await page.evaluate(() => __fromNative('shortcut', { to: 'check' })); await page.waitForTimeout(600);
+    assert.deepStrictEqual(await page.evaluate(() => [tab, SUB.recovery, pop]), ['recovery', 'rec', null]);
+    await page.evaluate(() => __fromNative('shortcut', { to: 'nope' })); await page.waitForTimeout(200);
+    assert.strictEqual(await page.evaluate(() => tab), 'recovery', 'anything else is ignored');
+    await go('today');
+  });
+  await test('early illness: a gentle notice on Today with its reasons, a line on Heart, and nothing when the data is not there', async () => {
+    await page.evaluate(() => {
+      window.__ill = { rhr: S.rhr, wx: S.wx, hrv: S.hrv };
+      S.rhr = {}; S.wx = {}; S.hrv = {};
+      for (let i = 0; i < 40; i++) { const d = shift(todayKey(), -i); S.rhr[d] = 54 + (i % 3); S.wx[d] = { hv: 45 + (i % 5) * 2.5 }; }
+      S.rhr[todayKey()] = 63; S.wx[todayKey()] = { hv: 36 }; S.rhr[shift(todayKey(), -1)] = 62; S.wx[shift(todayKey(), -1)] = { hv: 37 };
+      save();
+    });
+    await go('review'); await go('today');
+    const t = await page.evaluate(() => document.querySelector('.callout.ill')?.textContent.replace(/\s+/g, ' '));
+    assert.ok(t && /Take it easy today/.test(t) && /not a diagnosis/.test(t), t + JSON.stringify(await page.evaluate(() => [illness(), rhrMode()])));
+    assert.ok(/Resting heart rate 62 and 63 bpm; your usual is 55 \(watch\)/.test(t) && /HRV 37 and 36 ms; your normal range is \d+–\d+ \(watch, overnight\)/.test(t), t);
+    await page.evaluate(() => scrollTo(0, 0)); await shot('illness');
+    await go('recovery-rec');
+    const il = await page.evaluate(() => document.querySelector('.illline')?.textContent);
+    assert.ok(/Early sign of illness: Seen two nights in a row/.test(il), il);
+    await page.evaluate(() => { S.wx[todayKey()] = { hv: 50 }; save(); render(); });
+    const il2 = await page.textContent('.illline');
+    assert.ok(/Not seen/.test(il2), il2);
+    await go('today');
+    assert.ok(await page.evaluate(() => !document.querySelector('.callout.ill')), 'gone when HRV is normal again');
+    await page.evaluate(() => { for (let i = 8; i < 30; i++) delete S.rhr[shift(todayKey(), -i)]; save(); });
+    await go('recovery-rec');
+    const il3 = await page.textContent('.illline');
+    assert.ok(/Not read yet: resting heart rate needs \d+ more days? of baseline/.test(il3), il3);
+    await page.evaluate(() => { Object.assign(S, window.__ill); save(); });
+    await go('today');
+  });
+  await test('low blood oxygen in sleep: a notice on Today worded for a doctor, a line on Heart › Sleep, and quiet with too few nights', async () => {
+    await page.evaluate(() => {
+      window.__o2 = JSON.parse(JSON.stringify(S.wx));
+      for (let i = 0; i < 8; i++) { const d = shift(todayKey(), -i); S.wx[d] = Object.assign({}, S.wx[d], { o2n: i % 2 ? 95.5 : 90.4, o2c: 12, o2l: 86 }); }
+      save();
+    });
+    await go('review'); await go('today');
+    const t = await page.evaluate(() => document.querySelector('.callout.ill')?.textContent.replace(/\s+/g, ' '));
+    assert.ok(t && /Blood oxygen was low on several nights/.test(t) && /under 92% on 4 of your last 8 measured nights \(lowest 90.4%\)/.test(t) && /worth mentioning to a doctor/.test(t) && /not medical grade/.test(t), t);
+    await page.evaluate(() => scrollTo(0, 0)); await shot('spo2');
+    await go('recovery-sleep');
+    const l = await page.textContent('#view');
+    assert.ok(/Blood oxygen in sleep under 92% on 4 of 8 nights/.test(l), l.slice(-600));
+    await page.evaluate(() => { for (let i = 4; i < 8; i++) delete S.wx[shift(todayKey(), -i)].o2n; save(); render(); });
+    assert.ok(/Blood oxygen in sleep: [\d.]+% on average over 4 nights in the last two weeks, under 92% on 2\. 1 more night before it is read for low nights\./.test(await page.textContent('#view')));
+    await go('today');
+    assert.ok(await page.evaluate(() => !document.querySelector('.callout.ill')), 'nothing on Today with four nights');
+    await page.evaluate(() => { S.wx = window.__o2; save(); });
+  });
+  await test('a day in detail: the new watch figures appear, each against your own usual, and nothing when they are missing', async () => {
+    const k = await page.evaluate(() => shift(todayKey(), -1));
+    await page.evaluate(k => {
+      window.__nw = JSON.parse(JSON.stringify(S.wx));
+      for (let i = 1; i <= 20; i++) { const d = shift(k, -i); S.wx[d] = Object.assign({}, S.wx[d], { o2n: 95 + (i % 3) * 0.5, o2c: 10, o2l: 91, sk: 33.4 + (i % 3) * 0.1, skc: 20, bm: 20 + i, el: 30 + i, ss: 30 + (i % 5), pai: 60 + i }); }
+      S.wx[k] = Object.assign({}, S.wx[k], { o2n: 95.4, o2c: 12, o2l: 90, sk: 34.2, skc: 20, bm: 42, el: 55, fl: 12, ss: 41, pai: 85, pat: 9 });
+      save(); openPop({ kind: 'dayx', k });
+    }, k);
+    await page.waitForTimeout(600);
+    const t = await page.evaluate(() => document.querySelector('#sheet').textContent.replace(/\s+/g, ' '));
+    for (const re of [/Blood oxygen in sleep12 readings, lowest 90%/, /Skin temperature in sleep/, /34\.2 °C/, /Brisk walking/, /42 min/, /Climbed/, /55 m/, /Floors/, /Stress/, /PAI.*9 today/])
+      assert.ok(re.test(t), `${re} in ${t.slice(0, 400)}`);
+    await shot('daydetail');
+    await page.evaluate(() => closePop()); await page.waitForTimeout(300);
+    await page.evaluate(k => { S.wx = window.__nw; save(); openPop({ kind: 'dayx', k: shift(todayKey(), -40) }); }, k);
+    await page.waitForTimeout(400);
+    assert.ok(!/Brisk walking|Stress|PAI/.test(await page.textContent('#sheet')), 'no rows without data');
+    await page.evaluate(() => closePop()); await page.waitForTimeout(300);
+  });
   await test('wear time: short days are left out of the long game and said so, and the check lists them', async () => {
     const before = await page.evaluate(() => {
       const full = Array(288).fill(62), short = Array(288).fill(0).map((_, i) => i >= 96 && i < 168 ? 70 : 0), old = { hrd: S.hrd, steps: S.steps };
@@ -542,7 +654,10 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await page.evaluate(() => closePop()); await page.waitForTimeout(400);
     assert.ok(!bad.length, bad.join(' | '));
   });
-  await test('no errors were thrown on any screen', async () => assert.deepStrictEqual(errors, []));
+  await test('no errors were thrown on any screen, and none were caught and logged', async () => {
+    assert.deepStrictEqual(errors, []);
+    assert.deepStrictEqual(await page.evaluate(() => errList().map(e => `${e.at} ${e.m}`)), []);
+  });
 
   console.log(`\n${passed} passed, ${failed} failed`);
   await browser.close(); srv.close();

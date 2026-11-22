@@ -191,6 +191,29 @@ function recoveryScore(k = todayKey()) {
 }
 const ZONE = { go: ['Recovered', 'var(--good)'], care: ['Moderate', 'var(--mid)'], easy: ['Low', 'var(--bad)'], unknown: ['Calibrating', 'var(--soft)'] };
 
+// Today's three numbers, worked out once for the Today card and for the home-screen widget: how recovered you are,
+// what is left to eat, and how you slept against your own usual (7–9 h).
+function trioData(k = todayKey()) {
+  const RS = recoveryScore(k), T = targets(), t = totals(k), left = T.kcal - t.k, sl = S.sleep[k];
+  const usual = mean(range(28, shift(k, -1)).map(d => S.sleep[d]).filter(v => v != null)), need = clamp(usual ?? 7.5, 7, 9);
+  return {
+    rec: { score: RS.score, level: RS.level, word: ZONE[RS.level][0] },
+    fuel: { eaten: t.k, target: T.kcal, left },
+    sleep: { h: sl ?? null, need, word: sl == null ? 'Not synced' : sl >= need - 0.25 ? 'Enough' : sl >= need - 1 ? 'A little short' : 'Short' },
+  };
+}
+// What the widget draws: plain values, ready to show, so the phone does no sums of its own.
+function widgetData(k = todayKey()) {
+  const D = trioData(k), hm = h => `${Math.floor(h)}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
+  return {
+    day: k, at: Date.now(),
+    rec: { f: D.rec.score != null ? D.rec.score / 100 : 0, v: D.rec.score != null ? String(D.rec.score) : '–', u: D.rec.score != null ? '%' : 'learning', l: D.rec.word, z: D.rec.level },
+    fuel: { f: D.fuel.target ? D.fuel.eaten / D.fuel.target : 0, v: fmt(Math.abs(D.fuel.left)), u: D.fuel.left < 0 ? 'over' : 'left', over: D.fuel.left < 0 },
+    sleep: { f: D.sleep.h != null ? D.sleep.h / D.sleep.need : 0, v: D.sleep.h != null ? hm(D.sleep.h) : '–', u: D.sleep.h != null ? 'hours' : 'no night', l: D.sleep.word },
+    line: D.fuel.left < 0 ? `${fmt(-D.fuel.left)} kcal over · ${fmt(D.fuel.eaten)} of ${fmt(D.fuel.target)}` : `${fmt(D.fuel.left)} kcal left · ${fmt(D.fuel.eaten)} of ${fmt(D.fuel.target)}`,
+  };
+}
+
 // ---------- how you eat ----------
 function intakePatterns(end = todayKey()) {
   return cached('IP' + end, () => {

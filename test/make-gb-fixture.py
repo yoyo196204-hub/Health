@@ -25,6 +25,9 @@ SCHEMA = [
     samples('HUAMI_SLEEP_RESPIRATORY_RATE_SAMPLE', ['"UTC_OFFSET" INTEGER NOT NULL ,', '"RATE" INTEGER NOT NULL ,']),
     samples('HUAMI_STRESS_SAMPLE', ['"TYPE_NUM" INTEGER NOT NULL ,', '"STRESS" INTEGER NOT NULL ,']),
     samples('GENERIC_HRV_VALUE_SAMPLE', ['"VALUE" INTEGER NOT NULL ,']),
+    samples('HUAMI_PAI_SAMPLE', ['"UTC_OFFSET" INTEGER NOT NULL ,', '"PAI_LOW" REAL NOT NULL ,', '"PAI_MODERATE" REAL NOT NULL ,', '"PAI_HIGH" REAL NOT NULL ,', '"TIME_LOW" INTEGER NOT NULL ,',
+                                 '"TIME_MODERATE" INTEGER NOT NULL ,', '"TIME_HIGH" INTEGER NOT NULL ,', '"PAI_TODAY" REAL NOT NULL ,', '"PAI_TOTAL" REAL NOT NULL ,']),
+    samples('GENERIC_TEMPERATURE_SAMPLE', ['"TEMPERATURE" REAL NOT NULL ,', '"TEMPERATURE_TYPE" INTEGER NOT NULL ,', '"TEMPERATURE_LOCATION" INTEGER NOT NULL ,']),
     samples('GENERIC_WEIGHT_SAMPLE', ['"WEIGHT_KG" REAL NOT NULL ,', '"IMPEDANCE_OHM" INTEGER,']),
     'CREATE TABLE "BASE_ACTIVITY_SUMMARY" ("_id" INTEGER PRIMARY KEY AUTOINCREMENT ,"NAME" TEXT,"START_TIME" INTEGER NOT NULL ,"END_TIME" INTEGER NOT NULL ,"OVERRIDE_ACTIVITY_KIND" INTEGER NOT NULL ,"ACTIVITY_KIND" INTEGER NOT NULL ,"BASE_LONGITUDE" INTEGER,"BASE_LATITUDE" INTEGER,"BASE_ALTITUDE" INTEGER,"GPX_TRACK" TEXT,"RAW_DETAILS_PATH" TEXT,"HEADER_PHOTO" TEXT,"DEVICE_ID" INTEGER NOT NULL ,"USER_ID" INTEGER NOT NULL ,"SUMMARY_DATA" TEXT,"RAW_SUMMARY_DATA" BLOB);',
 ]
@@ -114,6 +117,18 @@ def main():
     c.executemany('INSERT INTO HUAMI_SPO2_SAMPLE VALUES (?,?,?,?,?)', [(sec(first + datetime.timedelta(days=i), 3) * 1000, BIP6, 1, 0, 96 + i % 3) for i in range(DAYS)])
     c.executemany('INSERT INTO HUAMI_SLEEP_RESPIRATORY_RATE_SAMPLE VALUES (?,?,?,?,?)', [(sec(first + datetime.timedelta(days=i), 4) * 1000, BIP6, 1, 0, 14 + i % 2) for i in range(DAYS)])
     c.executemany('INSERT INTO HUAMI_STRESS_SAMPLE VALUES (?,?,?,?,?)', [(sec(first + datetime.timedelta(days=i), 12) * 1000, BIP6, 1, 0, 30) for i in range(DAYS)])
+    # PAI twice a day (the later one is the day's), and wrist temperature at 02:00 and 04:00 in the night and once at noon.
+    pai = []
+    for i in range(DAYS):
+        d = first + datetime.timedelta(days=i)
+        pai.append((sec(d, 12) * 1000, BIP6, 1, 0, 1.0, 2.0, 0.0, 30, 20, 0, 3.0, 60.0 + i))
+        pai.append((sec(d, 22) * 1000, BIP6, 1, 0, 1.0, 4.0, 1.0, 40, 30, 5, 6.0 + i % 3, 62.5 + i))
+    c.executemany('INSERT INTO HUAMI_PAI_SAMPLE VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', pai)
+    temp = []
+    for i in range(1, DAYS):
+        d = first + datetime.timedelta(days=i)
+        temp += [(sec(d, 2) * 1000, BIP6, 1, 33.5 + (i % 4) * 0.1, 0, 0), (sec(d, 4) * 1000, BIP6, 1, 33.7 + (i % 4) * 0.1, 0, 0), (sec(d, 12) * 1000, BIP6, 1, 31.0, 0, 0)]
+    c.executemany('INSERT INTO GENERIC_TEMPERATURE_SAMPLE VALUES (?,?,?,?,?,?)', temp)
     hrv = []
     for i in range(1, DAYS):
         d = first + datetime.timedelta(days=i)

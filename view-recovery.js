@@ -80,12 +80,12 @@ function sleepSection() {
   return sec('Sleep, 14 nights', `${c}${para(line)}
     ${nights ? `<h3>Night by night</h3><ul class="list nights">${nights}</ul>` : ''}`, { why: ['regular', 'Timing'], id: 'rc-sleep' });
 }
-// What the Bip measures while you sleep, each against its own normal: overnight HRV, breathing rate, and for interest
-// only SpO2 and the VO2max estimate.
+// What the Bip measures while you sleep, each against its own normal: overnight HRV, breathing rate, blood oxygen in
+// sleep (read only for repeated low nights), and for interest the VO2max estimate.
 function nightSection() {
-  const days = range(30), WH = nightly('hv', todayKey(), true), BR = nightly('br'), o2 = {}, hv = {}, br = {};
+  const days = range(30), WH = nightly('hv', todayKey(), true), BR = nightly('br'), O = spo2Nights(), o2 = {}, hv = {}, br = {};
   for (const k of days) { const x = S.wx[k]; if (x?.hv) hv[k] = x.hv; if (x?.br) br[k] = x.br; if (x?.o2) o2[k] = x.o2; }
-  if (Object.keys(hv).length + Object.keys(br).length + Object.keys(o2).length < 2) return '';
+  if (Object.keys(hv).length + Object.keys(br).length + Object.keys(o2).length < 2 && !O.nights.length && !O.left.length) return '';
   const vo = Object.keys(S.wx).sort().reverse().find(k => S.wx[k].vo);
   const c1 = chart({ days, dots: hv, band: WH.lo ? [WH.lo, WH.hi] : null, fy: v => Math.round(v) });
   const c2 = chart({ days, dots: br, band: BR.base != null ? [BR.base - Math.max(1, 2 * BR.sd), BR.base + Math.max(1, 2 * BR.sd)] : null, fy: v => r1(v), h: 110 });
@@ -94,7 +94,16 @@ function nightSection() {
   const word = (f, v) => { const V = versus(v, prev.map(d => S.wx[d]?.[f])); return V.word ? ` Last night: <b>${V.word}</b> for you (z ${sign(V.z, 1)}).` : ''; };
   return sec('Overnight, from the watch', `${c1 ? `<h3>Overnight HRV</h3>${c1}${para(WH.lo ? `7-day average ${WH.roll ? Math.round(WH.roll) + ' ms' : DASH} against its own range of ${Math.round(WH.lo)}–${Math.round(WH.hi)} ms. ${V7(WH)} Kept apart from the strap's morning check: a different measurement, and one Amazfit has not published a validation for.${lastK && S.wx[lastK].hv ? word('hv', S.wx[lastK].hv) : ''}` : `${plural(WH.n, 'night')} so far; its own range appears after ${WH.need} more.`)}` : ''}
     ${c2 ? `<h3>Breathing rate in sleep</h3>${c2}${para(BR.base != null ? `Usually ${r1(BR.base)} breaths a minute${BR.now != null ? `; last night ${r1(BR.now)}` : ''}. A rise of 1 or more above your usual, beyond the shaded spread, often comes with infection or fever before you feel it, so it nudges the day's verdict.` : `${plural(BR.n, 'night')} so far; a baseline needs ${BR.need} more.`)}` : ''}
-    ${o2v.length || vo ? para(`${o2v.length ? `Blood oxygen in sleep: ${r1(mean(o2v.slice(-7)))}% on average this week. Wrist SpO2 misses by several points, so it is shown and never used.` : ''} ${vo ? `VO2max estimate ${r1(S.wx[vo].vo)} (${dateLabel(vo)}): a watch estimate, useful as a trend over months.` : ''}`) : ''}`, { why: ['night', 'How these are read'], id: 'rc-night' });
+    ${o2v.length || O.nights.length || O.left.length || vo ? para(`${o2v.length || O.nights.length || O.left.length ? o2Line(O) : ''} ${vo ? `VO2max estimate ${r1(S.wx[vo].vo)} (${dateLabel(vo)}): a watch estimate, useful as a trend over months.` : ''}`) : ''}`, { why: ['night', 'How these are read'], id: 'rc-night' });
+}
+// Blood oxygen in sleep, in one sentence: what it was over the last two weeks, or what it still needs.
+function o2Line(O) {
+  const left = O.left.length ? ` ${plural(O.left.length, 'night')} left out: under ${O2_READS} readings in the sleep or the watch off.` : '';
+  if (!O.nights.length) return `Blood oxygen in sleep: no night has ${O2_READS} or more readings inside the sleep yet; turn on all-day blood-oxygen monitoring for the watch.${left} ${why('spo2', 'How')}`;
+  const avg = r1(mean(O.nights.map(n => n.v)));
+  const head = O.on ? `<b>Blood oxygen in sleep under ${O2_LOW}% on ${O.low.length} of ${plural(O.nights.length, 'night')}</b> in the last two weeks: worth mentioning to a doctor.`
+    : `Blood oxygen in sleep: ${avg}% on average over ${plural(O.nights.length, 'night')} in the last two weeks${O.low.length ? `, under ${O2_LOW}% on ${O.low.length}` : ''}.${O.ready ? '' : ` ${plural(O.need, 'more night')} before it is read for low nights.`}`;
+  return `${head} Wrist SpO2 is not medical grade.${left} ${why('spo2', 'How')}`;
 }
 function V7(W) { return W.state === 'low' ? 'Below range: a nudge toward an easier day when there is no strap reading.' : W.state === 'high' ? 'Above range.' : W.state ? 'Inside range.' : ''; }
 function devicesSection() {
@@ -109,11 +118,19 @@ function devicesSection() {
       <tr><td>Workouts</td><td>${C.ex.n}</td><td>${fmtA(C.ex, 3)}</td><td>${lim(C.ex)}</td></tr></table>
     ${para(used.join(' '))}${proto}`, { why: ['devices', 'How this works'] });
 }
+// One line under the heart rate: whether the early-illness pattern can be read yet, and what it found.
+function illLine() {
+  const I = illness();
+  const t = I.on ? `<b>Seen two nights in a row.</b> ${illReasons(I).map(esc).join('. ')}.`
+    : I.ready ? 'Not seen: resting heart rate and HRV were not both off your normal on the last two nights.'
+    : `Not read yet: ${esc(I.missing.join('; '))}.`;
+  return `<p class="sub illline">Early sign of illness: ${t} ${why('ill', 'How')}</p>`;
+}
 function vRecovery() {
   const H = hrProfile(), nav = subnav('recovery', [['rec', 'Recovery'], ['sleep', 'Sleep'], ['cardio', 'Cardio']]), on = SUB.recovery;
   const body = on === 'sleep' ? part(sleepSection) + part(nightSection)
     : on === 'cardio' ? part(cardioHeart) + part(devicesSection)
-    : `${part(recoveryHero)}${sec('Morning check', strapBlock('morning') + strapMsg(), { why: ['hrv', 'Why mornings'] })}${part(hrvSection)}${part(rhrSection)}`;
+    : `${part(recoveryHero)}${sec('Morning check', strapBlock('morning') + strapMsg(), { why: ['hrv', 'Why mornings'] })}${part(hrvSection)}${part(rhrSection)}${part(illLine)}`;
   return `${appbar('Heart', `Resting ${H.rest} · max ${H.max} bpm`, NATIVE ? syncPill() : '')}${nav}${body}`;
 }
 // Loaded: this file ran to the end.

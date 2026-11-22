@@ -178,6 +178,9 @@ a.ghost.link { color: var(--ink); }
 .callout > b { padding-right: 34px; font-size: 15.5px; }
 .callout .solid { justify-self: start; margin-top: 4px; }
 .callout.lite { box-shadow: var(--shadow), inset 3px 0 0 var(--bad); }
+.callout.ill { box-shadow: var(--shadow), var(--hi), inset 3px 0 0 var(--mid); }
+.illwhy { margin: 2px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--ink2); display: grid; gap: 3px; }
+.illline { margin: 4px 2px 14px; font-size: 13px; }
 .callout.lite2 { gap: 8px; } .callout.lite2 .ghost { justify-self: start; margin: 0; }
 .banner { display: block; padding: 10px 14px; border-radius: var(--r1); background: color-mix(in srgb, var(--bad) 12%, var(--bg2)); color: var(--ink); }
 .banner .link { margin-left: 6px; }
@@ -985,6 +988,10 @@ canvas.bx.sq { aspect-ratio: 1; height: auto; background: var(--bg2); border-rad
 .ckbanner .grow { display: flex; flex-direction: column; gap: 2px; }
 .ckbanner .ckdot { margin-top: 0; }
 .stats.ckstats b { font-size: 24px; }
+.ckitems.errs { margin-left: 0; }
+.ckitems.errs .grow { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.ckitems.errs b { font-weight: 550; }
+.ckitems.errs .rep { color: var(--soft); font-weight: 400; }
 .setpage .block:first-child { margin-top: 4px; }
 .cutsum { margin: 10px 0 12px; }
 
@@ -1030,6 +1037,7 @@ a.ghost.link { background: var(--bg3); color: var(--ink); padding: 0 18px; }
 .card, .block, .group, .callout, .ckbanner, .td { background: var(--surf); box-shadow: var(--drop), var(--rim); }
 .callout { box-shadow: var(--drop), var(--rim); }
 .callout.lite { box-shadow: var(--drop), var(--rim), inset 3px 0 0 var(--bad); }
+.callout.ill { box-shadow: var(--drop), var(--rim), inset 3px 0 0 var(--mid); }
 .block .block, .card .block, .sheet .block { background: none; box-shadow: none; }
 .card.flat { background: var(--bg3); box-shadow: none; }
 .card > *, .fsum > *, .trio > * { position: relative; }
