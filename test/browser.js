@@ -425,6 +425,16 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await page.tap(`#rows li[data-id="${wid}"] .grow`); await page.waitForTimeout(300);
     const w = await page.evaluate(id => (S.food[todayKey()] || []).find(x => x.id === id), wid);
     assert.ok(w && w.k > 0 && w.c != null && w.src === 'on', JSON.stringify(w));
+    // Indian recipes from INDB come up under their own heading, first, and log as one serving with its numbers.
+    await page.fill('#q', 'masoor'); await page.waitForTimeout(500);
+    const heads = await page.evaluate(() => [...document.querySelectorAll('#rows .subhead')].map(e => e.textContent.trim()));
+    assert.match(heads[0] || '', /^Indian recipes · INDB$/);
+    const iid = await page.evaluate(() => document.querySelector('#rows li[data-id^="i"]')?.dataset.id);
+    assert.ok(/^i(ASC|BFP|OSR)\d{3}$/.test(iid || ''), `an INDB recipe: ${iid}`);
+    await page.tap(`#rows li[data-id="${iid}"] .grow`); await page.waitForTimeout(300);
+    const r = await page.evaluate(id => (S.food[todayKey()] || []).find(x => x.id === id), iid);
+    assert.ok(r && r.k > 0 && r.p > 0 && r.c != null && r.ft != null && r.g >= 10, JSON.stringify(r));
+    assert.ok(await page.evaluate(id => food(id)?.src === 'indb', iid), 'it is found again by its id after logging');
     await go('today');
   });
   await test('a tab opens at the part its link names', async () => {

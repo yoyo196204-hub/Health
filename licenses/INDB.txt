@@ -1,0 +1,18 @@
+Indian Nutrient Databank (INDB)
+
+indb.js holds Indian recipes from the Indian Nutrient Databank, used with attribution:
+
+  Vijayakumar A, Jaacks LM, et al. Development of an Indian Food Composition Database (Indian Nutrient Databank,
+  INDB). Current Developments in Nutrition, 2024. https://doi.org/10.1016/j.cdnut.2024.103790
+  Data and code: https://github.com/lindsayjaacks/Indian-Nutrient-Databank-INDB-
+
+The authors publish the data openly; the repository states no licence. INDB's values are computed from ICMR-NIN's
+Indian Food Composition Tables 2017 and Nutritive Value of Indian Foods 2004, the UK McCance and Widdowson's
+composition of foods integrated dataset, and USDA FoodData Central, with USDA nutrient retention factors. Recipes
+come from The Art & Science of Cooking (Khanna et al., 2007), Basic Food Preparation (Raina et al., 2011) and
+recipe websites.
+
+What was changed for this app (test/build-indb.py): per 100 g energy, protein, carbohydrate, fat, fibre and free
+sugars only; each recipe's own serving where it is one portion (10 to 500 g, not a jar); rows whose energy disagrees
+with their own macros by over 30% removed; recipes over 35 g fat per 100 g removed (deep-frying oil counted as eaten),
+except dressings.

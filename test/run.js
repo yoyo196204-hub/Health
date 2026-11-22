@@ -1158,6 +1158,27 @@ test('whole foods from OpenNutrition: every one traced to a food table, and its 
   assert.deepStrictEqual(bad.slice(0, 5), []);
   assert.ok(L.length > 3000, `${L.length} foods`);
 });
+test('Indian recipes from INDB: each with a serving, energy that agrees with its macros, and no frying oil counted as eaten', () => {
+  const ctx = { self: {} }; ctx.self = ctx; vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(path.join(root, 'indb.js'), 'utf8'), ctx);
+  const L = ctx.INDBD.split('\n'), bad = [];
+  for (const line of L) {
+    const [id, n, u, g, k, p, c, ft, fb] = line.split('|').map((v, i) => (i > 2 && v !== '' ? +v : v));
+    if (!/^(ASC|BFP|OSR)\d{3}$/.test(id) || !n || !u || !(g >= 10 && g <= 500)) bad.push(line);
+    if (k > 30 && Math.abs(4 * p + 4 * c + 9 * ft + 2 * (fb || 0) - k) / k > 0.3) bad.push(`${n}: ${k} kcal`);
+    if (ft > 35 && !/mayonnaise|dressing|tartare/i.test(n)) bad.push(`${n}: ${ft} g fat`);
+  }
+  assert.deepStrictEqual(bad.slice(0, 5), []);
+  assert.ok(L.length > 800, `${L.length} recipes`);
+  assert.ok(L.some(l => /^ASC144\|Idli\|1 idli \(25 g\)/.test(l)), 'an idli is one idli');
+  assert.ok(!L.some(l => /\|Poori\|/.test(l)), 'a poori with its whole kadai of oil is left out');
+});
+test('every file the app loads later is in the version stamp, so none can be served stale', () => {
+  const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+  for (const f of ['products.js', 'whole.js', 'indb.js']) assert.ok(sw.includes(`'${f}'`), f);
+  const { stamp } = require('./stamp.js'), before = stamp(), p = path.join(root, 'indb.js'), t = fs.readFileSync(p);
+  try { fs.appendFileSync(p, '\n'); assert.notStrictEqual(stamp(), before, 'a change to indb.js changes the stamp'); } finally { fs.writeFileSync(p, t); }
+});
 test('a script that fails to load is caught before the app starts', () => {
   const t = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
   assert.ok(t.indexOf('(function boot()') >= 0 && t.indexOf('(function boot()') < t.indexOf('let S = load()'));

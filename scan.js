@@ -81,17 +81,19 @@ function lookupCode(code) {
 let WHOLE = null;
 function wholeLoad() {
   if (WHOLE) return Promise.resolve(WHOLE);
-  return wholeLoad.p ||= loadScript('whole.js').then(() => {
-    const map = new Map(), rows = [];
-    for (const line of (self.ONDB || '').split('\n')) { const id = line.slice(0, line.indexOf('|')); map.set(id, line); rows.push([fnorm(line.split('|', 2)[1]), id]); }
-    self.ONDB = '';
-    WHOLE = { map, rows };
+  // Indian recipes from INDB come with it, in their own list, searched first.
+  return wholeLoad.p ||= Promise.all([loadScript('whole.js'), loadScript('indb.js')]).then(() => {
+    const read = s => { const map = new Map(), rows = []; for (const line of (s || '').split('\n')) { const id = line.slice(0, line.indexOf('|')); map.set(id, line); rows.push([fnorm(line.split('|', 2)[1]), id]); } return { map, rows }; };
+    WHOLE = read(self.ONDB); WHOLE.indb = read(self.INDBD);
+    self.ONDB = ''; self.INDBD = '';
     if (overlay?.type === 'add' && query) refreshAdd();
     return WHOLE;
   });
 }
 function wholeFood(id) {
-  if (!WHOLE || !/^n[A-Za-z0-9]{6,20}$/.test(id || '')) return null;
+  if (!WHOLE) return null;
+  if (/^i(ASC|BFP|OSR)\d{3}$/.test(id || '')) return indbFood(id);
+  if (!/^n[A-Za-z0-9]{6,20}$/.test(id || '')) return null;
   const line = WHOLE.map.get(id.slice(1));
   if (!line) return null;
   const [, n, u, sg, k, p, c, ft, fb, sug, tabs] = line.split('|'), x = s => (s === '' ? null : +s), g = +sg, f = g / 100;
@@ -100,15 +102,24 @@ function wholeFood(id) {
   if (x(c) != null && x(ft) != null) Object.assign(food, { c: r1(x(c) * f), ft: r1(x(ft) * f) });
   return food;
 }
+// A recipe from the Indian Nutrient Databank, as a food: its own serving, or 100 g.
+function indbFood(id) {
+  const line = WHOLE?.indb.map.get(id.slice(1));
+  if (!line) return null;
+  const [, n, u, sg, k, p, c, ft, fb, sug] = line.split('|'), x = s => (s === '' ? null : +s), g = +sg, f = g / 100;
+  return { id, n, u, g, k: Math.round(x(k) * f * 10) / 10, p: r1(x(p) * f), c: r1(x(c) * f), ft: r1(x(ft) * f), fb: r1((x(fb) || 0) * f), cat: 'whole', src: 'indb',
+    per100: { k: x(k), p: x(p), c: x(c), ft: x(ft), fb: x(fb), sug: x(sug) }, unit: 'g' };
+}
 // Every word in the name; a name that starts with the first word comes first, then shorter names.
-function wholeSearch(q, n = 8) {
-  if (!WHOLE) return [];
+function findIn(rows, q, n) {
   const words = fnorm(q).split(' ').filter(w => w.length > 1);
   if (!words.length || words.join('').length < 3) return [];
   const hits = [];
-  for (const [hay, id] of WHOLE.rows) if (words.every(w => hay.includes(w))) hits.push([(hay.startsWith(words[0]) ? 0 : 1) + hay.length / 200, id]);
-  return hits.sort((a, b) => a[0] - b[0]).slice(0, n).map(h => wholeFood('n' + h[1])).filter(Boolean);
+  for (const [hay, id] of rows) if (words.every(w => hay.includes(w))) hits.push([(hay.startsWith(words[0]) ? 0 : 1) + hay.length / 200, id]);
+  return hits.sort((a, b) => a[0] - b[0]).slice(0, n).map(h => h[1]);
 }
+function wholeSearch(q, n = 8) { return WHOLE ? findIn(WHOLE.rows, q, n).map(id => wholeFood('n' + id)).filter(Boolean) : []; }
+function indbSearch(q, n = 8) { return WHOLE ? findIn(WHOLE.indb.rows, q, n).map(id => indbFood('i' + id)).filter(Boolean) : []; }
 
 // ---------- a typed barcode ----------
 // No camera: typing the 13 digits under the bars is as quick, needs no permission and costs nothing while you do it.
