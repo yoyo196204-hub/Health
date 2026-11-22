@@ -107,6 +107,7 @@ function render() {
     screenKey = key;
   } catch (err) {
     console.error(err);
+    logError(err);
     screenKey = '';
     $('#sheet').innerHTML = '';
     $('#view').innerHTML = `${masthead('This screen failed', 'Your data is untouched')}${para(esc(err.message))}
@@ -403,7 +404,7 @@ applyTheme();
 if (backfillMacros()) save();
 dailyBackup();
 navigator.storage?.persist?.().catch(() => {});
-if (NATIVE) { document.documentElement.classList.add('native'); hcCheck(); backupInfo(); autoBackup(); ogInfo(); ogAuto(); remindStatus(); remindPlan(); strapAuto(); }
+if (NATIVE) { document.documentElement.classList.add('native'); crashIn(); hcCheck(); backupInfo(); autoBackup(); ogInfo(); ogAuto(); remindStatus(); remindPlan(); strapAuto(); }
 if (recovered === 'mirror') save();
 route();
 fresh('fwd');

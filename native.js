@@ -3,10 +3,17 @@
 // Health Connect, Bluetooth and file pickers are used directly. In Chrome it is absent and web fallbacks run.
 const NATIVE = window.HealthNative || null;
 const NEV = {};
-window.__fromNative = (ev, data) => { try { NEV[ev]?.(data); } catch (e) { console.error(e); } };
-function nat(method, ...args) { try { return NATIVE?.[method]?.(...args) ?? null; } catch (e) { console.error(e); return null; } }
+window.__fromNative = (ev, data) => { try { NEV[ev]?.(data); } catch (e) { console.error(e); logError(e); } };
+function nat(method, ...args) { try { return NATIVE?.[method]?.(...args) ?? null; } catch (e) { console.error(e); logError(e); return null; } }
 function parse(s) { try { return JSON.parse(s); } catch (e) { return null; } }
 const APP = NATIVE ? parse(nat('info')) || {} : null;
+// A crash in the app's Kotlin code during the last run goes into the error log (errlog.js).
+function crashIn() {
+  const t = nat('crashTake');
+  if (!t) return;
+  const [ms, at, ...m] = String(t).split('\n');
+  logError(`App closed by a crash: ${m.join(' ')}`, { at, t: +ms || Date.now(), s: 'native' });
+}
 const HERE = location.origin + location.pathname.replace(/[^/]*$/, '');
 // Every build is published, signed with the app's permanent key, on the repository's Releases page.
 const APK = 'https://github.com/yoyo196204-hub/Health/releases/latest/download/health.apk';

@@ -131,6 +131,27 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     assert.ok(await page.evaluate(() => !!document.querySelector('.ckbanner.bad')), 'Review says something does not add up');
     await page.evaluate(() => { S.food[todayKey()] = S.food[todayKey()].filter(e => e.id !== 'qt'); save(); });
   });
+  await test('error log: an error anywhere is kept with its place, screen and version, shown in Data checks, and copied', async () => {
+    await go('food');
+    await page.evaluate(() => {
+      const err = new Error('Planted failure');
+      dispatchEvent(new ErrorEvent('error', { message: err.message, filename: location.origin + '/view-food.js?v=' + BUILD, lineno: 42, error: err }));
+      part(() => { throw new Error('A part that fails'); });
+    });
+    await go('set-checks');
+    const r = await page.evaluate(() => [...document.querySelectorAll('.errs li')].map(li => [...li.querySelectorAll('b, .sub')].map(x => x.textContent.trim()).join(' | ')));
+    assert.strictEqual(r.length, 2, JSON.stringify(r));
+    assert.ok(/A part that fails/.test(r[0]) && /^Planted failure \| view-food\.js:42 · food · just now · /.test(r[1]), JSON.stringify(r));
+    assert.ok(r[1].endsWith(await page.evaluate(() => BUILD)));
+    await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(url).origin });
+    await page.tap('[data-act="errcopy"]'); await page.waitForTimeout(200);
+    const clip = await page.evaluate(() => navigator.clipboard.readText());
+    assert.ok(/\| food \| view-food\.js:42 \| Planted failure$/.test(clip.split('\n')[1]), clip);
+    await page.evaluate(() => scrollTo(0, 1e6)); await shot('errors');
+    await page.tap('[data-act="errclear"]'); await page.waitForTimeout(300);
+    assert.ok(/None recorded/.test(await page.textContent('#view')));
+    await go('today');
+  });
   await test('wear time: short days are left out of the long game and said so, and the check lists them', async () => {
     const before = await page.evaluate(() => {
       const full = Array(288).fill(62), short = Array(288).fill(0).map((_, i) => i >= 96 && i < 168 ? 70 : 0), old = { hrd: S.hrd, steps: S.steps };
@@ -542,7 +563,10 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await page.evaluate(() => closePop()); await page.waitForTimeout(400);
     assert.ok(!bad.length, bad.join(' | '));
   });
-  await test('no errors were thrown on any screen', async () => assert.deepStrictEqual(errors, []));
+  await test('no errors were thrown on any screen, and none were caught and logged', async () => {
+    assert.deepStrictEqual(errors, []);
+    assert.deepStrictEqual(await page.evaluate(() => errList().map(e => `${e.at} ${e.m}`)), []);
+  });
 
   console.log(`\n${passed} passed, ${failed} failed`);
   await browser.close(); srv.close();

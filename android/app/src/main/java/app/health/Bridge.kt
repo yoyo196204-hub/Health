@@ -17,6 +17,13 @@ class Bridge(private val a: MainActivity) {
         .put("ble", a.packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE))
         .toString()
 
+    // The error log: a crash from the last run, once, and Copy
+    @JavascriptInterface fun crashTake(): String? = Crash.take(a)
+    @JavascriptInterface fun copy(text: String) = a.main.post {
+        val cm = a.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("Health errors", text))
+    }
+
     // Health Connect
     @JavascriptInterface fun hcStatus() = a.main.post { a.health.status() }
     @JavascriptInterface fun hcRequest() = a.main.post { a.health.request() }

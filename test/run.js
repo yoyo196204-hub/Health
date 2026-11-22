@@ -14,7 +14,7 @@ function sandbox() {
   };
   ctx.self = ctx;
   vm.createContext(ctx);
-  for (const f of ['lib.js', 'hrv.js', 'data.js', 'exercises.js', 'opengym-ids.js', 'body-data.js', 'store.js', 'model.js', 'energy.js', 'insights.js', 'train.js', 'markers.js'])
+  for (const f of ['lib.js', 'errlog.js', 'hrv.js', 'data.js', 'exercises.js', 'opengym-ids.js', 'body-data.js', 'store.js', 'model.js', 'energy.js', 'insights.js', 'train.js', 'markers.js'])
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
   // What native.js would define outside the app, then the openGym link, which uses it.
   ctx.window = ctx; ctx.location = { origin: 'https://x', pathname: '/' };
@@ -1314,6 +1314,45 @@ test('every file the app loads later is in the version stamp, so none can be ser
 test('a script that fails to load is caught before the app starts', () => {
   const t = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
   assert.ok(t.indexOf('(function boot()') >= 0 && t.indexOf('(function boot()') < t.indexOf('let S = load()'));
+});
+
+test('error log: message, file:line, screen, time and version; the last 50 kept, a repeat counted, nothing else touched', c => {
+  run(c, "var tab = 'food', overlay = null, pop = null, BUILD = 'abc123'");
+  const data = run(c, 'localStorage.getItem(KEY)');
+  run(c, "logError({ message: 'x is undefined', stack: 'TypeError: x is undefined\\n    at vFood (https://h/view-food.js?v=abc123:42:7)\\n    at render (https://h/app.js?v=abc123:100:3)' })");
+  let L = run(c, 'errList()');
+  assert.strictEqual(L.length, 1);
+  assert.deepStrictEqual([L[0].m, L[0].at, L[0].s, L[0].v], ['x is undefined', 'view-food.js:42', 'food', 'abc123']);
+  assert.ok(Math.abs(L[0].t - Date.now()) < 5000);
+  // An ErrorEvent's own file and line win over the stack; the same error straight after is counted, not repeated.
+  run(c, "logError('boom', { file: 'https://h/model.js?v=abc123', line: 7 }); logError('boom', { file: 'https://h/model.js?v=abc123', line: 7 })");
+  L = run(c, 'errList()');
+  assert.deepStrictEqual([L.length, L[0].at, L[0].n], [2, 'model.js:7', 2]);
+  run(c, "overlay = { type: 'set', key: 'checks' }; for (let i = 0; i < 60; i++) logError('e' + i)");
+  L = run(c, 'errList()');
+  assert.strictEqual(L.length, 50);
+  assert.deepStrictEqual([L[0].m, L[0].s, L[49].m], ['e59', 'set-checks', 'e10']);
+  // Copy gives one line an error, newest first; a broken log reads as empty; the user's data is a different key.
+  const text = run(c, 'errText()').split('\n');
+  assert.strictEqual(text.length, 50);
+  assert.ok(/\| abc123 \| set-checks \| \? \| e59$/.test(text[0]), text[0]);
+  assert.strictEqual(run(c, 'localStorage.getItem(KEY)'), data);
+  run(c, "localStorage.setItem(ERRKEY, '{oops')");
+  assert.deepStrictEqual(run(c, 'errList()'), []);
+  run(c, "logError(undefined); errClear()");
+  assert.deepStrictEqual(run(c, 'errList()'), []);
+  // A Kotlin crash: its file:line kept as sent.
+  run(c, "logError('App closed by a crash: IllegalStateException', { at: 'Strap.kt:88', s: 'native' })");
+  assert.deepStrictEqual(run(c, '[errList()[0].at, errList()[0].s]'), ['Strap.kt:88', 'native']);
+});
+test('error log: caught failures in a screen part and in a native event are logged, and it loads before every other script', () => {
+  const ui = fs.readFileSync(path.join(root, 'ui.js'), 'utf8'), nat = fs.readFileSync(path.join(root, 'native.js'), 'utf8'), app = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+  assert.ok(/function part\([^]*?logError\(e\)/.test(ui.split('\n').find(l => l.startsWith('function part('))));
+  assert.ok(/__fromNative[^\n]*logError\(e\)/.test(nat) && /function nat\([^\n]*logError\(e\)/.test(nat));
+  assert.ok(/catch \(err\) \{\s*console\.error\(err\);\s*logError\(err\)/.test(app));
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8'), order = [...html.matchAll(/<script src="([a-z0-9-]+\.js)/g)].map(m => m[1]);
+  assert.deepStrictEqual(order.slice(0, 2), ['lib.js', 'errlog.js']);
+  assert.ok(fs.readFileSync(path.join(root, 'sw.js'), 'utf8').includes("'errlog.js'"));
 });
 
 (async () => {

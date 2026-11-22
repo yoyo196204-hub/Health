@@ -201,11 +201,28 @@ function vChecks() {
     ${groups.map(g => sec(g, `<ul class="checks">${C.filter(c => c.group === g).sort((a, b) => order[a.status] - order[b.status]).map(c => `<li class="ck ${c.status}">
       <details ${c.status === 'bad' ? 'open' : ''}><summary><i class="ckdot" aria-hidden="true"></i><span class="grow"><b>${c.title}</b><span class="sub">${c.result}</span></span><span class="ckw">${CHECKW[c.status]}</span></summary>
       ${c.items.length ? `<ul class="ckitems">${c.items.map(item).join('')}${c.more ? `<li class="sub">and ${c.more} more</li>` : ''}</ul>` : ''}
-      ${c.why ? `<p class="sub small">${c.why}</p>` : ''}</details></li>`).join('')}</ul>`)).join('')}`;
+      ${c.why ? `<p class="sub small">${c.why}</p>` : ''}</details></li>`).join('')}</ul>`)).join('')}
+    ${vErrors()}`;
+}
+// The error log (errlog.js): what went wrong in the app itself, newest first. Copy puts it on the clipboard as text;
+// nothing is sent anywhere.
+function vErrors() {
+  const L = errList();
+  return sec('Errors on this phone', !L.length ? para('None recorded. If something goes wrong, it is kept here (the last 50) for you to copy.') :
+    `${para(`The last ${plural(L.length, 'error')}, kept only on this phone.`)}
+    <ul class="ckitems errs">${L.map(e => `<li><span class="grow"><b>${esc(e.m)}${e.n > 1 ? ` <span class="rep">×${e.n}</span>` : ''}</b><span class="sub">${esc(e.at || 'place unknown')} · ${esc(e.s)} · ${ago(e.t)} · ${esc(e.v)}</span></span></li>`).join('')}</ul>`,
+    { right: L.length ? '<button class="mini" data-act="errcopy">Copy</button><button class="mini" data-act="errclear">Clear</button>' : '' });
+}
+function errCopy() {
+  const text = errText();
+  if (NATIVE) { nat('copy', text); return toast('Copied'); }
+  (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(() => toast('Copied'), () => toast('Could not copy here'));
 }
 SETPAGES.checks = ['Data checks', vChecks];
 function checkAct(a, el) {
   if (a === 'checkday') { const k = el.dataset.k; if (!DATE.test(k)) return true; day = k; location.hash = 'today'; return true; }
+  if (a === 'errcopy') { errCopy(); return true; }
+  if (a === 'errclear') { errClear(); render(); return true; }
   if (a === 'checkrec') { if (DATE.test(el.dataset.k) && S[el.dataset.s]) openPop({ kind: 'recedit', s: el.dataset.s, k: el.dataset.k }); return true; }
   return false;
 }

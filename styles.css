@@ -985,6 +985,10 @@ canvas.bx.sq { aspect-ratio: 1; height: auto; background: var(--bg2); border-rad
 .ckbanner .grow { display: flex; flex-direction: column; gap: 2px; }
 .ckbanner .ckdot { margin-top: 0; }
 .stats.ckstats b { font-size: 24px; }
+.ckitems.errs { margin-left: 0; }
+.ckitems.errs .grow { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.ckitems.errs b { font-weight: 550; }
+.ckitems.errs .rep { color: var(--soft); font-weight: 400; }
 .setpage .block:first-child { margin-top: 4px; }
 .cutsum { margin: 10px 0 12px; }
 

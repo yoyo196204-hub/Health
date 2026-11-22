@@ -71,6 +71,7 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Crash.install(this)
         health = HealthReader(this); strap = Strap(this); files = Files(this); feel = Feel(this); og = OpenGym(this)
         Remind.channel(this)
 
