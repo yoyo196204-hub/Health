@@ -183,6 +183,10 @@ between tabs reuses what was already worked out from the data; anything that cha
 - **Sleep regularity**: the Sleep Regularity Index (Phillips 2017), minute by minute from each night's onset and wake
   time over consecutive nights: the chance of being in the same state 24 hours apart, from −100 to 100. Shown against the
   UK Biobank median of 81, where regularity predicted mortality more strongly than sleep length (Windred 2024).
+- **Sleep stages**: watches measure total sleep and its timing reasonably, and deep, light and REM only moderately
+  (de Zambotti 2019; Chinoy 2021). Every sleep conclusion, link and recovery input rests on total sleep, its timing
+  and regularity, and the heart rate asleep; stages are drawn as the watch scored them and never compared or judged.
+  A test reshuffles every night's stages and checks that no conclusion moves.
 - **What moves what**: each pair (sleep and morning HRV, bedtime and HRV, hard sets and next-morning HRV, sleep and the
   calories eaten, steps and appetite, calories and carbs and the next morning's scale, the day's food and heart rate
   asleep, the last meal's time and heart rate asleep, steps and sleep) is read as a single-person study: each series as

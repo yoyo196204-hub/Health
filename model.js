@@ -272,7 +272,8 @@ function readiness(k = todayKey()) {
     if (sl != null && sl < 6) why.push([1, `${r1(sl)} h of sleep last night`, 'sleep']);
     else { const n3 = range(3, k).map(sleepOn).filter(v => v != null); if (n3.length === 3 && mean(n3) < 6.5) why.push([1, `${r1(mean(n3))} h of sleep a night over the last three`, 'sleep']); }
     const sx = S.sleepx[k], sh = sleepStats(28, shift(k, -1));
-    if (sx?.hr && sh.hr && sx.hr - sh.hr >= 4) why.push([1, `Sleeping heart rate ${Math.round(sx.hr)}, ${Math.round(sx.hr - sh.hr)} above your 4-week average`, 'rhr']);
+    const shr = sleepHrOn(k);
+    if (shr && sh.hr && shr - sh.hr >= 4) why.push([1, `Sleeping heart rate ${Math.round(shr)}, ${Math.round(shr - sh.hr)} above your 4-week average`, 'rhr']);
     // The watch overnight: only when the strap has no verdict of its own this week, and never more than a nudge.
     const WH = nightly('hv', k, true), BR = nightly('br', k);
     if (!V.state && WH.state === 'low') why.push([1, `The watch's overnight HRV, 7-day average ${Math.round(WH.roll)} ms, is below its own range of ${Math.round(WH.lo)}–${Math.round(WH.hi)}`, 'night']);
@@ -345,6 +346,8 @@ function nightWorn(k) {
 }
 // The night's sleep for any conclusion: none from a night the watch was off for an hour or more. Typed sleep stands.
 function sleepOn(k) { const v = S.sleep[k]; return v == null ? null : S.manual.sleep[k] || nightWorn(k) !== false ? v : null; }
+// Heart rate asleep, only from a night the watch was on through.
+function sleepHrOn(k) { return nightWorn(k) === false ? null : S.sleepx[k]?.hr ?? null; }
 // Days and nights left out for wear in a run of days, in words: "3 days left out: watch worn under 10 h".
 function wearNote(days, nights = false) {
   const d = days.filter(k => S.steps[k] != null && stepsOn(k) == null).length, n = nights ? days.filter(k => S.sleep[k] != null && sleepOn(k) == null).length : 0;
@@ -358,18 +361,18 @@ function midpoint(k) {
   if (!x || x.on == null) return null;
   return x.on + (x.bed || x.d + x.l + x.r + x.w || (S.sleep[k] || 0) * 60) / 2;
 }
+// Every sleep conclusion rests on how long and when: total sleep and timing, which watches measure reasonably. Stages
+// (deep, light, REM) agree with a sleep lab only moderately (de Zambotti 2019; Chinoy 2021), so nothing here reads them;
+// they are drawn on the screens as description only.
 function sleepStats(n = 14, end = todayKey()) {
   return cached(`L${n}${end}`, () => {
     const ks = range(n, end).filter(k => sleepOn(k) != null), X = ks.map(k => S.sleepx[k]).filter(Boolean);
     const mids = ks.map(midpoint).filter(v => v != null), ons = X.map(x => x.on).filter(v => v != null);
-    const effs = X.filter(x => x.bed || x.w).map(x => (x.d + x.l + x.r) / (x.bed || x.d + x.l + x.r + x.w) * 100).filter(v => v > 0 && v <= 100);
-    const staged = X.filter(x => x.d + x.r > 0), st = staged.reduce((a, x) => { a.d += x.d; a.l += x.l; a.r += x.r; return a; }, { d: 0, l: 0, r: 0 });
-    const tot = st.d + st.l + st.r, hrs = ks.map(k => S.sleepx[k]?.hr).filter(Boolean);
+    const hrs = ks.map(k => sleepHrOn(k)).filter(Boolean);
     return {
       n: ks.length, avg: ks.length ? mean(ks.map(sleepOn)) : null, out: range(n, end).filter(k => S.sleep[k] != null && sleepOn(k) == null).length,
-      eff: effs.length >= 3 ? mean(effs) : null, mid: mids.length >= 3 ? mean(mids) : null,
+      mid: mids.length >= 3 ? mean(mids) : null,
       midSd: mids.length >= 5 ? sd(mids) : null, onSd: ons.length >= 5 ? sd(ons) : null,
-      stages: staged.length >= 3 ? { d: st.d / tot * 100, l: st.l / tot * 100, r: st.r / tot * 100, n: staged.length } : null,
       hr: hrs.length >= 3 ? mean(hrs) : null,
     };
   });

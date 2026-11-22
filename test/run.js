@@ -1228,6 +1228,21 @@ test('wear time: the burn model and the long game leave out short days, and a sy
   run(c, `mergeSync({ days: { '${old}': { st: 4000, hd: ${JSON.stringify(hrDay(8, 14))} } } })`);
   assert.deepStrictEqual(run(c, `[S.hrd['${old}'], S.wx['${old}'].wm, validDay('${old}'), stepsOn('${old}')]`), [null, 360, false, null]);
 });
+// ---------- sleep stages describe, never decide ----------
+test('sleep: every conclusion is the same whatever the watch called deep, light or REM', c => {
+  c.raw = seedV3(); run(c, 'S = sanitize(raw)');
+  // 40 nights with stages, at a varying length and time, with morning checks and food beside them.
+  for (let i = 0; i < 40; i++) {
+    const k = run(c, `shift(todayKey(), -${i})`), tot = 380 + (i * 37) % 120, on = -90 + (i * 23) % 80;
+    run(c, `S.sleepx['${k}'] = { d: ${Math.round(tot * 0.2)}, l: ${tot - Math.round(tot * 0.2) - Math.round(tot * 0.22)}, r: ${Math.round(tot * 0.22)}, w: 20, on: ${on}, off: ${on + tot + 20}, hr: ${52 + i % 5} }; S.sleep['${k}'] = ${Math.round(tot / 6) / 10};
+      S.hrv['${k}'] = { rmssd: ${40 + (i * 7) % 15}, hr: ${55 + i % 4}, t: Date.parse('${k}T07:00') }`);
+  }
+  const all = () => run(c, `memo.clear(), JSON.stringify([readiness(), recoveryScore(), sleepStats(14), sleepStats(28), sri(), socialJetlag(), markers(), allLinks(), headline()])`);
+  const before = all();
+  // The same nights, the stages shuffled: deep and REM swapped and halved into light.
+  run(c, `for (const x of Object.values(S.sleepx)) { const d = x.d, r = x.r; x.d = Math.round(r / 2); x.r = Math.round(d / 2); x.l += d + r - x.d - x.r; }`);
+  assert.strictEqual(all(), before);
+});
 // ---------- watch against strap, by effort ----------
 // Paired workouts: strap sessions with the watch's average over the same time. sw: [[watch, strap], ...].
 function pairUp(c, sw) {

@@ -80,8 +80,6 @@ function onsetDev(k) {
   const base = cached('ON' + k, () => range(28, shift(k, -1)).map(d => S.sleepx[d]?.on).filter(v => v != null));
   return base.length >= 7 ? Math.abs(on - median(base)) / 60 : null;
 }
-// Heart rate asleep, only from a night the watch was on through.
-const sleepHrOn = k => nightWorn(k) === false ? null : S.sleepx[k]?.hr ?? null;
 const LINKS = [
   { id: 'sl-hrv', dom: ['sleep', 'heart'], x: 'Sleep', y: 'morning HRV', per: 1, xu: 'hour of sleep', fx: sleepOn, fy: lnHrv, pct: true, exp: 1, ev: 'sleep',
     test: 'Go to bed 45 minutes earlier for a week and watch the morning checks.' },

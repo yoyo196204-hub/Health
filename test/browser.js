@@ -165,6 +165,17 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await shot('calibration');
     await page.evaluate(() => { Object.assign(S, window.__cal); save(); render(); });
   });
+  await test('a day in detail: stages are described, never judged against your usual', async () => {
+    await go('today');
+    const k = await page.evaluate(() => { const k = shift(todayKey(), -1); S.sleepx[k] = { d: 20, l: 300, r: 30, w: 15, on: -60, off: 305, hr: 55 }; S.sleep[k] = 5.8; save(); openPop({ kind: 'dayx', k }); return k; });
+    await page.waitForTimeout(600);
+    const rows = await page.evaluate(() => [...document.querySelectorAll('#sheet tr')].map(r => r.textContent));
+    const st = rows.filter(r => /^(Deep|REM) sleep/.test(r));
+    assert.strictEqual(st.length, 2, rows.join(' | '));
+    assert.ok(st.every(r => /the watch's estimate/.test(r) && !/usual|low|high|short|long/i.test(r.replace("the watch's estimate", ''))), st.join(' | '));
+    await shot('daydetail');
+    await page.evaluate(() => closePop()); await page.waitForTimeout(300);
+  });
   await test('recovery, training, review: the inputs behind the verdict, nights that end, short session list, honest links', async () => {
     await page.evaluate(() => { const k = shift(todayKey(), -1); S.sleepx[k] = { d: 60, l: 200, r: 60, w: 10, on: -60 }; S.sleep[k] = 5.5; save(); });
     const part = async (t, v) => { await page.evaluate(([t, v]) => { SUB[t] = v; renderView(); }, [t, v]); await page.waitForTimeout(300); };
