@@ -82,11 +82,20 @@ NEV['hc-data'] = P => {
     const f = cleanFresh(Object.assign({}, obj(P.fresh) || {}, { read: num(P.read, 1e12, 1e13) || Date.now(), err: Array.isArray(P.errors) ? P.errors : [] }));
     if (f) S.meta.fresh = f;
     save();
+    widgetPush();
   }
   renderSoft();
 };
 NEV.resume = () => { rollDay(); strapAuto(); if (!zeppBack()) autoSync(); autoBackup(); ogAuto(); renderSoft(); };
-NEV.pause = () => { remindPlan(); flushMirror(); };
+NEV.pause = () => { remindPlan(); flushMirror(); widgetPush(); };
+// The home-screen widget (TodayWidget.kt) shows today's three rings and the kcal left. The page hands it plain
+// values when the app goes to the background and after each sync; the widget does no sums of its own.
+function widgetPush() {
+  if (!NATIVE || typeof NATIVE.widget !== 'function') return;
+  // Figures remembered from before midnight must not reach the widget as today's.
+  if (typeof memoDay !== 'undefined' && memoDay !== todayKey()) memo.clear();
+  try { nat('widget', JSON.stringify(widgetData())); } catch (e) { logError(e); }
+}
 // ---------- how fresh the watch data really is ----------
 // The newest moment any record from the watch app was written into Health Connect. That, not when this app last
 // read, says whether the watch's data has come through yet.

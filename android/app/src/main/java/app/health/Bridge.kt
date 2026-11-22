@@ -24,6 +24,9 @@ class Bridge(private val a: MainActivity) {
         cm.setPrimaryClip(android.content.ClipData.newPlainText("Health errors", text))
     }
 
+    // The home-screen widget: today's figures, from the page
+    @JavascriptInterface fun widget(json: String) { TodayWidget.push(a, json) }
+
     // Health Connect
     @JavascriptInterface fun hcStatus() = a.main.post { a.health.status() }
     @JavascriptInterface fun hcRequest() = a.main.post { a.health.request() }

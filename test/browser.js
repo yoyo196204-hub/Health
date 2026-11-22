@@ -152,6 +152,15 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     assert.ok(/None recorded/.test(await page.textContent('#view')));
     await go('today');
   });
+  await test('widget: it gets exactly the numbers Today shows', async () => {
+    await go('today'); await page.waitForTimeout(300);
+    const r = await page.evaluate(() => {
+      const W = widgetData();
+      const tri = [...document.querySelectorAll('.trio .tri')].map(a => a.querySelector('.num, b')?.textContent.trim());
+      return { tri, w: [W.rec.v, W.fuel.v, W.sleep.v] };
+    });
+    assert.deepStrictEqual(r.tri, r.w, JSON.stringify(r));
+  });
   await test('wear time: short days are left out of the long game and said so, and the check lists them', async () => {
     const before = await page.evaluate(() => {
       const full = Array(288).fill(62), short = Array(288).fill(0).map((_, i) => i >= 96 && i < 168 ? 70 : 0), old = { hrd: S.hrd, steps: S.steps };

@@ -1355,6 +1355,32 @@ test('error log: caught failures in a screen part and in a native event are logg
   assert.ok(fs.readFileSync(path.join(root, 'sw.js'), 'utf8').includes("'errlog.js'"));
 });
 
+test('widget: the same three numbers as Today, as plain values, with kcal left or over and no night said as such', c => {
+  const k = run(c, 'todayKey()');
+  run(c, `S.food['${k}'] = [{ id: 'a', n: 'Rice', u: '1', k: 600, p: 12, m: 'lunch', q: 1 }]; for (let i = 1; i <= 28; i++) S.sleep[shift('${k}', -i)] = 8; S.sleep['${k}'] = 7.25; memo.clear()`);
+  const W = run(c, 'widgetData()'), D = run(c, 'trioData()'), T = run(c, 'targets()');
+  assert.strictEqual(W.day, k);
+  assert.deepStrictEqual([D.fuel.eaten, D.fuel.target, D.fuel.left], [600, T.kcal, T.kcal - 600]);
+  assert.strictEqual(W.fuel.u, 'left'); assert.strictEqual(W.fuel.over, false);
+  assert.ok(Math.abs(W.fuel.f - 600 / T.kcal) < 1e-9);
+  assert.strictEqual(W.line, `${run(c, `fmt(${T.kcal - 600})`)} kcal left · 600 of ${run(c, `fmt(${T.kcal})`)}`);
+  assert.deepStrictEqual([W.sleep.v, W.sleep.u, W.sleep.l], ['7:15', 'hours', 'A little short']);
+  assert.ok(Math.abs(W.sleep.f - 7.25 / 8) < 1e-9);
+  assert.strictEqual(W.rec.z, D.rec.level);
+  assert.strictEqual(W.rec.v, D.rec.score != null ? String(D.rec.score) : '–');
+  // Over the target, and no night yet.
+  run(c, `S.food['${k}'][0].k = ${T.kcal + 250}; delete S.sleep['${k}']; memo.clear()`);
+  const O = run(c, 'widgetData()');
+  assert.deepStrictEqual([O.fuel.u, O.fuel.over, O.fuel.v, O.sleep.v, O.sleep.u, O.sleep.f], ['over', true, '250', '–', 'no night', 0]);
+  assert.ok(/^250 kcal over · /.test(O.line));
+  assert.ok(JSON.stringify(O).length < 4000, 'fits what the widget accepts');
+  // Handed over when the app goes to the background and after each sync.
+  const nat = fs.readFileSync(path.join(root, 'native.js'), 'utf8');
+  assert.ok(/NEV\.pause = \(\) => \{[^\n]*widgetPush\(\)/.test(nat));
+  assert.ok(/NEV\['hc-data'\][^]*?save\(\);\s*widgetPush\(\);/.test(nat));
+  assert.ok(fs.readFileSync(path.join(root, 'android/app/src/main/AndroidManifest.xml'), 'utf8').includes('android:name=".TodayWidget"'));
+});
+
 (async () => {
   for (const [name, fn] of later) {
     try { await fn(sandbox()); passed++; console.log('  ok  ', name); }

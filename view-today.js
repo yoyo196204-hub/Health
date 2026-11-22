@@ -69,19 +69,17 @@ function needsSyncLine() {
 }
 // The three numbers the day turns on: how recovered you are, what is left to eat, and how you slept.
 function trio() {
-  const k = todayKey(), RS = recoveryScore(k), T = targets(), t = totals(k), [zw, zc] = ZONE[RS.level];
-  const left = T.kcal - t.k, sl = S.sleep[k], usual = mean(range(28, shift(k, -1)).map(d => S.sleep[d]).filter(v => v != null)), need = clamp(usual ?? 7.5, 7, 9);
-  const rec = ring('t-rec', RS.score != null ? RS.score / 100 : 0, { c: zc, size: 104, stroke: 9, glow: RS.score != null,
-    inner: RS.score != null ? `<b class="num">${RS.score}</b><span>%</span>` : `<b>${DASH}</b><span>${RS.level === 'unknown' ? 'learning' : ''}</span>` });
-  const fuel = ring('t-fuel', t.k / T.kcal, { c: left < 0 ? 'var(--bad)' : 'var(--fuel)', size: 104, stroke: 9, glow: true, over: t.k > T.kcal,
+  const D = trioData(), [zw, zc] = ZONE[D.rec.level], { score } = D.rec, { eaten, target, left } = D.fuel, sl = D.sleep.h;
+  const rec = ring('t-rec', score != null ? score / 100 : 0, { c: zc, size: 104, stroke: 9, glow: score != null,
+    inner: score != null ? `<b class="num">${score}</b><span>%</span>` : `<b>${DASH}</b><span>${D.rec.level === 'unknown' ? 'learning' : ''}</span>` });
+  const fuel = ring('t-fuel', eaten / target, { c: left < 0 ? 'var(--bad)' : 'var(--fuel)', size: 104, stroke: 9, glow: true, over: eaten > target,
     inner: `<b class="num">${fmt(Math.abs(left))}</b><span>${left < 0 ? 'over' : 'left'}</span>` });
-  const slp = ring('t-sleep', sl != null ? sl / need : 0, { c: 'var(--sleep)', size: 104, stroke: 9, glow: sl != null,
+  const slp = ring('t-sleep', sl != null ? sl / D.sleep.need : 0, { c: 'var(--sleep)', size: 104, stroke: 9, glow: sl != null,
     inner: sl != null ? `<b class="num">${Math.floor(sl)}:${String(Math.round((sl % 1) * 60)).padStart(2, '0')}</b><span>hours</span>` : `<b>${DASH}</b><span>no night</span>` });
-  const sleepWord = sl == null ? 'Not synced' : sl >= need - 0.25 ? 'Enough' : sl >= need - 1 ? 'A little short' : 'Short';
   return `<section class="card trio" style="--tint:${zc}">
-    <a class="tri" href="#recovery-rec" style="--c:${zc}">${rec}<span class="tl">Recovery</span><span class="ts">${RS.score != null ? zw : RS.level === 'unknown' ? 'Calibrating' : zw}</span></a>
-    <a class="tri" href="#food" data-act="gotoday" style="--c:var(--fuel)">${fuel}<span class="tl">kcal</span><span class="ts" style="color:var(--soft)">${fmt(t.k)} of ${fmt(T.kcal)}</span></a>
-    <a class="tri" href="#recovery-sleep" style="--c:var(--sleep)">${slp}<span class="tl">Sleep</span><span class="ts">${sleepWord}</span></a></section>`;
+    <a class="tri" href="#recovery-rec" style="--c:${zc}">${rec}<span class="tl">Recovery</span><span class="ts">${zw}</span></a>
+    <a class="tri" href="#food" data-act="gotoday" style="--c:var(--fuel)">${fuel}<span class="tl">kcal</span><span class="ts" style="color:var(--soft)">${fmt(eaten)} of ${fmt(target)}</span></a>
+    <a class="tri" href="#recovery-sleep" style="--c:var(--sleep)">${slp}<span class="tl">Sleep</span><span class="ts">${D.sleep.word}</span></a></section>`;
 }
 // What is due today, each one tap from being done.
 function todoStrip() {
