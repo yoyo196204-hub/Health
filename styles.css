@@ -1094,7 +1094,7 @@ body { padding-bottom: calc(var(--tabh) + 28px + env(safe-area-inset-bottom)); }
 /* Training on Today: what is next, how hard, and two buttons. */
 .trnext { display: grid; gap: 1px; margin: 4px 0 0; }
 .trnext b { font: 650 18px/1.25 var(--sans); letter-spacing: -.015em; }
-.trcard .ease { margin: 8px 0 0; display: flex; align-items: center; }
+.trcard .ease { margin: 6px 0 0; display: flex; align-items: center; background: none; padding: 0; border-radius: 0; }
 .trcard .ease .dot { margin: 0 8px 0 0; width: 8px; height: 8px; }
 .rowb.duo2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
 .rowb.duo2 > * { margin: 0; min-height: 44px; }

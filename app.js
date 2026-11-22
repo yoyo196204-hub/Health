@@ -144,7 +144,13 @@ function route() {
   const was = overlay, wasTab = tab;
   let next = null, nextTab = tab;
   if (PAGES.includes(a)) next = { type: a, key: b };
-  else if (VIEWS[a]) nextTab = a;
+  else if (VIEWS[a]) {
+    nextTab = a;
+    // #recovery-sleep, #review-links…: a tab can be opened at one of its parts. A strap recording that is running
+    // brings up the part it lives in.
+    if (b && a in SUB) SUB[a] = b;
+    else if (a === 'recovery' && nextTab !== wasTab && HR.mode) SUB.recovery = HR.mode === 'morning' ? 'rec' : HR.mode === 'workout' || HR.mode === 'hrr' ? 'cardio' : SUB.recovery;
+  }
   if (next?.type === 'why' && was) next.under = was.type === 'why' ? was.under : was;
   if (next?.type === 'add') { offLoad().catch(() => {}); wholeLoad().catch(() => {}); }
   if (next?.type === 'add' && was?.type !== 'add') { query = ''; cat = addNext && addNext !== 'find' ? addNext : 'usual'; ADDORDER.meal = null; }

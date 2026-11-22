@@ -94,7 +94,7 @@ function weekCard(T) {
   const ws = weekStart(day), ks = range(7, shift(ws, 6)), vals = ks.map(k => totals(k).k), top = Math.max(T.kcal * 1.25, ...vals);
   const logged = ks.filter(k => S.food[k] && k <= todayKey()), done = ks.filter(k => S.food[k] && isComplete(k));
   const avg = done.length ? mean(done.map(k => totals(k).k)) : null, on = done.filter(k => Math.abs(totals(k).k - T.kcal) <= T.kcal * 0.1).length;
-  return `<section class="card">${cardHead('This week', 'cal', 'var(--fuel)', `<a class="more-link" href="#review">Trends ›</a>`)}
+  return `<section class="card">${cardHead('This week', 'cal', 'var(--fuel)', `<a class="more-link" href="#review-energy">Trends ›</a>`)}
     <div class="wkbars"><span class="tgt" style="bottom:${(T.kcal / top * 96 + 22).toFixed(1)}px" title="Target ${fmt(T.kcal)} kcal"></span>${ks.map((k, i) => `<button class="wb ${!vals[i] ? 'empty' : ''} ${k === day ? 'on' : ''}" data-act="gday" data-k="${k}" ${k > todayKey() ? 'disabled' : ''} style="--c:${dayColor(k, T)}"><i style="height:${Math.max(3, vals[i] / top * 96).toFixed(1)}px;animation-delay:${i * 40}ms"></i><span>${weekday(k)}</span></button>`).join('')}</div>
     ${stats([[avg != null ? fmt(avg) : DASH, 'kcal a day, complete days'], [`${on}<i>/ ${done.length}</i>`, 'within 10% of target'], [`${logged.length}<i>/ 7</i>`, 'days logged']])}</section>`;
 }

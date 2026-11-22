@@ -411,6 +411,56 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     assert.ok(w && w.k > 0 && w.c != null && w.src === 'on', JSON.stringify(w));
     await go('today');
   });
+  await test('a tab opens at the part its link names', async () => {
+    await go('recovery-sleep');
+    assert.deepStrictEqual(await page.evaluate(() => [tab, SUB.recovery, !!document.getElementById('rc-sleep'), document.querySelector('#tabs a.on')?.hash]), ['recovery', 'sleep', true, '#recovery']);
+    await go('review-links');
+    assert.deepStrictEqual(await page.evaluate(() => [tab, SUB.review, !!document.getElementById('in-links')]), ['review', 'links', true]);
+    await go('today');
+  });
+  // Nothing drawn on a screen may sit on top of text: no two runs of text overlap, and no icon, button, meter or
+  // input covers text it does not contain. Rings (text in the middle of a drawn circle) are what they are.
+  await test('no text is covered by other text or by anything drawn, on any main screen or the log sheet', async () => {
+    const audit = () => {
+      const out = [], scope = document.querySelector('#sheet .sheet') || document.getElementById('view');
+      const fixedUp = el => { for (let e = el; e && e !== document.body; e = e.parentElement) { const p = getComputedStyle(e).position; if (p === 'fixed' || p === 'sticky') return true; } return false; };
+      const inSheet = !!scope.closest('#sheet'), boxes = [], tw = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
+      while (tw.nextNode()) {
+        const t = tw.currentNode; if (!t.nodeValue.trim()) continue;
+        const el = t.parentElement, cs = getComputedStyle(el);
+        if (cs.visibility === 'hidden' || +cs.opacity === 0 || el.closest('details:not([open]) > :not(summary)') || (!inSheet && fixedUp(el))) continue;
+        let clip = null; for (let e = el; e && e !== scope; e = e.parentElement) if (getComputedStyle(e).overflowX !== 'visible' && !e.matches('.chips, .seg.scroll, .scrub, .scrub *')) { clip = e.getBoundingClientRect(); break; }
+        const r = document.createRange(); r.selectNodeContents(t);
+        for (const b0 of r.getClientRects()) {
+          const b = clip ? { l: Math.max(b0.left, clip.left), r: Math.min(b0.right, clip.right), t: Math.max(b0.top, clip.top), b: Math.min(b0.bottom, clip.bottom) } : { l: b0.left, r: b0.right, t: b0.top, b: b0.bottom };
+          if (b.r - b.l > 1 && b.b - b.t > 1) boxes.push({ el, b, s: t.nodeValue.trim().slice(0, 24) });
+        }
+      }
+      const hit = (a, b, mx, my) => Math.min(a.r, b.r) - Math.max(a.l, b.l) > mx && Math.min(a.b, b.b) - Math.max(a.t, b.t) > my;
+      for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) if (boxes[i].el !== boxes[j].el && hit(boxes[i].b, boxes[j].b, 2, 3)) out.push(`"${boxes[i].s}" × "${boxes[j].s}"`);
+      for (const o of scope.querySelectorAll('svg, button, input, .ico, .dot, .meter2, .chev, img')) {
+        if (o.closest('.ring, .dr, details:not([open]) > :not(summary)') || (!inSheet && fixedUp(o)) || getComputedStyle(o).display === 'none') continue;
+        const R = o.getBoundingClientRect(), ob = { l: R.left, r: R.right, t: R.top, b: R.bottom };
+        for (const x of boxes) if (!o.contains(x.el) && !x.el.contains(o) && hit(ob, x.b, 3, 4)) out.push(`${o.tagName.toLowerCase()}.${o.className.baseVal ?? o.className} over "${x.s}"`);
+      }
+      return out;
+    };
+    const bad = [];
+    for (const h of ['today', 'food', 'recovery-rec', 'recovery-sleep', 'recovery-cardio', 'review-energy', 'review-body', 'review-long', 'review-links', 'me', 'set-train']) {
+      await go(h); await page.evaluate(() => scrollTo(0, 0)); await page.waitForTimeout(200);
+      bad.push(...(await page.evaluate(audit)).map(x => `${h}: ${x}`));
+      // Scrolled to the end, the last thing on the page clears the tab bar, and the log button sits inside the bar.
+      const end = await page.evaluate(() => { scrollTo(0, 1e6); const v = document.getElementById('view').lastElementChild.getBoundingClientRect(), t = document.getElementById('tabs').getBoundingClientRect(), f = document.getElementById('fab').getBoundingClientRect();
+        if (getComputedStyle(document.getElementById('tabs')).display === 'none') return { last: 0, bar: 0, fab: true };
+        return { last: Math.round(v.bottom), bar: Math.round(t.top), fab: getComputedStyle(document.getElementById('fab')).display === 'none' || (f.top >= t.top - 1 && f.bottom <= t.bottom + 1) }; });
+      if (end.last > end.bar + 1) bad.push(`${h}: the page ends ${end.last - end.bar} px under the tab bar`);
+      if (!end.fab) bad.push(`${h}: the log button floats outside the tab bar`);
+    }
+    await go('today'); await page.evaluate(() => openPop({ kind: 'log' })); await page.waitForTimeout(700);
+    bad.push(...(await page.evaluate(audit)).map(x => `log sheet: ${x}`));
+    await page.evaluate(() => closePop()); await page.waitForTimeout(400);
+    assert.ok(!bad.length, bad.join(' | '));
+  });
   await test('no errors were thrown on any screen', async () => assert.deepStrictEqual(errors, []));
 
   console.log(`\n${passed} passed, ${failed} failed`);

@@ -42,7 +42,7 @@ function miniStages(sx) {
 function dueList() {
   const k = todayKey(), h = new Date().getHours(), out = [];
   const strap = S.meta.h9 || Object.keys(S.hrv).length;
-  if (strap && !S.hrv[k] && h >= 4 && h < 12) out.push({ id: 'hrv', t: 'Morning check', s: 'Two minutes lying down with the H9, before getting up. Your HRV range is built from these.', href: '#recovery' });
+  if (strap && !S.hrv[k] && h >= 4 && h < 12) out.push({ id: 'hrv', t: 'Morning check', s: 'Two minutes lying down with the H9, before getting up. Your HRV range is built from these.', href: '#recovery-rec' });
   // A scale that writes to Health Connect fills this in; ask only when nothing has come in today.
   if (S.weights[k] == null && h >= 5) out.push({ id: 'weight', t: 'Weigh in', s: 'After the toilet, before food or water: the same conditions each day are what make the trend honest.', field: 'weights' });
   const lastWaist = Object.keys(S.waist).sort().pop();
@@ -79,9 +79,9 @@ function trio() {
     inner: sl != null ? `<b class="num">${Math.floor(sl)}:${String(Math.round((sl % 1) * 60)).padStart(2, '0')}</b><span>hours</span>` : `<b>${DASH}</b><span>no night</span>` });
   const sleepWord = sl == null ? 'Not synced' : sl >= need - 0.25 ? 'Enough' : sl >= need - 1 ? 'A little short' : 'Short';
   return `<section class="card trio" style="--tint:${zc}">
-    <a class="tri" href="#recovery" style="--c:${zc}">${rec}<span class="tl">Recovery</span><span class="ts">${RS.score != null ? zw : RS.level === 'unknown' ? 'Calibrating' : zw}</span></a>
+    <a class="tri" href="#recovery-rec" style="--c:${zc}">${rec}<span class="tl">Recovery</span><span class="ts">${RS.score != null ? zw : RS.level === 'unknown' ? 'Calibrating' : zw}</span></a>
     <a class="tri" href="#food" data-act="gotoday" style="--c:var(--fuel)">${fuel}<span class="tl">kcal</span><span class="ts" style="color:var(--soft)">${fmt(t.k)} of ${fmt(T.kcal)}</span></a>
-    <a class="tri" href="#recovery" style="--c:var(--sleep)">${slp}<span class="tl">Sleep</span><span class="ts">${sleepWord}</span></a></section>`;
+    <a class="tri" href="#recovery-sleep" style="--c:var(--sleep)">${slp}<span class="tl">Sleep</span><span class="ts">${sleepWord}</span></a></section>`;
 }
 // What is due today, each one tap from being done.
 function todoStrip() {
@@ -141,7 +141,7 @@ function bodyMove() {
       <span class="eyebrow">Weight ${w != null ? '· today' : '· trend'}</span>
       <span class="kpi"><b class="num">${r1(w ?? M.W ?? T.wt)}<i>kg</i></b><span class="sub">${rate != null ? `${sign(rate, 2)} kg a week` : 'trend after a week'}</span></span>${spark}
       <span class="sub">${w == null ? 'Tap to weigh in' : `Trend ${r1(M.W ?? T.wt)} kg`}</span></button>
-    <a class="card tap" href="#review">
+    <a class="card tap" href="#review-long">
       <span class="eyebrow">Move</span>
       <div class="dualrow">${ring('t-steps', st / T.stepGoal, { c: 'var(--move)', size: 58, stroke: 10, inner: `<b class="num">${Math.round(Math.min(999, st / T.stepGoal * 100))}</b>` })}<span class="kpi"><b class="num" style="font-size:22px">${fmt(st)}</b><span class="sub">of ${fmt(T.stepGoal)}</span></span></div>
       <span class="sub">${Math.round(A.who)} of 150 active min this week</span></a></div>`;
@@ -188,7 +188,7 @@ function vLog() {
     <div class="eyebrow qlabel">Body</div>
     <div class="qgrid">${tile('body', 'var(--body)', 'Weight', S.weights[todayKey()] != null ? `${kg(S.weights[todayKey()])} kg` : '', 'data-act="weigh" data-s="weights"')}${tile('tape', 'var(--body)', 'Waist', '', 'data-act="weigh" data-s="waist"')}${tile('move', 'var(--move)', 'Cardio', '', 'data-act="cardioadd"')}${tile('sleep', 'var(--sleep)', 'Your day', '', `data-act="dayx" data-k="${todayKey()}"`)}</div>
     <div class="eyebrow qlabel">Heart, with the strap</div>
-    <div class="qgrid">${tile('heart', 'var(--heart)', strap ? 'Morning check' : 'Strap', S.hrv[todayKey()] ? 'done' : '', 'href="#recovery" data-act="popnav"')}${tile('breathe', 'var(--pro)', 'Breathe', '', 'href="#lab-breathe" data-act="popnav"')}${tile('pulse', 'var(--heart)', 'Spot check', '', 'href="#lab-spot" data-act="popnav"')}${tile('insight', 'var(--heart)', 'Live', '', 'href="#lab-live" data-act="popnav"')}${tile('pulse', 'var(--pro)', 'Resonance', 'finder', 'href="#lab-rf" data-act="popnav"')}${tile('body', 'var(--heart)', 'Stand-up', 'test', 'href="#lab-ortho" data-act="popnav"')}</div></aside>`;
+    <div class="qgrid">${tile('heart', 'var(--heart)', strap ? 'Morning check' : 'Strap', S.hrv[todayKey()] ? 'done' : '', 'href="#recovery-rec" data-act="popnav"')}${tile('breathe', 'var(--pro)', 'Breathe', '', 'href="#lab-breathe" data-act="popnav"')}${tile('pulse', 'var(--heart)', 'Spot check', '', 'href="#lab-spot" data-act="popnav"')}${tile('insight', 'var(--heart)', 'Live', '', 'href="#lab-live" data-act="popnav"')}${tile('wave', 'var(--good)', 'Resonance', 'finder', 'href="#lab-rf" data-act="popnav"')}${tile('stand', 'var(--sleep)', 'Stand-up', 'test', 'href="#lab-ortho" data-act="popnav"')}</div></aside>`;
 }
 
 // ---------- the scale and the tape ----------

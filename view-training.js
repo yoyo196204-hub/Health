@@ -21,7 +21,7 @@ function vNext() {
     return `<li><span class="grow"><span class="nm">${esc(exName(x.id))}</span><span class="sub">${what}${G.kind === 'raise' ? ' · <b class="up">load up</b>' : G.kind === 'deload' ? ' · <b class="down">step back</b>' : ''}</span></span></li>`;
   }).join('');
   return `${sheetTop(`${today ? `Today: ${esc(today.n)} done · next` : 'Next session'} in openGym`, `${esc(plan.name)} <span class="sub">${esc(plan.focus)}</span>`, 'next')}<div class="nextog lv-${R.level}">
-    <div class="ease"><span class="dot"></span><span class="grow"><b>${head}</b><span class="sub">${sub}${R.why[0] ? ` <a href="#recovery">${esc(R.why[0][1])}</a>.` : ''}</span></span></div>
+    <div class="ease"><span class="dot"></span><span class="grow"><b>${head}</b><span class="sub">${sub}${R.why[0] ? ` <a href="#recovery-rec">${esc(R.why[0][1])}</a>.` : ''}</span></span></div>
     <ul class="list">${rows}</ul>
     ${S.profile.shoulder ? `<details class="inner prehab"><summary>Shoulder routine · 5 min${S.prehab[k] ? ' · done today' : ''}</summary><ol>${PREHAB.map(([n, dose, w]) => `<li><b>${n}</b>, ${dose}<span class="sub">${w}</span></li>`).join('')}</ol></details>
       <label class="check prehabdone"><input type="checkbox" data-act="prehab" ${S.prehab[k] ? 'checked' : ''}><span>Shoulder routine done today</span></label>` : ''}
