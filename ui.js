@@ -111,6 +111,8 @@ function historyList(title, rows, stream) {
 // ---------- the new building blocks ----------
 // Icons, drawn on a 24-unit grid with round joins, stroked in currentColor.
 const IC = {
+  share: '<path d="M12 3v12M7.5 7.5 12 3l4.5 4.5"/><path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/>',
+  strap: '<path d="M2.5 13c3.5-2.6 15.5-2.6 19 0"/><rect x="8.5" y="9.5" width="7" height="6" rx="2"/><path d="M11 12.5h2"/>',
   wave: '<path d="M2 12c2-6 4-6 6 0s4 6 6 0 4-6 6 0"/><path d="M4 20v-3M9 20v-5M14 20v-7M19 20v-4"/>',
   stand: '<path d="M3 18h7"/><path d="M15 21V9"/><circle cx="15" cy="5" r="2"/><path d="M12 13l3-3 3 3"/>',
   food: '<path d="M7 3v8a2 2 0 0 0 4 0V3M9 11v10M16 3c-2 2-2 6 0 8v10"/>',

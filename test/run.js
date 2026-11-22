@@ -3,6 +3,7 @@
 'use strict';
 const fs = require('fs'), path = require('path'), vm = require('vm'), assert = require('assert');
 const { seedV3 } = require('./seed.js');
+const { strapSynth } = require('./strap-synth.js');
 const root = path.join(__dirname, '..');
 
 function sandbox() {
@@ -14,7 +15,7 @@ function sandbox() {
   };
   ctx.self = ctx;
   vm.createContext(ctx);
-  for (const f of ['lib.js', 'errlog.js', 'hrv.js', 'data.js', 'exercises.js', 'opengym-ids.js', 'body-data.js', 'store.js', 'model.js', 'energy.js', 'insights.js', 'train.js', 'markers.js'])
+  for (const f of ['lib.js', 'errlog.js', 'hrv.js', 'analysis.js', 'data.js', 'exercises.js', 'opengym-ids.js', 'body-data.js', 'store.js', 'rec.js', 'model.js', 'energy.js', 'insights.js', 'train.js', 'markers.js'])
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
   // What native.js would define outside the app, then the openGym link, which uses it.
   ctx.window = ctx; ctx.location = { origin: 'https://x', pathname: '/' };
@@ -1524,6 +1525,110 @@ test('skin temperature in sleep: read only against its own series, a nudge to re
   assert.deepStrictEqual(run(c, 'skinDev(todayKey())'), { v: 0.9, need: 14 }, 'a change-from-baseline night is not read against absolute nights');
   run(c, `S.wx['${t}'] = { hv: 36, sk: 34.3, skc: 1 }; memo.clear()`);
   assert.strictEqual(run(c, 'skinDev(todayKey())'), null, 'one reading is not a night');
+});
+
+
+// ---------- the strap's recordings ----------
+const T0 = 1763700000000;
+test('a recording keeps time: beats lost in transit become a gap, the clock stays true, and no difference crosses it', c => {
+  c.r = strapSynth('morning', T0);
+  const X = run(c, '(() => { const X = recSeries(r); return { gaps: X.gaps, runs: X.runs, dur: X.dur, n: X.n, last: X.E[X.E.length - 1] }; })()');
+  assert.strictEqual(X.gaps.length, 1, 'one stretch lost');
+  assert.ok(X.gaps[0][1] - X.gaps[0][0] > 2.5 && X.gaps[0][1] - X.gaps[0][0] < 5, `gap ${JSON.stringify(X.gaps)}`);
+  assert.ok(Math.abs(X.dur - 360) < 2, `duration ${X.dur} against 360 s recorded`);
+  assert.ok(X.runs.length >= 2 && X.runs.every(([a, b]) => b > a), 'the gap splits the runs');
+  // Every beat as sent comes back exactly: the strap's 1/1024 s units, lossless.
+  assert.deepStrictEqual(run(c, 'recRaw(r).map(x => Math.round(x * 1.024))'), c.r.ru);
+});
+test('edits never change the recording: an excluded stretch, a trim, a dropped beat and one kept as sent', c => {
+  c.r = strapSynth('morning', T0);
+  const base = run(c, 'analyse(recSeries(r))');
+  assert.ok(base.q < 100 && base.q > 97, 'the planted ectopic and missed beats are corrected');
+  run(c, 'r2 = Object.assign({}, r, { edits: { ex: [[100, 160]], trim: [30, 330] } })');
+  const ex = run(c, '(() => { const X = recSeries(r2), A = analyse(X); let inEx = 0; for (let k = 0; k < X.n; k++) { const m = X.T[k] - X.rr[k] / 2000; if (X.inc[k] && ((m >= 100 && m < 160) || m < 30 || m > 330)) inEx++; } return { inEx, dur: A.dur, n: A.n }; })()');
+  assert.strictEqual(ex.inEx, 0, 'nothing excluded is counted');
+  assert.ok(ex.dur > 230 && ex.dur < 245, `analysed ${ex.dur} s of 300 − 60`);
+  assert.deepStrictEqual(run(c, 'r2.ru'), c.r.ru, 'the beats themselves are untouched');
+  const i = run(c, '(() => { const X = recSeries(r); for (let k = 0; k < X.n; k++) if (X.fix[k] === 1) return X.src[k]; })()');
+  run(c, `r3 = Object.assign({}, r, { edits: { beat: { ${i}: 'keep' } } }); r4 = Object.assign({}, r, { edits: { beat: { ${i}: 'drop' } } })`);
+  const kept = run(c, '(() => { const X = recSeries(r3); return [X.n, [...X.fix].filter(f => f === 6).length]; })()'), whole = run(c, 'recSeries(r).n');
+  assert.deepStrictEqual(kept, [whole - 1, 1], 'kept as sent: the missed beat is one long beat again');
+  assert.ok(run(c, 'analyse(recSeries(r3)).rmssd') > base.rmssd * 1.2, 'and RMSSD shows what the correction was protecting');
+  assert.ok(run(c, 'recSeries(r4).runs.length') > run(c, 'recSeries(r).runs.length'), 'a dropped beat breaks its run');
+});
+test('cardio: α1 falls with effort, and the first threshold is found where it crosses 0.75', c => {
+  c.r = strapSynth('cardio', T0);
+  const tl = run(c, 'timeline(recSeries(r), { step: 15, win: 60, br: false })').filter(p => p.a1 != null);
+  const early = tl.slice(0, 10).map(p => p.a1), late = tl.slice(-10).map(p => p.a1), m = a => a.reduce((x, y) => x + y) / a.length;
+  assert.ok(m(early) > 1 && m(late) < 0.75, `α1 ${m(early).toFixed(2)} early, ${m(late).toFixed(2)} late`);
+  const th = run(c, 'a1Cross(timeline(recSeries(r), { step: 15, win: 60, br: false }), 0.75)');
+  assert.ok(th && th.hr > 125 && th.hr < 166, JSON.stringify(th));
+  const L = run(c, 'hrLoad(recSeries(r), 185)');
+  assert.ok(Math.abs(L.z.reduce((a, b) => a + b) - 1500) < 60 && L.trimp > 40, JSON.stringify(L));
+});
+test('standing up: heart rate rises, and the 30:15 ratio reads the pause around the 30th beat', c => {
+  c.r = strapSynth('ortho', T0);
+  const R = run(c, 'ratio3015(recSeries(r), 150)');
+  assert.ok(R && R.r > 1.04, JSON.stringify(R));
+  const pm = run(c, 'perMinute(recSeries(r))');
+  assert.ok(pm[4].hr > pm[0].hr + 12 && pm[4].rmssd < pm[0].rmssd / 2, 'standing: faster and less variable');
+});
+test('a recording read against the same person\'s own: the smallest worthwhile change is half an SD', c => {
+  const O = run(c, 'ownRef(Math.log(40), [3.9, 4.0, 4.1, 4.0, 3.95, 4.05])');
+  assert.ok(Math.abs(O.swc - 0.5 * O.s) < 1e-9 && O.word === 'below' && O.n === 6, JSON.stringify(O));
+  assert.strictEqual(run(c, 'ownRef(4, [4, 4.1]).m'), undefined, 'under 5 earlier ones there is no usual');
+});
+test('what a recording may hold: hostile or broken input is cut down to known, bounded fields', c => {
+  c.bad = Object.assign(strapSynth('morning', T0), { id: 'r1763700000000', kind: 'evil', who: '<script>', ru: [500, 'x', 1e9, 1100].concat(Array(30).fill(1000)), __proto__: { x: 1 },
+    edits: { ex: [[5, 3], [1, 2]], beat: { 3: 'keep', nope: 'drop', 4: 'burn' }, trim: [9, 1] }, marks: [[1, '<b>hi</b>'], ['x', 'y']], x: { a: [1, { b: 'c' }], constructor: 1 }, ref: { s: 'food', k: '2026-01-01' } });
+  const r = run(c, 'cleanRec(bad)');
+  assert.strictEqual(r.kind, 'raw'); assert.strictEqual(r.who, 'me'); assert.strictEqual(r.ru.length, 32);
+  assert.deepStrictEqual(r.edits, { ex: [[1, 2]], beat: { 3: 'keep' } });
+  assert.strictEqual(r.ref, undefined); assert.ok(!Object.prototype.hasOwnProperty.call(r.x, 'constructor'));
+  assert.strictEqual(run(c, "cleanRec({ id: 'x', t0: 1 })"), null);
+  const noAt = t => t.replace(/"at":\d+/, '');
+  assert.strictEqual(noAt(run(c, 'JSON.stringify(cleanRec(cleanRec(bad)))')), noAt(run(c, 'JSON.stringify(cleanRec(bad))')), 'idempotent');
+  assert.deepStrictEqual(run(c, "sanitize({ people: [{ id: 'pab12cd', n: ' Asha ', by: 1990, sex: 'f' }, { id: 'bad', n: 'x' }, { id: 'pzz99zz' }] }).people"), [{ id: 'pab12cd', n: 'Asha', sex: 'f', by: 1990 }]);
+});
+atest('the store: old morning checks become recordings once, an edit reaches the verdict, and moving one to someone else takes it out of yours', async c => {
+  const k = run(c, 'todayKey()'), raw = strapSynth('morning', T0).ru.map(u => Math.round(u * 1000 / 1024)).slice(0, 300);
+  c.raw = raw;
+  run(c, `{ const m = hrvMetrics(raw); S.hrv['${k}'] = cleanHrv({ rmssd: r1(m.rmssd), hr: r1(m.hr), q: m.q, t: Date.now(), rr: raw, pos: 'lying' }); }`);
+  assert.strictEqual(await vm.runInContext('recInit()', c), 'ls', 'no IndexedDB here: localStorage');
+  let list = run(c, 'recList()');
+  assert.strictEqual(list.length, 1); assert.deepStrictEqual(list[0].ref, { s: 'hrv', k }); assert.strictEqual(list[0].kind, 'morning');
+  run(c, 'recMigrate(); recMigrate()');
+  assert.strictEqual(run(c, 'recList().length'), 1, 'migrating again adds nothing');
+  // Exclude a stretch: the morning check the verdict reads follows.
+  const before = run(c, `S.hrv['${k}'].rmssd`), id = list[0].id;
+  run(c, `{ const r = recGet('${id}'); recSyncS(recPut(Object.assign({}, r, { edits: { ex: [[0, 150]] } }))); }`);
+  const after = run(c, `S.hrv['${k}']`);
+  assert.ok(after.rmssd !== before && after.rr.length < raw.length - 100, `RMSSD ${before} → ${after.rmssd}, beats ${after.rr.length}`);
+  // To someone else: out of your morning checks; undo puts it back.
+  run(c, "S.people = [{ id: 'pasha01', n: 'Asha' }]");
+  run(c, `undo = recMove(recGet('${id}'), 'pasha01')`);
+  assert.strictEqual(run(c, `S.hrv['${k}']`), undefined, 'not in your data any more');
+  assert.deepStrictEqual(run(c, `[recGet('${id}').who, recGet('${id}').ref ?? null]`), ['pasha01', null]);
+  run(c, 'undo()');
+  assert.ok(run(c, `!!S.hrv['${k}'] && recGet('${id}').who === 'me'`), 'undone');
+  // The store was written through: a fresh load finds the recording with its edit.
+  const stored = JSON.parse(run(c, "localStorage.getItem('health.recs')"));
+  assert.ok(stored.some(r => r.id === id && r.edits?.ex), 'kept in storage');
+  // A backup carries every recording; merging it back keeps the newer edit of each.
+  const B = JSON.parse(run(c, 'backupText()'));
+  assert.strictEqual(B.recs.length, 1);
+  B.recs[0].note = 'older'; B.recs[0].at -= 1e6;
+  assert.deepStrictEqual(run(c, `recMerge(${JSON.stringify(B.recs)})`), { added: 0, newer: 0 });
+  B.recs[0].note = 'newer'; B.recs[0].at += 2e6;
+  assert.deepStrictEqual(run(c, `recMerge(${JSON.stringify(B.recs)})`), { added: 0, newer: 1 });
+  assert.strictEqual(run(c, `recGet('${id}').note`), 'newer');
+});
+atest('a draft left by a session that never ended is kept, marked recovered, never thrown away', async c => {
+  run(c, `RSTORE.queue = []; recPut(Object.assign(${JSON.stringify(strapSynth('spot', T0))}, { live: true }))`);
+  await vm.runInContext('recInit()', c);
+  const r = run(c, `recGet('r${T0}')`);
+  assert.deepStrictEqual([r.live, r.rcv, r.inc], [undefined, true, true]);
+  assert.strictEqual(run(c, 'recList().length'), 1);
 });
 
 (async () => {

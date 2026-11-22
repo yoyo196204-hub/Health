@@ -13,7 +13,11 @@
 
 const HR = { conn: 'idle', name: '', battery: null, bpm: null, ibpm: null, contact: null, offSkin: 0, mode: null, kind: 'walk', t0: 0, last: 0,
   z: [0, 0, 0, 0], sum: 0, n: 0, max: 0, beats: [], wave: [], tr: [], bin: [], a1: [], a1At: 0, msg: '', tick: null, lock: null, gatt: null,
-  result: null, painted: 0, live: null, liveAt: 0, nextBeat: 0, stopHr: null, hrrFor: null, scale: null, raf: 0 };
+  result: null, painted: 0, live: null, liveAt: 0, nextBeat: 0, stopHr: null, hrrFor: null, scale: null, raf: 0, pk: [], draftAt: 0 };
+// Who is wearing the strap. Anyone but you: their recordings are kept apart (rec.js) and never reach your verdict,
+// baselines, calibration or training load. Back to you whenever the strap disconnects, so a friend's check can never
+// run on into your morning.
+const WEAR = { who: 'me' };
 const ZONES = ['Light', 'Moderate', 'Vigorous', 'Near max'];
 const SETTLE = 60;                // morning check: one minute to settle before recording
 const WAVE_S = 90;                // seconds of heart rate on the workout trace
@@ -54,7 +58,7 @@ function strapAuto() {
 function amAuto() {
   const fresh = Date.now() - HR.amTry < 20000, h = new Date().getHours();
   HR.amTry = 0;
-  if (!fresh || S.settings.amAuto === 'off' || HR.mode || S.hrv[todayKey()] || h < 3 || h >= 11) return;
+  if (!fresh || S.settings.amAuto === 'off' || HR.mode || WEAR.who !== 'me' || S.hrv[todayKey()] || h < 3 || h >= 11) return;
   if (HR.contact === false || overlay || !['today', 'recovery'].includes(tab) || HR.bpm > hrProfile().rest + 30) return;
   if (tab !== 'recovery' || SUB.recovery !== 'rec') { SUB.recovery = 'rec'; location.hash = 'recovery-rec'; }
   hrStart('morning');
@@ -64,8 +68,9 @@ function strapDisconnect() { if (NATIVE) nat('bleDisconnect'); else HR.gatt?.dis
 function strapForget() { S.meta.h9 = null; save(); if (NATIVE) nat('bleForget'); strapDisconnect(); }
 function strapLost(msg) {
   if (HR.mode === 'workout') hrStop();
-  else if (HR.mode && HR.mode !== 'breathe') { const m = HR.mode; hrEnd(); HR.result = { type: m === 'morning' ? 'morning' : m, ok: false, why: 'The strap disconnected during the recording, so nothing was saved.' }; msg = ''; }
+  else if (HR.mode && HR.mode !== 'breathe') { const m = HR.mode, kept = recKeepFailed(m); hrEnd(); HR.result = { type: m === 'morning' ? 'morning' : m, ok: false, why: `The strap disconnected during the recording, so no result was saved.${kept}` }; msg = ''; }
   Object.assign(HR, { conn: 'idle', bpm: null, ibpm: null, contact: null, gatt: null, live: null });
+  WEAR.who = 'me';
   setMsg(msg || '');
   if (msg) buzz('warn');
   render();
@@ -101,10 +106,15 @@ function hrData(v, now = Date.now()) {
   const first = HR.bpm == null;
   HR.contact = flags & 4 ? !!(flags & 2) : null;
   if (HR.contact === false) { if (!HR.offSkin) HR.offSkin = now; } else HR.offSkin = 0;
-  if (bpm < 25 || bpm > 240) { HR.last = now; return; }
+  if (bpm < 25 || bpm > 240) { HR.last = now; HR.pk.push([now, 0, HR.contact === false ? 0 : 2, []]); return; }
   HR.bpm = bpm;
   HR.wave.push([now, bpm]);
   while (HR.wave.length && now - HR.wave[0][0] > WAVE_S * 1000) HR.wave.shift();
+  // The packet as it came: time, bpm, contact (0 off, 1 on, 2 not reported) and the RR in the strap's own 1/1024 s.
+  const ru = [];
+  if (flags & 16) for (let j = flags & 1 ? 3 : 2, k = j + (flags & 8 ? 2 : 0); k + 1 < v.byteLength; k += 2) ru.push(v.getUint16(k, true));
+  HR.pk.push([now, bpm, HR.contact === false ? 0 : HR.contact ? 1 : 2, ru]);
+  if (HR.pk.length > 24000) HR.pk.splice(0, HR.pk.length - 20000);
   if (rr.length) {
     // beatTimes gives [time, bpm]; the timeline keeps [time, RR].
     beatTimes(rr, now).forEach((b, j) => HR.beats.push([b[0], rr[j]]));
@@ -219,6 +229,7 @@ function hrPaint() {
     const d = document.getElementById('hrrdrop'); if (d && HR.stopHr) d.textContent = sign(HR.bpm - HR.stopHr);
   }
   if (typeof labPaint === 'function') labPaint();
+  if (typeof stuPaint === 'function') stuPaint();
 }
 function zoneWord() { return HR.mode === 'morning' ? (S.settings.hrvPos === 'sitting' ? 'sitting still' : 'lying still') : HR.mode && HR.mode !== 'workout' ? 'live' : ZONES[zoneOf(HR.bpm)]; }
 function a1Line(last) {
@@ -244,7 +255,7 @@ function hrTick() {
   const now = Date.now(), el = (now - HR.t0) / 1000;
   const silent = now - HR.last > 15000, off = HR.offSkin && now - HR.offSkin > 12000;
   if (HR.mode === 'morning') {
-    if (silent || off) { hrEnd(); HR.result = { type: 'morning', ok: false, why: off ? 'The strap lost skin contact for over 12 seconds. Wet the electrodes, tighten the strap and start again.' : 'Lost contact with the strap. Wet the electrodes and start again.' }; buzz('warn'); return render(); }
+    if (silent || off) { const kept = recKeepFailed('morning'); hrEnd(); HR.result = { type: 'morning', ok: false, why: (off ? 'The strap lost skin contact for over 12 seconds. Wet the electrodes, tighten the strap and start again.' : 'Lost contact with the strap. Wet the electrodes and start again.') + kept }; buzz('warn'); return render(); }
     if (Math.floor(el) === SETTLE) buzz('tick');
     if (el >= SETTLE + S.settings.hrvDur) return hrMorningDone();
   } else if (HR.mode === 'workout') {
@@ -258,14 +269,92 @@ function hrTick() {
         if (a != null && a > 0.1 && a < 2.5) { HR.a1.push([Math.round(el), Math.round(a * 1000) / 1000, Math.round(60000 / mean(C.rr))]); if (HR.a1.length > 300) HR.a1.shift(); }
       }
     }
-    if (Math.floor(el) % 15 === 0) draftWrite();
+    if (Math.floor(el) % 15 === 0 && WEAR.who === 'me') draftWrite();
   } else if (HR.mode === 'hrr') {
-    if (silent) { hrEnd(); HR.result = { type: 'hrr', ok: false, why: 'Lost contact with the strap.' }; return render(); }
+    if (silent) { recDrop(); hrEnd(); HR.result = { type: 'hrr', ok: false, why: 'Lost contact with the strap.' }; return render(); }
     if (el >= 60) return hrrDone();
   } else if (typeof labTick === 'function') labTick(now, el, silent, off);
+  if (HR.mode) recDraft();
   hrPaint();
 }
 function hrEnd() { HR.mode = null; clearInterval(HR.tick); HR.tick = null; keepAwake(false); }
+
+// ---------- the recording behind every session ----------
+// Every session, of every kind, is kept whole in the recording store (rec.js): the packets from its start, each beat
+// in the strap's own units, each packet's time, heart rate and contact. A draft is written every 10 seconds while it
+// runs, so a crash, a killed app or a flat phone keeps all but the last few seconds.
+const REC_MODE = { morning: 'morning', workout: 'cardio', hrr: 'hrr', breathe: 'breathe', rf: 'rf', ortho: 'ortho', spot: 'spot', live: 'live' };
+function strapRec(t, until = Infinity) {
+  // Packets arrive in time order; sorting what is taken costs nothing and keeps a reordered one from ever
+  // putting a beat before the start.
+  let i = HR.pk.length;
+  while (i > 0 && HR.pk[i - 1][0] >= t) i--;
+  const P = HR.pk.slice(i).filter(p => p[0] >= t).sort((a, b) => a[0] - b[0]);
+  i = 0;
+  const ru = [], pk = [], nc = [];
+  let first = null, ncAt = null, endAt = t;
+  for (let j = i; j < P.length && P[j][0] < until; j++) {
+    const [ms, bpm, c, u] = P[j];
+    endAt = ms;
+    if (c === 0) { if (ncAt == null) ncAt = ms; } else if (ncAt != null) { nc.push([ncAt, ms]); ncAt = null; }
+    if (!u.length) continue;
+    if (first == null) first = ms - u.reduce((a, b) => a + b, 0) * 1000 / 1024;
+    for (const x of u) ru.push(x);
+    pk.push([ru.length - 1, ms, bpm, c]);
+  }
+  if (ncAt != null) nc.push([ncAt, endAt]);
+  if (!ru.length) return null;
+  const t0 = Math.round(first);
+  return { t0, ru, pk: pk.map(p => [p[0], p[1] - t0, p[2], p[3]]), dev: HR.name || 'Strap', nc: nc.map(([a, b]) => [r1((a - t0) / 1000), r1((b - t0) / 1000)]) };
+}
+function recPos(mode) {
+  const s = S.settings;
+  return mode === 'morning' ? s.hrvPos : mode === 'spot' ? s.spPos : mode === 'ortho' ? 'lying' : mode === 'workout' ? 'moving' : mode === 'breathe' || mode === 'rf' ? 'sitting' : undefined;
+}
+// Marks at the moments a session changes phase, in seconds from the recording's first beat.
+function recMarks(mode, off) {
+  const at = s => r1(off + s);
+  if (mode === 'morning') return [[at(0), 'Settling'], [at(SETTLE), 'Recording']];
+  if (mode === 'spot') return [[at(0), 'Settling'], [at(SPOT_SETTLE), 'Recording']];
+  if (mode === 'ortho') return [[at(0), 'Lying'], [at(ORTHO_LIE), 'Standing']];
+  if (mode === 'rf') return RF_RATES.map((r, i) => [at(i * RF_SEG), `${r} a minute`]);
+  if (mode === 'live') return (LAB.marks || []).map(([s, tag]) => [at(s), LIVETAGS[tag] || tag]);
+  return [];
+}
+// The recording of the session now running (or just ended), with whatever it adds.
+function recBuild(extra = {}) {
+  const mode = extra.mode || HR.mode, b = strapRec(HR.t0 - 1500);
+  if (!b) return null;
+  const off = (HR.t0 - b.t0) / 1000, nc = b.nc; delete b.nc;
+  const r = Object.assign(b, { id: 'r' + HR.t0, kind: REC_MODE[mode] || 'raw', who: WEAR.who, pos: recPos(mode), marks: recMarks(mode, off) }, extra);
+  delete r.mode;
+  if (nc.length) r.x = Object.assign({ nc }, r.x || {});
+  // The settling part is left out the way the session itself leaves it out; that trim is the recording's own, not an
+  // edit (x.trim0), and "Undo your edits" goes back to it.
+  if (mode === 'morning' || mode === 'spot') { const tr = [r1(off + (mode === 'morning' ? SETTLE : SPOT_SETTLE)), r1(off + (Date.now() - HR.t0) / 1000 + 5)]; r.edits = { trim: tr }; r.x = Object.assign({}, r.x, { trim0: tr }); }
+  return r;
+}
+function recDraft() {
+  if (!HR.mode || Date.now() - HR.draftAt < 10000) return;
+  HR.draftAt = Date.now();
+  const r = recBuild({ live: true });
+  if (r && r.ru.length >= 5) recPut(r, true);
+}
+// The session ended: kept as it was, with its place in your data when it is yours.
+function recFinish(extra) {
+  const r = recBuild(Object.assign({ live: false }, extra));
+  HR.draftAt = 0;
+  return r && r.ru.length >= 20 ? recPut(r) : (recDel('r' + HR.t0), null);
+}
+// A session that failed is still kept when it has beats in it: incomplete, and yours to look at or delete.
+function recKeepFailed(mode) {
+  const r = recBuild({ live: false, inc: true, mode });
+  HR.draftAt = 0;
+  if (r && r.ru.length >= 30) { recPut(r); return ' The beats it did get are kept in Strap › Sessions, marked incomplete.'; }
+  recDel('r' + HR.t0);
+  return '';
+}
+function recDrop() { HR.draftAt = 0; recDel('r' + HR.t0); }
 
 // ---------- cardio ----------
 function cardioNow() {
@@ -295,29 +384,36 @@ function hrStop() {
   const end = HR.wave.filter(w => Date.now() - w[0] <= 10000).map(w => w[1]);
   HR.stopHr = end.length ? mean(end) : HR.bpm;
   if (x.dur >= 60 && HR.n) {
-    const { c, k, th } = cardioSave(x);
+    const me = WEAR.who === 'me', { c, k, th } = me ? cardioSave(x) : { c: cleanCardio(Object.assign({}, x, { vt1: hrvThreshold(x.a1)?.hr })), k: dk(new Date(x.t)), th: hrvThreshold(x.a1) };
+    const rec = recFinish({ mode: 'workout', x: { kind: x.kind, avg: x.avg, max: x.max, z: x.z, a1: x.a1, vt1: th?.hr ?? null }, ...(me && c ? { ref: { s: 'cardio', k, t: x.t } } : {}) });
     if (c) buzz('done');
-    HR.result = { type: 'workout', ok: !!c, k, c, i: c ? S.cardio[k].length - 1 : null, th, hrrOk: !!c && HR.conn === 'on' };
+    HR.result = { type: 'workout', ok: !!c, k, c, i: c && me ? S.cardio[k].length - 1 : null, th, hrrOk: !!c && HR.conn === 'on', rid: rec?.id, who: WEAR.who };
     setMsg('');
-  } else { HR.result = { type: 'workout', ok: false, why: 'Under a minute, so it was not saved.' }; buzz('warn'); }
+  } else { recDrop(); HR.result = { type: 'workout', ok: false, why: 'Under a minute, so it was not saved.' }; buzz('warn'); }
   draftDrop();
   hrEnd();
 }
 // Heart-rate recovery: how far heart rate falls in the first minute after stopping, standing or sitting still.
 function hrrStart() {
   const r = HR.result;
-  HR.hrrFor = { k: r.k, t: r.c.t, hr0: HR.stopHr };
+  HR.hrrFor = { k: r.k, t: r.c.t, hr0: HR.stopHr, rid: r.rid, who: r.who || 'me', c: r.c };
   hrStart('hrr');
 }
 function hrrDone() {
   const F = HR.hrrFor, end = beatsSince(HR.t0 + 55000).map(b => 60000 / b[1]).filter(x => x > 27 && x < 222);
   const hr60 = end.length >= 3 ? median(end) : HR.bpm;
+  const c = F.who === 'me' ? (S.cardio[F.k] || []).find(x => x.t === F.t) : F.c;
+  const hrr = c && F.hr0 && hr60 != null ? Math.round(F.hr0 - hr60) : null;
+  const rec = hrr != null ? recFinish({ mode: 'hrr', x: { hr0: Math.round(F.hr0), hrr, of: F.rid || null } }) : (recDrop(), null);
   hrEnd();
-  const c = (S.cardio[F.k] || []).find(x => x.t === F.t);
-  if (!c || !F.hr0 || hr60 == null) { HR.result = { type: 'hrr', ok: false, why: 'The session or its stopping heart rate was not found.' }; return render(); }
-  c.hr0 = Math.round(F.hr0); c.hrr = Math.round(F.hr0 - hr60);
-  save(); buzz('done');
-  HR.result = { type: 'hrr', ok: true, k: F.k, c };
+  if (hrr == null) { HR.result = { type: 'hrr', ok: false, why: 'The session or its stopping heart rate was not found.' }; return render(); }
+  c.hr0 = Math.round(F.hr0); c.hrr = hrr;
+  // The cardio recording carries its recovery too.
+  const cr = F.rid && recGet(F.rid);
+  if (cr) recPut(Object.assign({}, cr, { x: Object.assign({}, cr.x, { hr0: c.hr0, hrr }) }), true);
+  if (F.who === 'me') save();
+  buzz('done');
+  HR.result = { type: 'hrr', ok: true, k: F.k, c, rid: rec?.id, who: F.who };
   render();
 }
 // Your heart-rate recoveries over time, newest first, from strap sessions.
@@ -329,17 +425,26 @@ function hrrHistory() {
 
 // ---------- the morning check ----------
 function hrMorningDone() {
-  const rr = rrSince(HR.t0 + SETTLE * 1000), m = hrvMetrics(rr), k = todayKey(), before = S.hrv[k], want = S.settings.hrvDur;
-  hrEnd();
+  const rr = rrSince(HR.t0 + SETTLE * 1000), m = hrvMetrics(rr), k = todayKey(), before = S.hrv[k], want = S.settings.hrvDur, me = WEAR.who === 'me';
   if (m && m.q >= 80 && m.dur >= want * 0.75) {
-    S.hrv[k] = cleanHrv(Object.assign(hrvRecord(m), { t: Date.now(), pos: S.settings.hrvPos, rr: rr.filter(x => x > 270 && x < 2200).slice(0, 600) }));
-    save(); buzz('done');
-    HR.result = { type: 'morning', ok: true, k, m, replaced: !!before };
+    if (me) recUnref({ s: 'hrv', k });
+    const rec = recFinish({ mode: 'morning', ...(me ? { ref: { s: 'hrv', k } } : {}) });
+    hrEnd();
+    if (me) { S.hrv[k] = cleanHrv(Object.assign(hrvRecord(m), { t: Date.now(), pos: S.settings.hrvPos, rr: rr.filter(x => x > 270 && x < 2200).slice(0, 600) })); save(); }
+    buzz('done');
+    HR.result = { type: 'morning', ok: true, k, m, replaced: me && !!before, rid: rec?.id, who: WEAR.who };
   } else {
+    const kept = recKeepFailed('morning');
+    hrEnd();
     buzz('warn');
-    HR.result = { type: 'morning', ok: false, why: m ? (m.q < 80 ? `Only ${m.q}% of beats were clean, so nothing was saved. Lie still, wet the electrodes and try again.` : `Only ${Math.round(m.dur)} seconds of beats arrived. Keep the phone near and try again.`) : 'The signal was too noisy. Wet the strap electrodes, lie still and try again.' };
+    HR.result = { type: 'morning', ok: false, why: (m ? (m.q < 80 ? `Only ${m.q}% of beats were clean, so no result was saved. Lie still, wet the electrodes and try again.` : `Only ${Math.round(m.dur)} seconds of beats arrived. Keep the phone near and try again.`) : 'The signal was too noisy. Wet the strap electrodes, lie still and try again.') + kept };
   }
   render();
+}
+// A recording that stops being the source of a summary (a morning check done again replaces the first) keeps its
+// beats but loses the link, so editing it later cannot overwrite the newer one.
+function recUnref(ref) {
+  for (const r of recAll()) if (r.ref && r.ref.s === ref.s && r.ref.k === ref.k && (r.ref.t || 0) === (ref.t || 0)) { const x = Object.assign({}, r); delete x.ref; x.title = `${recTitle(r)}, replaced`; recPut(x, true); }
 }
 // The measures kept with a reading, rounded to what they can honestly resolve.
 function hrvRecord(m) {
@@ -361,7 +466,7 @@ function hrAct(a, el) {
   if (a === 'hrdur') { S.settings.hrvDur = +el.dataset.v; save(); buzz('tick'); return render(); }
   if (a === 'hrpos') { S.settings.hrvPos = el.dataset.v; save(); buzz('tick'); return render(); }
   if (a === 'hrstop') { hrStop(); return render(); }
-  if (a === 'hrcancel') { if (HR.mode === 'workout') draftDrop(); hrEnd(); setMsg(''); buzz('tick'); return render(); }
+  if (a === 'hrcancel') { if (HR.mode === 'workout') draftDrop(); if (HR.mode) recDrop(); hrEnd(); setMsg(''); buzz('tick'); return render(); }
   if (a === 'hrresdone') { HR.result = null; buzz('tick'); return render(); }
   if (a === 'hrhrr') return hrrStart();
   if (a === 'hrdraftsave') { const d = draftFound(); if (d) { const r = cardioSave(d); draftDrop(); buzz('done'); HR.result = { type: 'workout', ok: !!r.c, k: r.k, c: r.c, th: r.th }; toast('Interrupted session saved'); } return render(); }
@@ -370,12 +475,13 @@ function hrAct(a, el) {
 }
 
 // ---------- the block, shared by Training (cardio) and Recovery (morning check) ----------
-function liveHead() {
+// lean: the strap's own page already shows contact, signal and battery, so its monitor leaves them out.
+function liveHead(lean) {
   return `<div class="bpm"><span class="beat" id="beat"></span><b class="num" id="bpm">${HR.bpm}</b>
-    <span>bpm · <span id="zone">${zoneWord()}</span>${HR.battery != null ? ` · battery ${HR.battery}%` : ''}</span></div>${waveSvg()}<div class="lchips" id="lchips">${liveChips()}</div>`;
+    <span>bpm · <span id="zone">${zoneWord()}</span>${HR.battery != null && !lean ? ` · battery ${HR.battery}%` : ''}</span></div>${waveSvg()}${lean ? '' : `<div class="lchips" id="lchips">${liveChips()}</div>`}`;
 }
 function strapIdle(purpose) {
-  if (!strapSupported()) return `<p class="sub">Bluetooth is not available here. Use the Android app, or Chrome on Android.</p>`;
+  if (!strapSupported() && HR.conn !== 'on') return `<p class="sub">Bluetooth is not available here. Use the Android app, or Chrome on Android.</p>`;
   if (HR.conn === 'connecting') return `<div class="strap st-connecting"><div class="seek" aria-hidden="true"><i></i><i></i><i></i></div>
     <p class="sub center">Connecting${S.meta.h9 ? ` to ${esc(S.meta.h9.name)}` : ''}… Wet the electrodes and wear the strap; it only wakes up on skin.</p><button class="ghost wide" data-act="hrdisconnect">Cancel</button></div>`;
   if (HR.conn !== 'on') return `<div class="strap st-idle"><p class="sub">${purpose === 'morning' ? 'On waking, before getting up: wet the strap, put it on, connect, then lie still.' : purpose === 'lab' ? 'Wet the electrodes, put the strap on, then connect.' : 'Wet the electrodes, put the strap on, then connect.'} Close Polar Beat or Zepp first if either is holding the strap.</p>
@@ -431,6 +537,8 @@ ACT_HOLD.hrdraftdrop = () => hrAct('hrdraftdrop');
 function resultCard(res) {
   const done = '<button class="solid wide" data-act="hrresdone">Done</button>';
   if (!res.ok) return `<div class="result bad"><b>Not saved</b><p class="sub">${esc(res.why || '')}</p>${done}</div>`;
+  if (res.who && res.who !== 'me') return recResultCard(res);
+  const full = res.rid && recGet(res.rid) ? `<a class="ghost link nextstep" href="#rec-${res.rid}">Full analysis ›</a>` : '';
   const stampSvg = '<svg viewBox="0 0 48 48" class="stamp" aria-hidden="true"><circle cx="24" cy="24" r="21"/><path d="M14 25l7 7 13-15"/></svg>';
   if (res.type === 'morning') {
     const V = hrvState(res.k), x = S.hrv[res.k], R = readiness(res.k), m = res.m;
@@ -441,16 +549,16 @@ function resultCard(res) {
     return `<div class="result ok">${stampSvg}
       <b>Morning check saved${res.replaced ? ', replacing this morning’s earlier one' : ''}</b>
       ${stats([[r1(x.rmssd), 'RMSSD, ms'], [Math.round(x.hr), 'bpm'], [`${x.q}%`, 'clean beats']])}${band}
-      ${beatsViz(x.rr, `#beats-h${res.k.replace(/-/g, '')}`)}
+      ${beatsViz(x.rr, res.rid ? `#rec-${res.rid}` : `#beats-h${res.k.replace(/-/g, '')}`)}
       <p class="sub">Verdict today: <b>${VERDICT[R.level][0].toLowerCase()}</b>.${V.roll ? ` 7-day average now ${r1(V.roll)} ms.` : ''}</p>
       ${metricsTable(m)}
-      <div class="rowb">${next}<span class="grow"></span><button class="solid" data-act="hrresdone">Done</button></div></div>`;
+      <div class="rowb">${next}${full}<span class="grow"></span><button class="solid" data-act="hrresdone">Done</button></div></div>`;
   }
   if (res.type === 'hrr') {
     const H = hrrHistory(), prev = H.slice(1, 6).map(x => x.hrr), V = versus(res.c.hrr, H.slice(1, 30).map(x => x.hrr));
     return `<div class="result ok">${stampSvg}<b>Heart-rate recovery saved</b>
       ${stats([[res.c.hrr, 'bpm drop in 60 s'], [res.c.hr0, 'bpm at stop'], [res.c.hr0 - res.c.hrr, 'bpm after 1 min']])}
-      <p class="sub">${V.word ? `Against your last ${V.n}: <b>${V.word}</b> (usually ${Math.round(V.m)} bpm).` : prev.length ? `Previous: ${prev.join(', ')} bpm.` : 'The first one: from three on, each is read against your own.'} A faster fall than your usual, at the same effort, goes with better fitness and freshness; a slower one, with fatigue. ${why('hrr', 'Why')}</p>${done}</div>`;
+      <p class="sub">${V.word ? `Against your last ${V.n}: <b>${V.word}</b> (usually ${Math.round(V.m)} bpm).` : prev.length ? `Previous: ${prev.join(', ')} bpm.` : 'The first one: from three on, each is read against your own.'} A faster fall than your usual, at the same effort, goes with better fitness and freshness; a slower one, with fatigue. ${why('hrr', 'Why')}</p><div class="rowb">${full}<span class="grow"></span><button class="solid" data-act="hrresdone">Done</button></div></div>`;
   }
   const c = res.c, th = res.th;
   return `<div class="result ok">${stampSvg}
@@ -458,7 +566,7 @@ function resultCard(res) {
     ${stats([[dur(c.dur / 60), 'duration'], [`${c.avg} / ${c.max}`, 'avg / max bpm'], [Math.round((c.z[1] + 2 * (c.z[2] + c.z[3])) / 60), 'WHO minutes']])}
     ${traceChart(c)}${zoneBar(c.z)}
     <p class="sub">${th ? `Aerobic threshold estimate: <b>${th.hr} bpm</b>, where α1 crossed 0.75 (${th.n} windows). ${why('dfa', 'How')}` : c.a1?.length ? `α1 was measured in ${c.a1.length} windows but did not cross 0.75 cleanly, so there is no threshold estimate from this one. ${why('dfa', 'Why')}` : `No α1: it needs two minutes of clean beats. ${why('dfa', 'Why')}`}</p>
-    ${res.hrrOk && HR.conn === 'on' ? `<div class="rowb"><button class="solid" data-act="hrhrr">Measure recovery · 1 min</button><button class="ghost" data-act="hrresdone">Done</button></div><p class="sub small">Stand still with the strap on: how far your heart rate falls in a minute is a fitness and fatigue signal. ${why('hrr', 'Why')}</p>` : done}</div>`;
+    ${full ? `<div class="rowb">${full}</div>` : ''}${res.hrrOk && HR.conn === 'on' ? `<div class="rowb"><button class="solid" data-act="hrhrr">Measure recovery · 1 min</button><button class="ghost" data-act="hrresdone">Done</button></div><p class="sub small">Stand still with the strap on: how far your heart rate falls in a minute is a fitness and fatigue signal. ${why('hrr', 'Why')}</p>` : done}</div>`;
 }
 // Every measure of a reading, each with what it means.
 function metricsTable(m) {

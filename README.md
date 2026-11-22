@@ -116,7 +116,8 @@ you log in openGym arrives with its name and the muscles it trains, from `opengy
 | Automation (Android app) | The remembered strap connects by itself when the app opens with it on your chest, and before 11 with no check yet that day the morning check starts by itself; both can be turned off under the morning check. On a day without a morning check the watch's night stands in for it in the verdict, and the verdict says what it rests on |
 | Lab (from the log button) | Breathe (resonance, cyclic sighing, box; with or without the strap, haptic cues per breath), the resonance finder, the orthostatic test, spot checks, and Live: an open-ended session with RMSSD, SDNN, pNN50, SD1/SD2, breathing rate and α1 moving as you watch, marks for what you are doing, each marked stretch read on its own and against your earlier ones, and the beats saved as a CSV file for other HRV software; every session kept |
 | A day in detail (tap a night, or Your day) | The watch's heart rate across 24 hours with sleep and workouts marked, the night stage by stage, and every number against your previous four weeks |
-| Beat by beat (from any morning check or Lab session) | The recording beat by beat: one finger reads each beat (time to the millisecond, RR, bpm, change from the last, and what correction it needed), a pinch zooms, the strip below moves the window; RMSSD, SDNN, pNN50, SD1/SD2, the Poincaré plot and the spectrum are worked out again for the stretch on screen |
+| Strap (the strap button on Heart, or Strap in the log button) | Everything the Polar H9 does, in one place. **Live**: the strap now (connected, battery, skin contact, signal, how long since the last beat), who is wearing it, the heart rate beat by beat with RMSSD, SDNN and breathing over the last minute, and every kind of session started from here. **Sessions**: every recording ever made, of every kind and every person, by day, each with its heart rate as a line and how clean its beats were; filter by person and kind; swipe one left to delete it; open or export strap files. **People**: anyone else who wears the strap, each with their readings read only against their own |
+| A session (#rec-…, from Sessions or Full analysis after any session) | The recording in full. The beat explorer: one finger reads each beat (its clock time to the millisecond, RR, bpm, the change from the last, and what correction it needed, with Drop this beat or Use as recorded), a pinch zooms, the strip below moves the window, and Select drags out a stretch to zoom to, exclude, keep only, or mark. Gaps where beats were lost between strap and phone, excluded stretches and the settling minute are drawn as such. Then every measure for the whole and for what is on screen beside the person's own usual; minute by minute; through time (heart rate, RMSSD, α1, breathing, clean beats on one time axis, tap to go there); the signal (every correction, gaps, lost contact, your edits, each undoable); what the kind of session measures (stand-up: the rise, peak and 30:15 ratio; cardio: zones, TRIMP, first and second α1 thresholds, recovery; Live: each marked stretch); edit (whose it is, position, name, notes, marks); and files: a report page, the lossless strap file, the beats as CSV, RR for Kubios |
 | Data checks (You, and a line on Insights when something needs a look) | About twenty fixed-rule checks across every dataset: food energy against its own macros, sleep stages against the night's total, watch resting and workout heart rate against the strap (Bland–Altman), saved RMSSD against its own beats, steps against distance, active against total energy, duplicate workouts, load typos, wear time, and how fresh the watch data is. Each gives its numbers and lists the records that failed. Below them, the last 50 errors in the app itself, with Copy; kept only on the phone |
 | Pack by barcode (the log button, or the barcode button in Add food's search) | Type the number under the bars; as soon as it is whole the pack is looked up on the phone in 16,000 packaged foods from Open Food Facts (every Indian product with a nutrition panel, and the most-scanned ones worldwide) and in your own foods. It shows the panel per 100 g, and three things that matter on a fixed budget: protein per 100 kcal, energy density, and the share of energy from sugars, with ultra-processing (NOVA 4) said plainly; then what one serving is of what is left today. Choose amount opens the usual amount sheet. A pack that is not in the list is entered once from its label with its barcode, and is known from then on. Packs also come up by name in the food search, under their own heading. Fling the card away for the next |
 | Adding food | A switch between the four meals at the top; search that understands Marathi, Hindi and English names (roti, chawal, anda, chaas, aloo, kombdi…) and forgives a typo; chips for Usual, Recent (exactly as you last logged it), Plates (yours first), Quick add, Mine, and every group from home food to Pune street food, pizza and Chinese, bakery and Irani café, and upvas. Tap adds one (the list keeps its order while you add, so nothing jumps from under your finger); hold any food, or swipe it right, for any amount: steppers, a ruler you drag (a light detent each quarter; a flick keeps it rolling), or by weight, into any meal. The bar at the bottom shows the meal and the day as you go |
@@ -208,6 +209,32 @@ between tabs reuses what was already worked out from the data; anything that cha
   its deviation from its own 15-day running mean, lagged the way the physiology runs, with the effective number of days
   cut by both series' autocorrelation, and the effect in real units with a 95% interval. A link is "clear" only when the
   interval leaves out zero; each says whether it agrees with the research and how to test it on yourself.
+- **Every strap recording** (`rec.js`, `analysis.js`): kept whole in IndexedDB, not in the app's main storage: each beat in
+  the strap's own 1/1024 s units (lossless), and each Bluetooth packet's arrival time, heart rate and skin contact. A
+  draft is written every 10 seconds while any session runs, so a crash keeps all but the last seconds (kept as
+  "recovered"); a session that fails (lost contact, too noisy) keeps the beats it got, marked incomplete. Beat times
+  come from the intervals themselves; the packet times only find beats lost in transit (the phone's clock running
+  ahead of the beats by more than 0.7 s over three packets), which become a gap no successive difference crosses.
+  Edits (a trim, excluded stretches, a beat dropped or kept as sent) sit beside the recording and never change it;
+  every measure is worked out over the unbroken runs of included beats, and an edit to your morning check changes the
+  day's verdict too. The settling minute of a morning check is the recording's own trim, not an edit.
+  Measures: time domain, Poincaré, Lomb–Scargle on the beat times (HF from one minute, LF from two, VLF and total
+  power from five), DFA α1 (4–16 beats, from 100) and α2 (16–64, from 300), the triangular index (labelled: its
+  standard needs 20 minutes), per minute, and through time. Against the person's own: the same kind and position,
+  with the smallest worthwhile change as half the SD of their ln RMSSD (Plews 2012; Buchheit 2014); healthy-adult values
+  (Nunan 2010) only as a loose reference beside resting readings. The stand-up test adds the 30:15 ratio (Ewing 1978,
+  1985), said to be a reading and not a diagnosis; cardio adds Edwards TRIMP and the heart rates where α1 crosses 0.75
+  and 0.5 (Rogers 2021), only when the session crossed them.
+- **Someone else on the strap**: chosen under Wearing it before a session, and back to you whenever the strap
+  disconnects. Their recordings never reach your verdict, baselines, morning checks, calibration, training load or
+  resonance rate; the morning check never starts by itself for them. A recording can be moved between people
+  afterwards: moving one of yours away takes its summary out of your data, moving one to you adds it (a morning check
+  only to a morning without one), each with undo. Their maximum heart rate comes from their age (Tanaka 2001).
+- **Strap files**: one recording or many as `health-strap` JSON (every beat as sent, packets, marks, edits, the
+  person's name), which opens in this app on any phone and is added to whoever you choose, never into your own
+  summaries; a self-contained report page (every chart and number, how each was made, prints to PDF); the beats as
+  CSV with clock time, interval as sent and corrected, flag and whether included; corrected RR one a line for Kubios.
+  Backups and Export carry every recording, and importing one merges them, the newer edit of each winning.
 - **Every strap reading** (`hrv.js`): artefacts corrected with thresholds that adapt to your own beat-to-beat spread
   (Lipponen & Tarvainen 2019), so slow breathing is never mistaken for noise; RMSSD, SDNN, pNN50, Poincaré SD1/SD2, the
   Lomb–Scargle spectrum (HF from one minute, LF from two) and breathing rate from the rhythm in the beats. Each packet
@@ -347,7 +374,10 @@ Plain JavaScript, no build step. Scripts load in this order:
 | `ui.js` | Shared building blocks: rings, meters, icons, the chart (with interval bands) and the muscle map |
 | `styles.css`, `inter.woff2` | The design: flat surfaces in warm neutrals, each a solid tone edged by a hairline (no gradients, glows or bevels), one saffron accent and a colour per domain; a solid tab bar with the log button in its middle, so nothing floats over the page; Inter with optical sizing, bundled |
 | `h9.js` | The strap: connection, the beat timeline, live trace, morning HRV check, cardio with α1, heart-rate recovery, crash-safe drafts |
-| `beats.js` | The beat explorer |
+| `analysis.js` | One recording read in full: its clock and gaps, the corrected series with your edits, every measure over runs, per minute, through time, the 30:15 ratio, TRIMP, α1 thresholds, reading against your own |
+| `rec.js` | The recording store (IndexedDB, with fallbacks), people, older readings brought in, drafts recovered, your summaries kept in step, moving between people, backup and merge |
+| `beats.js` | The beat explorer on a recording: reading, zooming, selecting, excluding and per-beat edits |
+| `view-strap.js` | The strap's page (Live, Sessions, People), a session's page, a person's page, strap files and the report, the live pill |
 | `lab.js` | The Lab: breathing pacer, resonance finder, orthostatic test, spot check, Live sessions and the beat export |
 | `zip.js` | Reading a zip on the phone: its table of contents, the PKWARE and WinZip AES locks, inflating with the browser's own DecompressionStream, line by line |
 | `watch.js` | History files: the Zepp export (the zip as emailed, or its CSV files, each recognised by its columns), and databases in or out of a zip, each reduced to days, previewed, merged |

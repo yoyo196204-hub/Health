@@ -130,8 +130,13 @@ function vRecovery() {
   const H = hrProfile(), nav = subnav('recovery', [['rec', 'Recovery'], ['sleep', 'Sleep'], ['cardio', 'Cardio']]), on = SUB.recovery;
   const body = on === 'sleep' ? part(sleepSection) + part(nightSection)
     : on === 'cardio' ? part(cardioHeart) + part(devicesSection)
-    : `${part(recoveryHero)}${sec('Morning check', strapBlock('morning') + strapMsg(), { why: ['hrv', 'Why mornings'] })}${part(hrvSection)}${part(rhrSection)}${part(illLine)}`;
-  return `${appbar('Heart', `Resting ${H.rest} · max ${H.max} bpm`, NATIVE ? syncPill() : '')}${nav}${body}`;
+    : `${part(recoveryHero)}${sec('Morning check', strapBlock('morning') + strapMsg() + `<a class="navrow strapnav" href="#strap-sessions"><span class="ic" style="--c:var(--heart)">${ic('strap')}</span><span class="grow"><span class="nm">Every strap session</span><span class="sub">${plural(recList().length, 'recording')}, beat by beat, for you and anyone else</span></span><span class="chev">›</span></a>`, { why: ['hrv', 'Why mornings'] })}${part(hrvSection)}${part(rhrSection)}${part(illLine)}`;
+  return `${appbar('Heart', `Resting ${H.rest} · max ${H.max} bpm`, `${strapPill()}${NATIVE ? syncPill() : ''}`)}${nav}${body}`;
+}
+// The strap at the top of Heart: its state at a glance, and the way into its own page.
+function strapPill() {
+  const on = HR.conn === 'on';
+  return `<a class="strappill ${on ? 'on' : ''}${HR.mode ? ' rec' : ''}" href="#strap-live" aria-label="The strap">${ic('strap')}<span class="num">${on ? `${HR.bpm ?? DASH}` : 'Strap'}</span></a>`;
 }
 // Loaded: this file ran to the end.
 (self.LOADED ||= []).push('view-recovery.js');
