@@ -100,11 +100,14 @@ function V7(W) { return W.state === 'low' ? 'Below range: a nudge toward an easi
 function devicesSection() {
   const C = calibration(), fmtA = (A, need) => A.bias == null ? `${need - A.n} more` : `${sign(A.bias, 1)} bpm`, lim = A => A.lo == null ? DASH : `${sign(A.lo, 0)} to ${sign(A.hi, 0)}`;
   const used = [C.restOn ? `Watch resting heart rate is shifted by ${sign(-C.rest.bias, 1)} bpm on days without a morning check.` : `Resting correction starts at 5 paired mornings (${C.rest.n} so far).`,
-    C.exOn ? `Watch workout heart rate is shifted by ${sign(-C.ex.bias, 1)} bpm before zones are counted.` : `Workout correction starts at 3 shared workouts (${C.ex.n} so far): wear both, start a workout on the watch and in this app.`];
+    C.lineOn ? `Watch workout heart rate is put on the strap's scale by effort: strap = ${C.line.m.toFixed(2)} × watch ${C.line.b < 0 ? '−' : '+'} ${Math.round(Math.abs(C.line.b))}, within ±${Math.round(1.96 * C.line.se)} bpm (95%).`
+    : C.exOn ? `Watch workout heart rate is shifted by ${sign(-C.ex.bias, 1)} bpm before zones are counted. ${C.line.n >= 6 && C.line.m != null ? 'The pairs do not yet show a steady line, so the fixed shift stays.' : `A correction by effort needs ${C.line.n < 6 ? `${6 - C.line.n} more shared workouts` : 'workouts'}${C.line.span < 30 ? ` spread over 30 bpm (now ${Math.round(C.line.span)})` : ''}.`}`
+    : `Workout correction starts at 3 shared workouts (${C.ex.n} so far): wear both, start a workout on the watch and in this app.`];
+  const proto = `<details class="inner"><summary>Calibrate the watch to the strap</summary>${para('Wear both, the watch snug two fingers above the wrist bone. Start a workout on the watch and cardio in this app at the same moment, then: 5 min resting, 10 min easy, 10 min moderate, 3–5 min hard. Three such sessions cover the range a line needs; keep the watch in the same place each time.')}</details>`;
   return sec('Watch against strap', `<table class="cal"><tr><th></th><th>Pairs</th><th>Watch reads</th><th>95% within</th></tr>
       <tr><td>Resting</td><td>${C.rest.n}</td><td>${fmtA(C.rest, 5)}</td><td>${lim(C.rest)}</td></tr>
       <tr><td>Workouts</td><td>${C.ex.n}</td><td>${fmtA(C.ex, 3)}</td><td>${lim(C.ex)}</td></tr></table>
-    ${para(used.join(' '))}`, { why: ['devices', 'How this works'] });
+    ${para(used.join(' '))}${proto}`, { why: ['devices', 'How this works'] });
 }
 function vRecovery() {
   const H = hrProfile(), nav = subnav('recovery', [['rec', 'Recovery'], ['sleep', 'Sleep'], ['cardio', 'Cardio']]), on = SUB.recovery;

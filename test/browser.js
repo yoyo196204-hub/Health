@@ -150,6 +150,21 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await shot('wear');
     await page.evaluate(() => { Object.assign(S, window.__wear); save(); render(); });
   });
+  await test('watch against strap: a line by effort, its error in Data checks, and the protocol on Heart', async () => {
+    await page.evaluate(() => {
+      window.__cal = { cardio: S.cardio, pairs: S.pairs }; S.cardio = {}; S.pairs = {};
+      [100, 110, 120, 130, 140, 150].forEach((w, i) => { const t = Date.now() - (i + 2) * 864e5, k = dk(new Date(t)); (S.cardio[k] ||= []).push({ t, dur: 1800, avg: Math.round(1.25 * w - 25) + (i % 2 ? 1 : -1), max: 180, z: [0, 1800, 0, 0] }); S.pairs[t] = { a: w, n: 300 }; });
+      save(); render();
+    });
+    await go('set-checks');
+    const r = await page.evaluate(() => [...document.querySelectorAll('.ck')].find(l => /corrected by effort/.test(l.textContent))?.querySelector('summary .sub').textContent);
+    assert.ok(/strap = 1\.2\d × watch − 2\d, from 6 workouts over \d+ bpm; 95% of corrected workouts within ±\d bpm/.test(r), r);
+    await go('recovery'); await page.evaluate(() => { SUB.recovery = 'cardio'; renderView(); }); await page.waitForTimeout(300);
+    const t = await page.evaluate(() => document.getElementById('view').textContent);
+    assert.ok(/put on the strap's scale by effort/.test(t) && /5 min resting, 10 min easy, 10 min moderate, 3–5 min hard/.test(t), 'the line and the protocol');
+    await shot('calibration');
+    await page.evaluate(() => { Object.assign(S, window.__cal); save(); render(); });
+  });
   await test('recovery, training, review: the inputs behind the verdict, nights that end, short session list, honest links', async () => {
     await page.evaluate(() => { const k = shift(todayKey(), -1); S.sleepx[k] = { d: 60, l: 200, r: 60, w: 10, on: -60 }; S.sleep[k] = 5.5; save(); });
     const part = async (t, v) => { await page.evaluate(([t, v]) => { SUB[t] = v; renderView(); }, [t, v]); await page.waitForTimeout(300); };

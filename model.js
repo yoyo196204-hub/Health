@@ -159,10 +159,25 @@ function calibration() {
     const rest = Object.keys(S.hrv).filter(k => S.rhr[k] != null && gapDays(k, now) <= 180).map(k => [S.rhr[k], S.hrv[k].hr]);
     const ex = [];
     for (const k in S.cardio) for (const c of S.cardio[k]) { const p = c.t && S.pairs[c.t]; if (p && p.n >= 20) ex.push([p.a, c.avg]); }
-    const R = agreement(rest), E = agreement(ex);
-    return { rest: R, ex: E, restOn: R.n >= 5, exOn: E.n >= 3 };
+    const R = agreement(rest), E = agreement(ex), L = exLine(ex);
+    return { rest: R, ex: E, line: L, restOn: R.n >= 5, exOn: E.n >= 3, lineOn: !!L.on };
   });
 }
+// Wrist error grows with effort and arm movement (Bent 2020), so one fixed offset can be right at an easy pace and wrong
+// in a hard one. Once there are 6 workouts worn with both, spread over at least 30 bpm of the strap's average, the
+// watch is mapped to the strap by a straight line (least squares, strap on watch), with the residual error shown. A
+// slope outside 0.6–1.4 means the pairs are not yet telling a line apart from noise, so the fixed offset stays.
+const LINE_N = 6, LINE_SPAN = 30;
+function exLine(pairs) {
+  const n = pairs.length, ys = pairs.map(p => p[1]), span = n ? Math.max(...ys) - Math.min(...ys) : 0, out = { n, span };
+  if (n < LINE_N || span < LINE_SPAN) return out;
+  const f = linfit(pairs);
+  if (!f) return out;
+  const res = pairs.map(([x, y]) => y - (f.m * x + f.b)), se = Math.sqrt(res.reduce((a, r) => a + r * r, 0) / (n - 2));
+  return Object.assign(out, { m: f.m, b: f.b, se, on: f.m >= 0.6 && f.m <= 1.4 });
+}
+// A watch workout reading on the strap's scale: the line once there is one, else the fixed offset, else as it is.
+function watchFix(bpm, C = calibration()) { return C.lineOn ? C.line.m * bpm + C.line.b : C.exOn ? bpm - C.ex.bias : bpm; }
 // One consistent resting-HR series. Until the watch is calibrated, mixing sources would show jumps that are
 // only the change of device, so the source with more days in the last 4 weeks is used alone.
 function rhrMode() {
@@ -364,18 +379,19 @@ function sleepStats(n = 14, end = todayKey()) {
 const STRENGTH = /strength|weight|lift|calisthenics|crossfit/i, CALM = /yoga|stretch|breath|pilates|meditat/i;
 function overlapMs(a0, a1, b0, b1) { return Math.max(0, Math.min(a1, b1) - Math.max(a0, b0)); }
 // Strap sessions and watch workouts for a day. A watch workout recorded alongside a strap session is dropped:
-// the strap is the better instrument. Watch heart rate is corrected by the learned offset once there are 3 paired workouts.
+// the strap is the better instrument. Watch heart rate is put on the strap's scale once there are 3 paired workouts
+// (a fixed offset), or by a line through effort once there are 6 spread over 30 bpm (watchFix).
 function sessions(k) {
   return cached('X' + k, () => {
-    const H = hrProfile(), C = calibration(), bias = C.exOn ? C.ex.bias : 0;
+    const H = hrProfile(), C = calibration(), fix = C.lineOn || C.exOn;
     const strap = (S.cardio[k] || []).map((c, i) => ({ src: c.m ? 'manual' : 'strap', i, kind: (KINDS.find(x => x[0] === c.kind) || KINDS[KINDS.length - 1])[1], t: c.t, dur: c.dur, avg: c.avg ?? null, max: c.max ?? null, z: c.z, eff: c.eff }));
     const watch = (S.ex[k] || []).filter(w => !strap.some(c => c.t && overlapMs(c.t, c.t + c.dur * 1000, w.s, w.e) > 0.5 * Math.min(c.dur * 1000, w.e - w.s))).map(w => {
       const z = [0, 0, 0, 0], d = (w.e - w.s) / 1000;
       let sum = 0, secs = 0, max = 0;
-      for (const [b, s] of w.h) { const c = b - bias; z[zoneOf(c, H)] += s; sum += c * s; secs += s; max = Math.max(max, c); }
+      for (const [b, s] of w.h) { const c = watchFix(b, C); z[zoneOf(c, H)] += s; sum += c * s; secs += s; max = Math.max(max, c); }
       const noHr = secs < 60;
       if (noHr && !STRENGTH.test(w.k) && !CALM.test(w.k)) z[1] = d;   // a deliberate workout with no heart rate counts as moderate
-      return { src: 'watch', kind: w.og ? w.ti || 'openGym workout' : w.k, app: w.src, og: !!w.og, t: w.s, dur: d, avg: secs ? sum / secs : null, max: max || null, z, noHr, corrected: !!bias && !noHr, strength: w.og || STRENGTH.test(w.k) };
+      return { src: 'watch', kind: w.og ? w.ti || 'openGym workout' : w.k, app: w.src, og: !!w.og, t: w.s, dur: d, avg: secs ? sum / secs : null, max: max || null, z, noHr, corrected: fix && !noHr, strength: w.og || STRENGTH.test(w.k) };
     });
     return [...strap, ...watch].sort((a, b) => (a.t || 0) - (b.t || 0));
   });

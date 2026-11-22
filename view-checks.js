@@ -82,6 +82,12 @@ function runChecks() {
         'The strap’s morning reading lying still is the reference. A steady offset is corrected for on days without a strap reading; a wide spread means the watch’s resting figure is noisy.'));
       out.push(chk('h-ex', 'Heart', 'Watch workout heart rate against the strap', C.ex.n < 3 ? 'na' : Math.abs(C.ex.bias) > 5 || (C.ex.hi - C.ex.lo) > 20 ? 'look' : 'ok',
         C.ex.n < 3 ? `${plural(C.ex.n, 'shared workout')}; the comparison starts at three.` : `${C.ex.n} workouts: the watch reads ${sign(C.ex.bias, 1)} bpm, 95% within ${sign(C.ex.lo, 0)} to ${sign(C.ex.hi, 0)}.`));
+      const L = C.line;
+      out.push(chk('h-line', 'Heart', 'Watch workout heart rate corrected by effort', C.lineOn ? (1.96 * L.se > 10 ? 'look' : 'ok') : 'na',
+        C.lineOn ? `strap = ${L.m.toFixed(2)} × watch ${L.b < 0 ? '−' : '+'} ${Math.round(Math.abs(L.b))}, from ${L.n} workouts over ${Math.round(L.span)} bpm; 95% of corrected workouts within ±${Math.round(1.96 * L.se)} bpm (against ±${Math.round(1.96 * C.ex.sd)} with a fixed shift).`
+          : L.m != null ? `${L.n} workouts over ${Math.round(L.span)} bpm give a slope of ${r1(L.m)}, outside 0.6–1.4: the fixed shift is used until the pairs settle.`
+          : `${plural(L.n, 'shared workout')} over ${Math.round(L.span)} bpm; a line needs 6 over at least 30 bpm. Until then the fixed shift is used${C.exOn ? '' : ' (from 3)'}.`, [],
+        'A wrist reads blood flow with light, and its error grows with effort and arm movement (Bent 2020), so one offset can fit easy sessions and miss hard ones. With enough workouts across easy to hard, a line from watch to strap (least squares) takes that into account; its residual error is what is left. Heart › Cardio has a three-session protocol that covers the range.'));
       const vals = Object.keys(S.rhr).filter(inWin).sort(), odd = [];
       vals.forEach((k, i) => { const h = vals.slice(Math.max(0, i - 28), i).map(j => S.rhr[j]); if (h.length >= 10) { const m = median(h), s = sd(h) || 1; if (Math.abs(S.rhr[k] - m) > Math.max(3 * s, 8)) odd.push({ k, t: `${S.rhr[k]} bpm against a usual ${Math.round(m)}`, s: 'rhr' }); } });
       out.push(chk('h-jump', 'Heart', 'Resting heart rate without sudden jumps', vals.length < 11 ? 'na' : odd.length ? 'look' : 'ok',

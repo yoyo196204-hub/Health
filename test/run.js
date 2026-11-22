@@ -1228,6 +1228,42 @@ test('wear time: the burn model and the long game leave out short days, and a sy
   run(c, `mergeSync({ days: { '${old}': { st: 4000, hd: ${JSON.stringify(hrDay(8, 14))} } } })`);
   assert.deepStrictEqual(run(c, `[S.hrd['${old}'], S.wx['${old}'].wm, validDay('${old}'), stepsOn('${old}')]`), [null, 360, false, null]);
 });
+// ---------- watch against strap, by effort ----------
+// Paired workouts: strap sessions with the watch's average over the same time. sw: [[watch, strap], ...].
+function pairUp(c, sw) {
+  run(c, 'S.cardio = {}; S.pairs = {}');
+  sw.forEach(([w, st], i) => {
+    const t = Date.parse('2026-11-01T07:00:00Z') + i * 864e5, k = run(c, `dk(new Date(${t}))`);
+    run(c, `(S.cardio['${k}'] ||= []).push({ t: ${t}, dur: 1800, avg: ${st}, max: ${st + 15}, z: [0, 1800, 0, 0] }); S.pairs['${t}'] = { a: ${w}, n: 300 }; memo.clear()`);
+  });
+}
+test('watch workout heart rate: a fixed shift from 3 pairs, a line by effort from 6 over 30 bpm', c => {
+  // The watch reads low, more so the harder it gets: strap = 1.25 × watch − 25, give or take a beat.
+  const line = w => Math.round(1.25 * w - 25);
+  pairUp(c, [[100, line(100)], [104, line(104)], [108, line(108) + 1]]);
+  let C = run(c, 'calibration()');
+  assert.ok(C.exOn && !C.lineOn, 'three pairs: the fixed shift only');
+  assert.strictEqual(run(c, 'Math.round(watchFix(150))'), Math.round(150 - C.ex.bias));
+  // Six pairs, but all easy: too narrow a range for a line.
+  pairUp(c, [100, 102, 104, 106, 108, 110].map(w => [w, line(w)]));
+  C = run(c, 'calibration()');
+  assert.ok(!C.lineOn && C.line.span < 30, `span ${C.line.span}`);
+  // Six pairs from easy to hard: the line, with its residual error, and corrections that follow effort.
+  pairUp(c, [[100, line(100) + 1], [110, line(110) - 1], [120, line(120)], [130, line(130) + 1], [140, line(140) - 1], [150, line(150)]]);
+  C = run(c, 'calibration()');
+  assert.ok(C.lineOn, JSON.stringify(C.line));
+  assert.ok(Math.abs(C.line.m - 1.25) < 0.05 && C.line.se < 1.5, JSON.stringify(C.line));
+  assert.ok(Math.abs(run(c, 'watchFix(150)') - line(150)) < 2 && Math.abs(run(c, 'watchFix(100)') - line(100)) < 2, 'right at both ends, where one shift cannot be');
+  // A watch workout is counted on the strap's scale through the line.
+  const k = run(c, 'shift(todayKey(), -1)'), s0 = run(c, `Date.parse('${k}T18:00:00')`);
+  run(c, `S.ex['${k}'] = [{ s: ${s0}, e: ${s0 + 1800000}, k: 'Run', src: 'Gadgetbridge', h: [[150, 1800]] }]; memo.clear()`);
+  const X = run(c, `sessions('${k}').find(x => x.src === 'watch')`);
+  assert.ok(X.corrected && Math.abs(X.avg - line(150)) < 2, JSON.stringify(X));
+  // Pairs that scatter with no steady slope: the fixed shift stays.
+  pairUp(c, [[100, 160], [110, 100], [120, 165], [130, 105], [140, 150], [150, 110]]);
+  C = run(c, 'calibration()');
+  assert.ok(!C.lineOn && C.exOn, JSON.stringify(C.line));
+});
 test('every file the app loads later is in the version stamp, so none can be served stale', () => {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
   for (const f of ['products.js', 'whole.js', 'indb.js']) assert.ok(sw.includes(`'${f}'`), f);

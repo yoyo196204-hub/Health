@@ -193,6 +193,11 @@ between tabs reuses what was already worked out from the data; anything that cha
   (Lipponen & Tarvainen 2019), so slow breathing is never mistaken for noise; RMSSD, SDNN, pNN50, Poincaré SD1/SD2, the
   Lomb–Scargle spectrum (HF from one minute, LF from two) and breathing rate from the rhythm in the beats. Each packet
   is timestamped where Bluetooth delivers it, and beat times come from the intervals themselves.
+- **Watch against strap**: after 5 paired mornings the watch's resting heart rate is shifted to the strap's; after 3
+  paired workouts its workout heart rate is shifted by the average difference. Wrist error grows with effort and arm
+  movement (Bent 2020), so once 6 paired workouts span at least 30 bpm the watch is mapped to the strap by a straight
+  line (least squares, strap on watch; a slope outside 0.6–1.4 keeps the shift), with its residual error in Data checks.
+  Heart › Cardio has the calibration protocol: wear both for 3 sessions of 5 min rest, 10 easy, 10 moderate, 3–5 hard.
 - **Heart-rate recovery**: after a strap cardio session, the fall in heart rate over one still minute, read against your own.
 - **Aerobic threshold**: during strap cardio, α1 of detrended fluctuation analysis over each two minutes of beats,
   every 30 seconds, windows with over 5% corrected beats dropped; the heart rate where α1 crosses 0.75 (Rogers 2021).
