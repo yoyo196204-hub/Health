@@ -161,6 +161,22 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     });
     assert.deepStrictEqual(r.tri, r.w, JSON.stringify(r));
   });
+  await test('shortcuts: Log food opens the meal due now, Weigh in its sheet over Today, Morning check the strap part of Heart', async () => {
+    await go('review');
+    await page.evaluate(() => __fromNative('shortcut', { to: 'food' })); await page.waitForTimeout(600);
+    const f = await page.evaluate(() => [overlay?.type, overlay?.key === nextMeal(), day === todayKey()]);
+    assert.deepStrictEqual(f, ['add', true, true]);
+    await page.evaluate(() => __fromNative('shortcut', { to: 'weigh' })); await page.waitForTimeout(700);
+    assert.deepStrictEqual(await page.evaluate(() => [location.hash, tab, overlay, pop?.kind]), ['#today', 'today', null, 'weigh']);
+    await page.evaluate(() => closePop()); await page.waitForTimeout(400);
+    await page.evaluate(() => __fromNative('shortcut', { to: 'weigh' })); await page.waitForTimeout(500);
+    assert.strictEqual(await page.evaluate(() => pop?.kind), 'weigh', 'from Today itself too');
+    await page.evaluate(() => __fromNative('shortcut', { to: 'check' })); await page.waitForTimeout(600);
+    assert.deepStrictEqual(await page.evaluate(() => [tab, SUB.recovery, pop]), ['recovery', 'rec', null]);
+    await page.evaluate(() => __fromNative('shortcut', { to: 'nope' })); await page.waitForTimeout(200);
+    assert.strictEqual(await page.evaluate(() => tab), 'recovery', 'anything else is ignored');
+    await go('today');
+  });
   await test('wear time: short days are left out of the long game and said so, and the check lists them', async () => {
     const before = await page.evaluate(() => {
       const full = Array(288).fill(62), short = Array(288).fill(0).map((_, i) => i >= 96 && i < 168 ? 70 : 0), old = { hrd: S.hrd, steps: S.steps };

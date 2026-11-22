@@ -72,6 +72,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Crash.install(this)
+        shortcuts()
         health = HealthReader(this); strap = Strap(this); files = Files(this); feel = Feel(this); og = OpenGym(this)
         Remind.channel(this)
 
@@ -153,6 +154,10 @@ class MainActivity : ComponentActivity() {
     // Data handed over from the web app in Chrome arrives as app.health://import?d=<gzip, base64url>.
     // A tapped reminder carries the tab it is about.
     private fun handle(intent: Intent?) {
+        intent?.getStringExtra("shortcut")?.takeIf { it in SHORTCUTS }?.let { to ->
+            intent?.removeExtra("shortcut")
+            emit("shortcut", JSONObject().put("to", to).toString())
+        }
         intent?.getStringExtra("hash")?.takeIf { Regex("^[a-z-]{1,20}$").matches(it) }?.let { h ->
             intent?.removeExtra("hash")
             emit("goto", JSONObject().put("hash", h).toString())
@@ -162,6 +167,24 @@ class MainActivity : ComponentActivity() {
             val d = data.getQueryParameter("d")
             if (!d.isNullOrEmpty() && d.length < 600_000) emit("import", JSONObject().put("d", d).toString())
         }
+    }
+
+    // Long-press the icon: Log food, Weigh in, Morning check. Set from code, not XML, so they point at this app
+    // whatever its ID (the test build has its own).
+    private fun shortcuts() {
+        try {
+            val sm = getSystemService(android.content.pm.ShortcutManager::class.java) ?: return
+            val list = listOf(
+                Triple("food", "Log food", R.drawable.sc_food),
+                Triple("weigh", "Weigh in", R.drawable.sc_weigh),
+                Triple("check", "Morning check", R.drawable.sc_check),
+            ).mapIndexed { i, (id, label, icon) ->
+                val open = Intent(this, MainActivity::class.java).setAction(Intent.ACTION_VIEW).putExtra("shortcut", id)
+                android.content.pm.ShortcutInfo.Builder(this, id).setShortLabel(label).setLongLabel(label)
+                    .setIcon(android.graphics.drawable.Icon.createWithResource(this, icon)).setIntent(open).setRank(i).build()
+            }
+            sm.dynamicShortcuts = list
+        } catch (e: Exception) { /* the launcher has no shortcuts */ }
     }
 
     override fun onResume() {
@@ -217,6 +240,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val HOST = "appassets.androidplatform.net"
+        val SHORTCUTS = setOf("food", "weigh", "check")
         const val ZEPP = "com.huami.watch.hmwatchmanager"
         // Gadgetbridge, the open-source app that runs an Amazfit watch without Zepp, and its nightly build.
         const val GADGETBRIDGE = "nodomain.freeyourgadget.gadgetbridge"

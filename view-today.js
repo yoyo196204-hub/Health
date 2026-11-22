@@ -250,5 +250,16 @@ function navTo(hash) {
   if (pop && history.state?.pop) { pop = null; history.replaceState(null, '', '#' + hash); route(); }
   else { pop = null; location.hash = hash; }
 }
+// The app's shortcuts (long-press the icon; MainActivity.kt): log food for the meal due now, weigh in, or the
+// morning check. Each opens the same screen the matching row on Today does.
+function shortcut(to) {
+  if (to === 'food') { day = todayKey(); addNext = null; return navTo(`add-${nextMeal()}`); }
+  if (to === 'check') return navTo('recovery-rec');
+  if (to !== 'weigh') return;
+  const weigh = () => todayAct('weigh', { dataset: { s: 'weights' } });
+  if (location.hash === '#today' && !overlay) return weigh();
+  addEventListener('hashchange', () => setTimeout(weigh), { once: true });
+  navTo('today');
+}
 // Loaded: this file ran to the end.
 (self.LOADED ||= []).push('view-today.js');

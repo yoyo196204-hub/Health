@@ -1381,6 +1381,17 @@ test('widget: the same three numbers as Today, as plain values, with kcal left o
   assert.ok(fs.readFileSync(path.join(root, 'android/app/src/main/AndroidManifest.xml'), 'utf8').includes('android:name=".TodayWidget"'));
 });
 
+test('shortcuts: the three the phone offers are exactly the three the page opens', () => {
+  const kt = fs.readFileSync(path.join(root, 'android/app/src/main/java/app/health/MainActivity.kt'), 'utf8');
+  const nat = fs.readFileSync(path.join(root, 'native.js'), 'utf8');
+  const set = JSON.parse('[' + kt.match(/SHORTCUTS = setOf\(([^)]*)\)/)[1] + ']');
+  const js = JSON.parse(nat.match(/NEV\.shortcut = r => \{ if \((\[[^\]]*\])/)[1].replace(/'/g, '"'));
+  assert.deepStrictEqual(set, ['food', 'weigh', 'check']);
+  assert.deepStrictEqual(js, set);
+  for (const id of set) assert.ok(kt.includes(`Triple("${id}", `), id);
+  for (const d of ['sc_food', 'sc_weigh', 'sc_check']) assert.ok(fs.existsSync(path.join(root, `android/app/src/main/res/drawable/${d}.xml`)), d);
+});
+
 (async () => {
   for (const [name, fn] of later) {
     try { await fn(sandbox()); passed++; console.log('  ok  ', name); }

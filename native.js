@@ -258,6 +258,7 @@ function remindOn() { return ['remAm', 'remWk', 'remPm'].some(k => S.settings[k]
 const REMIND = { allowed: null };
 function remindStatus() { if (NATIVE && typeof NATIVE.remindAllowed === 'function') REMIND.allowed = nat('remindAllowed') === true; }
 NEV.remind = r => { REMIND.allowed = !!r?.allowed; if (!REMIND.allowed) toast('Notifications are off for Health in the phone’s settings', 5000); remindPlan(); renderSoft(); };
+NEV.shortcut = r => { if (['food', 'weigh', 'check'].includes(r?.to)) shortcut(r.to); };
 NEV.goto = r => { if (r?.hash && /^[a-z-]+$/.test(r.hash)) location.hash = r.hash; };
 
 // ---------- moving data from Chrome into the app ----------

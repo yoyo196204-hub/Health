@@ -19,7 +19,7 @@ Amazfit and Polar H9 data that decides how hard each day should be.
   by themselves from Health Connect each time the app opens, and again whenever you pull down on any tab. The Polar H9
   connects over the phone's own Bluetooth and is remembered. Haptics come from the phone's vibration engine (composed
   clicks where the phone supports them). Reminders for the morning check, the weekly waist and the evening food log
-  arrive as notifications, only when the thing is still undone. A home-screen widget shows today's recovery, food left and sleep as three rings with the kcal left; it updates when you leave the app and after each sync, and a tap opens Today. A daily backup can go to a folder you choose. The app has
+  arrive as notifications, only when the thing is still undone. A home-screen widget shows today's recovery, food left and sleep as three rings with the kcal left; it updates when you leave the app and after each sync, and a tap opens Today. Long-press the app icon for three shortcuts: Log food (the meal due now), Weigh in, and Morning check. A daily backup can go to a folder you choose. The app has
   **no internet permission**, so nothing in it can leave the phone.
 - **In Chrome** (`index.html`, served by GitHub Pages): the same screens, with the H9 over Web Bluetooth and
   Amazfit data from a Gadgetbridge or Zepp export. "Move my data to the app" in You hands everything to the Android app
