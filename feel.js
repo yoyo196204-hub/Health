@@ -370,14 +370,14 @@ let repeated = '';
 })();
 
 // ---------- the section bar ----------
-// The long tabs (Recovery, Training, Review) get a row of their sections that stays at the top while you scroll:
+// The long tabs (Heart, Insights) get a row of their sections that stays at the top while you scroll:
 // tap one to go straight to it, and the one you are reading lights up as you pass it. Built from the sections
 // themselves, so a section a screen adds or drops is never out of step with the bar.
 let jumpObs = null;
 function jumpbar() {
   jumpObs?.disconnect(); jumpObs = null;
   const v = $('#view');
-  if (!v || overlay || !['recovery', 'training', 'review'].includes(tab)) return;
+  if (!v || overlay || !['recovery', 'review'].includes(tab)) return;
   if (v.querySelector(':scope > .jumpbar')) v.querySelector(':scope > .jumpbar').remove();
   const secs = [...v.querySelectorAll(':scope > section.block, :scope > section.card')].filter(x => x.querySelector(':scope > .mh > h2'));
   if (secs.length < 3) return;

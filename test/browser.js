@@ -31,7 +31,7 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
   const test = async (name, fn) => { try { await fn(); passed++; console.log('  ok  ', name); } catch (e) { failed++; console.log('  FAIL', name, '\n       ', e.message.split('\n')[0]); } };
   const go = async h => { await page.evaluate(x => { location.hash = x; }, h); await page.waitForTimeout(500); };
 
-  for (const tab of ['today', 'recovery', 'training', 'review', 'me']) await test(`${tab}: a finger scrolls the page`, async () => {
+  for (const tab of ['today', 'recovery', 'review', 'me']) await test(`${tab}: a finger scrolls the page`, async () => {
     await go(tab); await page.evaluate(() => scrollTo(0, 0));
     await drag(200, 620, 200, 220);
     assert.ok(await page.evaluate(() => scrollY) > 150, `scrolled ${await page.evaluate(() => scrollY)} px of ${await page.evaluate(() => document.documentElement.scrollHeight - innerHeight)}`);
@@ -140,9 +140,18 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await page.tap('.part[data-to="rc-sleep"]'); await page.waitForTimeout(700);
     assert.ok(await page.evaluate(() => Math.abs(document.getElementById('rc-sleep').getBoundingClientRect().top) < 200), 'tapping an input scrolls to its section');
     await shot('recovery');
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll('#view .block h2')].some(h => /Cardio with the H9/.test(h.textContent))), 'strap cardio lives on Heart');
+    // No Train tab: an old link lands on Insights, which carries the training sections, and Today opens the next session.
+    assert.strictEqual(await page.evaluate(() => document.querySelectorAll('#tabs a').length), 4);
     await go('training');
-    assert.ok(await page.evaluate(() => [...document.querySelectorAll('#view .block')].findIndex(b => /This week/.test(b.textContent)) < [...document.querySelectorAll('#view .block')].findIndex(b => /Last three weeks/.test(b.textContent))));
-    assert.ok(await page.evaluate(() => [...document.querySelectorAll('#view .block')].find(b => /Last three weeks/.test(b.querySelector('h2').textContent)).querySelectorAll(':scope > ul.list > li').length <= 4 + 7));
+    assert.strictEqual(await page.evaluate(() => tab), 'review');
+    assert.ok(await page.evaluate(() => document.querySelector('#in-train').querySelectorAll(':scope > ul.list > li').length <= 4 + 7), 'short session list');
+    await go('today');
+    if (await page.evaluate(() => !!document.querySelector('[data-act="nextgo"]'))) {
+      await page.tap('[data-act="nextgo"]'); await page.waitForTimeout(600);
+      assert.ok(await page.evaluate(() => pop?.kind === 'next' && !!document.querySelector('#sheet .nextog li')), 'the next session opens as a sheet with its exercises');
+      await page.evaluate(() => closePop()); await page.waitForTimeout(400);
+    }
     await go('review');
     const lk = await page.evaluate(() => [...document.querySelectorAll('.lrow, .lneed span')].map(e => e.textContent));
     assert.ok(lk.length >= 5, lk.join(' | '));
@@ -354,25 +363,12 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await page.waitForTimeout(500);
     assert.strictEqual(await page.evaluate(() => document.getElementById('toast').classList.contains('show')), false);
   });
-  await test('the scanner: a drawn barcode is read, found offline, judged, and logged; an unknown pack is learned', async () => {
+  await test('packs by barcode: a typed number is found offline, judged, and logged; an unknown pack is learned', async () => {
     await go('today'); await page.evaluate(() => { day = todayKey(); });
     await page.evaluate(() => navTo(`scan-lunch`)); await page.waitForTimeout(900);
     assert.strictEqual(await page.evaluate(() => overlay?.type), 'scan');
-    // An EAN-13 drawn the way a pack prints it, read by the same decoder the camera frames go through.
-    const code = await page.evaluate(async () => {
-      const L = ['0001101', '0011001', '0010011', '0111101', '0100011', '0110001', '0101111', '0111011', '0110111', '0001011'];
-      const G = L.map(x => x.split('').map(b => b === '1' ? '0' : '1').reverse().join('')), R = L.map(x => x.split('').map(b => b === '1' ? '0' : '1').join(''));
-      const P = ['LLLLLL', 'LLGLGG', 'LLGGLG', 'LLGGGL', 'LGLLGG', 'LGGLLG', 'LGGGLL', 'LGLGLG', 'LGLGGL', 'LGGLGL'];
-      const c = '8901262010023', d = c.split('').map(Number);
-      let bits = '101'; for (let i = 1; i <= 6; i++) bits += (P[d[0]][i - 1] === 'L' ? L : G)[d[i]]; bits += '01010'; for (let i = 7; i <= 12; i++) bits += R[d[i]]; bits += '101';
-      const cv = document.createElement('canvas'); cv.width = 1280; cv.height = 720;
-      const x = cv.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 1280, 720); x.fillStyle = '#000';
-      const m = 8, x0 = (1280 - bits.length * m) / 2; [...bits].forEach((b, i) => { if (b === '1') x.fillRect(x0 + i * m, 220, m, 280); });
-      await scanDecoder();
-      return scanFrame(cv, 1280, 720);
-    });
-    assert.strictEqual(code, '8901262010023', 'the barcode is read');
-    await page.evaluate(c => scanFound(c), code); await page.waitForTimeout(700);
+    await page.evaluate(() => offLoad());
+    await page.fill('#scancode', '8901262010023'); await page.waitForTimeout(700);
     const card = await page.evaluate(() => ({ n: SCAN.hit?.n, v: document.querySelectorAll('.pv li').length, h: document.querySelector('.scard h2')?.textContent }));
     assert.ok(/butter/i.test(card.h), `found: ${card.h}`);
     assert.ok(card.v >= 2, 'the pack is judged per 100 kcal');
@@ -381,7 +377,7 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await page.tap('[data-act="padd"]'); await page.waitForTimeout(600);
     const e = await page.evaluate(() => (S.food[todayKey()] || []).find(x => x.id === 'b8901262010023'));
     assert.ok(e && e.k > 0 && e.c != null && e.ft != null && e.g, 'logged with its panel, carbs and fat');
-    // Not in the list: its label is entered once, and the next scan finds it.
+    // Not in the list: its label is entered once, and the number finds it from then on.
     await page.evaluate(() => scanFound('4006381333931')); await page.waitForTimeout(500);
     assert.ok(await page.evaluate(() => SCAN.miss === '4006381333931' || !!SCAN.hit));
     if (await page.evaluate(() => !!SCAN.miss)) {

@@ -1,15 +1,12 @@
 'use strict';
-// The scanner: a packaged food by its barcode, read by the camera, looked up on the phone.
+// Packs: a packaged food by the barcode number you type, looked up on the phone.
 //
 // Where the numbers come from, in order: your own foods (any you saved with a barcode), then Open Food Facts
 // (products.js: every product sold in India with a nutrition panel, and the most-scanned ones worldwide, checked
 // against their own macros). Nothing is looked up online: the app has no internet. A pack that is not there is
 // entered once from its label, with the barcode, and is found by the scanner from then on.
-//
-// Reading the barcode: the browser's own BarcodeDetector where it has one (Chrome on Android), otherwise ZXing
-// (zxing.min.js, Apache-2.0), which reads EAN-13, EAN-8, UPC-A and UPC-E from the camera frames. Both are loaded
-// only when the scanner opens, so they cost nothing the rest of the time.
-const SCAN = { stream: null, raf: 0, busy: false, last: '', lastN: 0, hit: null, miss: null, err: '', torch: false, det: null, zx: null, code: '' };
+
+const SCAN = { hit: null, miss: null, code: '' };
 let OFF = null;              // { map: code -> line, rows: [[hay, code]] } once products.js is in
 function loadScript(src) {
   return new Promise((ok, no) => {
@@ -113,90 +110,15 @@ function wholeSearch(q, n = 8) {
   return hits.sort((a, b) => a[0] - b[0]).slice(0, n).map(h => wholeFood('n' + h[1])).filter(Boolean);
 }
 
-// ---------- the camera ----------
-async function scanStart() {
-  if (SCAN.stream || SCAN.starting) return;
-  SCAN.starting = true; SCAN.err = '';
-  try {
-    if (!navigator.mediaDevices?.getUserMedia) throw new Error('nocam');
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
-    if (overlay?.type !== 'scan') { stream.getTracks().forEach(t => t.stop()); return; }
-    SCAN.stream = stream;
-    const v = $('#scanv');
-    if (v) { v.srcObject = stream; await v.play().catch(() => {}); }
-    await scanDecoder();
-    scanLoop();
-  } catch (e) {
-    SCAN.err = e?.name === 'NotAllowedError' ? 'denied' : e?.message === 'nocam' ? 'nocam' : 'fail';
-    render();
-  } finally { SCAN.starting = false; }
-}
-function scanStop() {
-  cancelAnimationFrame(SCAN.raf); SCAN.raf = 0;
-  SCAN.stream?.getTracks().forEach(t => t.stop()); SCAN.stream = null; SCAN.torch = false;
-}
-async function scanDecoder() {
-  if (SCAN.det || SCAN.zx) return;
-  try {
-    if ('BarcodeDetector' in self) {
-      const have = await BarcodeDetector.getSupportedFormats();
-      const want = ['ean_13', 'ean_8', 'upc_a', 'upc_e'].filter(f => have.includes(f));
-      if (want.length) { SCAN.det = new BarcodeDetector({ formats: want }); return; }
-    }
-  } catch (e) { /* fall through to ZXing */ }
-  await loadScript('zxing.min.js');
-  const Z = self.ZXing, hints = new Map();
-  hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E]);
-  hints.set(Z.DecodeHintType.TRY_HARDER, true);
-  SCAN.zx = new Z.MultiFormatReader(); SCAN.zx.setHints(hints);
-}
-// One frame: the middle of the picture, where the guide is, read for a barcode.
-async function scanFrame(src, w, h) {
-  if (SCAN.det) { const r = await SCAN.det.detect(src); return r[0]?.rawValue || null; }
-  if (!SCAN.zx) return null;
-  const cv = scanFrame.cv ||= document.createElement('canvas'), Z = self.ZXing;
-  const cw = Math.min(960, w), ch = Math.round(cw * 0.45), sx = (w - w * 0.9) / 2, sw = w * 0.9, sh = sw * 0.45, sy = (h - sh) / 2;
-  cv.width = cw; cv.height = ch;
-  const ctx = cv.getContext('2d', { willReadFrequently: true });
-  ctx.drawImage(src, sx, sy, sw, sh, 0, 0, cw, ch);
-  try { return SCAN.zx.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(cv)))).getText(); }
-  catch (e) { return null; } finally { SCAN.zx.reset(); }
-}
-function scanLoop() {
-  let t = 0;
-  const tick = async now => {
-    if (!SCAN.stream || overlay?.type !== 'scan') return;
-    SCAN.raf = requestAnimationFrame(tick);
-    const v = $('#scanv');
-    if (SCAN.busy || SCAN.hit || SCAN.miss || !v || v.readyState < 2 || now - t < 110) return;
-    t = now; SCAN.busy = true;
-    try {
-      const code = await scanFrame(v, v.videoWidth, v.videoHeight);
-      // A barcode must read the same twice in a row (and pass its check digit) before it counts.
-      if (code && eanOK(code)) { if (code === SCAN.last) SCAN.lastN++; else { SCAN.last = code; SCAN.lastN = 1; } if (SCAN.lastN >= (SCAN.det ? 1 : 2)) scanFound(code); }
-    } finally { SCAN.busy = false; }
-  };
-  SCAN.raf = requestAnimationFrame(tick);
-}
+// ---------- a typed barcode ----------
+// No camera: typing the 13 digits under the bars is as quick, needs no permission and costs nothing while you do it.
+// The lookup runs as soon as the digits make a whole barcode (its check digit agrees).
 async function scanFound(code) {
   await offLoad().catch(() => null);
   const f = lookupCode(code);
-  SCAN.last = ''; SCAN.lastN = 0; SCAN.code = code;
+  SCAN.code = code;
   if (f) { SCAN.hit = f; SCAN.miss = null; buzz('ok'); } else { SCAN.miss = code; SCAN.hit = null; buzz('warn'); }
   render();
-}
-async function scanTorch() {
-  const tr = SCAN.stream?.getVideoTracks()[0];
-  if (!tr) return;
-  try { SCAN.torch = !SCAN.torch; await tr.applyConstraints({ advanced: [{ torch: SCAN.torch }] }); buzz('tick'); render(); }
-  catch (e) { SCAN.torch = false; toast('This camera has no light'); }
-}
-// Called after every render: the camera runs only while the scanner is on screen.
-function scanKick() {
-  if (overlay?.type === 'scan') {
-    if (!SCAN.stream && !SCAN.err) scanStart();
-    else if (SCAN.stream) { const v = $('#scanv'); if (v && v.srcObject !== SCAN.stream) { v.srcObject = SCAN.stream; v.play().catch(() => {}); } }
-  } else if (SCAN.stream) { scanStop(); SCAN.hit = SCAN.miss = null; SCAN.err = ''; }
 }
 
 // ---------- what it says about a pack ----------
@@ -224,8 +146,7 @@ function packFit(f) {
 // ---------- the screen ----------
 function vScan(meal) {
   const m = MEALS.some(x => x[0] === meal) ? meal : nextMeal();
-  const head = masthead('Scan a pack', `Food · ${mealName(m).toLowerCase()}`, { before: `<button class="nav" data-act="close" aria-label="Back">${ic('back')}</button>` });
-  const err = { denied: 'The camera is not allowed. Allow it for Health in the phone’s settings, or type the number under the barcode.', nocam: 'No camera can be used here. Type the number under the barcode instead.', fail: 'The camera could not start. Type the number under the barcode instead.' }[SCAN.err];
+  const head = masthead('Pack by barcode', `Food · ${mealName(m).toLowerCase()}`, { before: `<button class="nav" data-act="close" aria-label="Back">${ic('back')}</button>` });
   let card = '';
   if (SCAN.hit) {
     const f = SCAN.hit, V = packVerdict(f), P = f.per100;
@@ -234,24 +155,26 @@ function vScan(meal) {
       ${P ? `<div class="m4">${[['kcal', P.k, ''], ['protein', P.p, 'g'], ['carbs', P.c, 'g'], ['fat', P.ft, 'g']].map(([l, v, u]) => `<div><b class="num">${v == null ? DASH : r1(v)}${v != null && u ? `<i>${u}</i>` : ''}</b><span>${l}</span></div>`).join('')}</div><p class="sub small center">per 100 ${f.unit || 'g'}</p>` : ''}
       ${V.length ? `<ul class="pv">${V.map(([c, a, b]) => `<li class="${c}"><i></i><span><b>${a}</b><span class="sub">${b}</span></span></li>`).join('')}</ul>` : ''}
       <p class="sub">${packFit(f)}</p>
-      <div class="rowb"><button class="ghost" data-act="scanagain">Scan another</button><button class="solid" data-act="scanadd" data-m="${m}">Choose amount</button></div></div>`;
+      <div class="rowb"><button class="ghost" data-act="scanagain">Another</button><button class="solid" data-act="scanadd" data-m="${m}">Choose amount</button></div></div>`;
   } else if (SCAN.miss) {
     card = `<div class="scard" data-fling="scanagain"><div class="eyebrow">${esc(SCAN.miss)}</div><h2>Not in the list on this phone</h2>
-      <p class="sub">Copy its nutrition panel once, and the scanner knows this pack from then on.</p>
-      <div class="rowb"><button class="ghost" data-act="scanagain">Scan again</button><button class="solid" data-act="scanlabel" data-m="${m}">Enter its label</button></div></div>`;
+      <p class="sub">Copy its nutrition panel once, and this number finds the pack from then on.</p>
+      <div class="rowb"><button class="ghost" data-act="scanagain">Another</button><button class="solid" data-act="scanlabel" data-m="${m}">Enter its label</button></div></div>`;
   }
   return `${head}
-    <div class="scanbox ${SCAN.hit || SCAN.miss ? 'paused' : ''}"><video id="scanv" data-keep playsinline muted autoplay></video><div class="guide"><i></i></div>
-      ${err ? `<p class="scanerr">${err}</p>` : !SCAN.stream ? '<p class="scanerr">Starting the camera…</p>' : ''}
-      ${SCAN.stream ? `<button class="torch ${SCAN.torch ? 'on' : ''}" data-act="scantorch" aria-label="Light">${ic('bolt')}</button>` : ''}</div>
-    ${card || `<p class="hint">Hold the barcode inside the frame, flat and lit</p>`}
-    <div class="scanman"><input id="scancode" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="14" placeholder="Or type the number under it" aria-label="Barcode number" autocomplete="off"><button class="ghost" data-act="scantype">Look up</button></div>`;
+    <div class="scanman big"><input id="scancode" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="14" placeholder="The number under the bars" aria-label="Barcode number" autocomplete="off" value="${esc(SCAN.hit || SCAN.miss ? SCAN.code : '')}"><button class="ghost" data-act="scantype">Look up</button></div>
+    ${card || `<p class="hint">13 digits on most packs, 8 on small ones. It looks up as soon as the number is whole. Searching by name on Add food finds packs too.</p>`}`;
 }
-FLING.scanagain = () => { SCAN.hit = SCAN.miss = null; renderView(); };
+FLING.scanagain = () => { SCAN.hit = SCAN.miss = null; renderView(); setTimeout(() => { const i = $('#scancode'); if (i) { i.value = ''; i.focus(); } }, 0); };
+// Typing: a whole, valid barcode looks itself up.
+function scanTyped(el) {
+  const c = el.value.replace(/\D/g, '');
+  if (c !== el.value) el.value = c;
+  if ((c.length === 8 || c.length === 12 || c.length === 13) && eanOK(c) && c !== SCAN.code) { el.blur(); scanFound(c); }
+}
 function scanAct(a, el) {
-  if (a === 'scango') { day = el.dataset.k || todayKey(); SCAN.hit = SCAN.miss = null; SCAN.err = ''; navTo(`scan-${el.dataset.m || nextMeal()}`); offLoad().catch(() => {}); return true; }
-  if (a === 'scantorch') { scanTorch(); return true; }
-  if (a === 'scanagain') { SCAN.hit = SCAN.miss = null; buzz('tick'); render(); return true; }
+  if (a === 'scango') { day = el.dataset.k || todayKey(); SCAN.hit = SCAN.miss = null; SCAN.code = ''; navTo(`scan-${el.dataset.m || nextMeal()}`); offLoad().catch(() => {}); setTimeout(() => $('#scancode')?.focus(), 350); return true; }
+  if (a === 'scanagain') { SCAN.hit = SCAN.miss = null; SCAN.code = ''; buzz('tick'); render(); const i = $('#scancode'); if (i) { i.value = ''; i.focus(); } return true; }
   if (a === 'scantype') {
     const c = ($('#scancode')?.value || '').replace(/\D/g, '');
     if (!eanOK(c)) { buzz('warn'); toast('That is not a whole barcode: check the digits'); return true; }
@@ -265,7 +188,7 @@ function scanAct(a, el) {
     return true;
   }
   if (a === 'scanlabel') {
-    // The own-food form on Add food, with the barcode kept for the next scan of this pack.
+    // The own-food form on Add food, with the barcode kept for the next lookup of this pack.
     CUSTOM.bc = SCAN.miss; CUSTOM.basis = '100'; addNext = 'mine';
     SCAN.miss = null;
     navTo(`add-${el.dataset.m}`);

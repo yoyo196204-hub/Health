@@ -404,7 +404,7 @@ body.adding #toast, body.setting #toast { bottom: calc(100px + env(safe-area-ins
 /* ---------- the tab bar and the log button ---------- */
 #tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: flex; padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); view-transition-name: tabs;
   background: var(--glass); -webkit-backdrop-filter: blur(22px) saturate(1.6); backdrop-filter: blur(22px) saturate(1.6); box-shadow: 0 -1px 0 var(--line); }
-#tabs::before { content: ''; position: absolute; top: 6px; left: 6px; width: calc((100% - 12px) / 5); height: 52px; border-radius: 16px; background: var(--bg3); opacity: var(--on, 1);
+#tabs::before { content: ''; position: absolute; top: 6px; left: 6px; width: calc((100% - 12px) / 4); height: 52px; border-radius: 16px; background: var(--bg3); opacity: var(--on, 1);
   transform: translateX(calc(var(--i) * 100%)); transition: transform .45s var(--spring); pointer-events: none; }
 #tabs a { position: relative; flex: 1; min-width: 0; height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--soft); text-decoration: none; font: 600 10.5px var(--sans); letter-spacing: .02em; transition: color .2s; }
 #tabs svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: transform .3s var(--spring); }
@@ -412,7 +412,7 @@ body.adding #toast, body.setting #toast { bottom: calc(100px + env(safe-area-ins
 #tabs a.on { color: var(--ink); }
 #tabs a.on svg { stroke: var(--t, var(--accent)); stroke-width: 2.1; transform: translateY(-1px); }
 #tabs a[href="#today"] { --t: var(--accent); } #tabs a[href="#food"] { --t: var(--fuel); } #tabs a[href="#recovery"] { --t: var(--heart); }
-#tabs a[href="#training"] { --t: var(--move); } #tabs a[href="#review"] { --t: var(--sleep); }
+#tabs a[href="#review"] { --t: var(--sleep); }
 #fab { position: fixed; right: max(16px, calc(50% - 294px)); bottom: calc(var(--tabh) + 16px + env(safe-area-inset-bottom)); z-index: 11; width: 58px; height: 58px; border-radius: 20px; border: 0;
   background: linear-gradient(150deg, var(--accent2), var(--accent)); color: var(--on-accent); display: grid; place-items: center; view-transition-name: fab;
   box-shadow: 0 1px 0 rgba(255, 255, 255, .35) inset, 0 12px 28px -10px color-mix(in srgb, var(--accent) 90%, transparent), 0 4px 10px rgba(0, 0, 0, .25); transition: transform .35s var(--spring), opacity .2s; }
@@ -802,6 +802,7 @@ html.still *, html.still *::before, html.still *::after { animation-duration: .0
 .nextog.lv-go { box-shadow: var(--shadow), inset 4px 0 0 var(--good); } .nextog.lv-care { box-shadow: var(--shadow), inset 4px 0 0 var(--mid); } .nextog.lv-easy { box-shadow: var(--shadow), inset 4px 0 0 var(--bad); }
 .nextog h2 { font-size: 21px; margin: 2px 0 8px; }
 .nextog .list li { padding: 7px 0; }
+.sheet .nextog { box-shadow: none; }
 .ease { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--bg3); }
 .ease .dot { margin: 5px 0 0; }
 .ease b { font: 650 14.5px var(--sans); }
@@ -1275,26 +1276,12 @@ body.sheet-open #tabs, body.sheet-open #fab { transform: translateY(calc(var(--l
   transform: translateY(calc(var(--fold) * 22px)) scale(calc(1 - var(--fold) * .05)); opacity: calc(1 - var(--fold) * .6); }
 #view > .card, #view > section, #view > .duo, #view > .todo, #view > .callout { position: relative; z-index: 1; }
 
-/* ---------- the scanner ---------- */
+/* ---------- packs by barcode ---------- */
 .searchbar .scanbtn { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 38px; height: 38px; border: 0; border-radius: 12px; background: color-mix(in srgb, var(--fuel) 16%, var(--bg3)); color: var(--fuel); display: grid; place-items: center; }
 .searchbar .scanbtn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; }
 .searchbar .clr:not([hidden]) ~ .scanbtn { display: none; }
 .foods li.subhead { cursor: default; border: 0; padding: 18px 0 4px; }
-.scanbox { position: relative; aspect-ratio: 4 / 3.2; border-radius: var(--r3); overflow: hidden; background: #000; margin: 4px 0 10px; box-shadow: var(--shadow2); }
-.scanbox video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: filter .4s var(--ease), transform .6s var(--spring); }
-.scanbox.paused video { filter: brightness(.45) blur(3px); transform: scale(1.04); }
-.scanbox .guide { position: absolute; left: 5%; right: 5%; top: 50%; height: 45%; transform: translateY(-50%); border-radius: 18px; box-shadow: 0 0 0 999px rgba(0, 0, 0, .35); }
-.scanbox .guide::before, .scanbox .guide::after { content: ''; position: absolute; inset: 0; border-radius: 18px; border: 2.5px solid rgba(255, 255, 255, .9);
-  -webkit-mask: linear-gradient(#000 0 0) top left / 28px 28px no-repeat, linear-gradient(#000 0 0) top right / 28px 28px no-repeat, linear-gradient(#000 0 0) bottom left / 28px 28px no-repeat, linear-gradient(#000 0 0) bottom right / 28px 28px no-repeat;
-  mask: linear-gradient(#000 0 0) top left / 28px 28px no-repeat, linear-gradient(#000 0 0) top right / 28px 28px no-repeat, linear-gradient(#000 0 0) bottom left / 28px 28px no-repeat, linear-gradient(#000 0 0) bottom right / 28px 28px no-repeat; }
-.scanbox .guide i { position: absolute; left: 8%; right: 8%; top: 50%; height: 2px; border-radius: 2px; background: var(--accent); box-shadow: 0 0 14px 2px var(--accent); animation: sweep 1.8s var(--ease) infinite alternate; }
-.scanbox.paused .guide i { animation-play-state: paused; opacity: 0; }
-@keyframes sweep { from { transform: translateY(-34px); } to { transform: translateY(34px); } }
-.scanerr { position: absolute; left: 16px; right: 16px; bottom: 14px; margin: 0; color: #fff; font-size: 13.5px; text-align: center; text-shadow: 0 1px 6px rgba(0, 0, 0, .8); }
-.scanbox .torch { position: absolute; right: 12px; bottom: 12px; width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, .45); color: #fff; display: grid; place-items: center; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
-.scanbox .torch svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
-.scanbox .torch.on { background: var(--accent); color: var(--on-accent); }
-.scard { position: relative; z-index: 2; margin-top: -54px; padding: 18px; border-radius: var(--r3); background: var(--bg2); box-shadow: var(--shadow2), var(--hi); display: grid; gap: 6px; animation: scard-in .6s var(--spring) both; touch-action: pan-y; }
+.scard { position: relative; z-index: 2; margin-top: 14px; padding: 18px; border-radius: var(--r3); background: var(--bg2); box-shadow: var(--shadow2), var(--hi); display: grid; gap: 6px; animation: scard-in .6s var(--spring) both; touch-action: pan-y; }
 .scard h2 { font-size: 20px; letter-spacing: -.015em; }
 @keyframes scard-in { from { transform: translateY(60px) scale(.96); opacity: 0; } }
 .scard .m4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 6px; }
@@ -1307,5 +1294,6 @@ body.sheet-open #tabs, body.sheet-open #fab { transform: translateY(calc(var(--l
 .pv li.good > i { background: var(--good); } .pv li.bad > i { background: var(--bad); }
 .pv b { display: block; font-size: 14.5px; }
 .scanman { display: flex; gap: 8px; margin-top: 14px; }
+.scanman.big input { min-height: 58px; font-size: 22px; letter-spacing: .06em; }
 .scanman input { flex: 1; min-width: 0; }
 .scanman input { min-height: 46px; padding: 0 14px; border-radius: 14px; border: 1px solid transparent; background: var(--bg3); outline: none; font-variant-numeric: tabular-nums; } .scanman input:focus { border-color: var(--accent); }

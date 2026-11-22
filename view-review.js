@@ -151,7 +151,8 @@ function vReview() {
     ${part(markersCard)}
     ${part(linksCard)}
     ${part(patternsCard)}
-    ${sec('The week', matrix(T, days, cells), { cls: 'first', id: 'in-week' })}`;
+    ${sec('The week', matrix(T, days, cells), { cls: 'first', id: 'in-week' })}
+    ${part(trainInsights)}`;
 }
 // Loaded: this file ran to the end.
 (self.LOADED ||= []).push('view-review.js');

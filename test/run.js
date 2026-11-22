@@ -275,6 +275,10 @@ test('training energy follows the sessions actually done once there is a month o
 
 // ---- reminders ----
 test('reminders skip what is already done today', c => {
+  // The clock is held at noon, so the evening times are always still ahead (a run just before midnight once failed).
+  const Real = c.Date, noon = new Real(); noon.setHours(12, 0, 0, 0);
+  c.Date = class extends Real { constructor(...a) { super(...(a.length ? a : [noon.getTime()])); } static now() { return noon.getTime(); } };
+  try {
   run(c, "S.settings.remAm = '23:59'; S.settings.remPm = '23:58'; S.meta.h9 = { id: 'x', name: 'H9' }");
   const tk = run(c, 'todayKey()');
   let it = run(c, 'remindItems()').filter(x => x.id.endsWith(tk));
@@ -283,6 +287,7 @@ test('reminders skip what is already done today', c => {
   it = run(c, 'remindItems()').filter(x => x.id.endsWith(tk));
   assert.deepStrictEqual(it.map(x => x.title), ['Food log']);
   assert.ok(run(c, 'remindItems()').length > 6, 'the week ahead is scheduled');
+  } finally { c.Date = Real; }
 });
 test('cutting old data removes only what is older, in the groups chosen, and a snapshot undoes it', c => {
   c.raw = seedV3(); run(c, 'S = sanitize(raw); save()');
