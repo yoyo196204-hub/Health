@@ -23,12 +23,14 @@ const RECS = {
 };
 // What the overnight figures are and how they can be edited.
 const WXF = [['hv', 'Overnight HRV', 'ms', 1], ['br', 'Breathing in sleep', '/min', 0.1], ['o2', 'Blood oxygen', '%', 0.1], ['vo', 'VO2max', '', 0.1], ['bf', 'Body fat', '%', 0.1], ['tk', 'Total burn (watch)', 'kcal', 10]];
+// Shown in the list but not typed: read from the watch only.
+const WXV = [['o2n', 'Oxygen-in-sleep', '%'], ['sk', 'Skin °C', ''], ['bm', 'Brisk', 'min'], ['el', 'Climbed', 'm'], ['ss', 'Stress', ''], ['pai', 'PAI', '']];
 
 function recRows(s) {
   const t = d => dateLabel(d, { weekday: 'short', day: 'numeric', month: 'short', year: '2-digit' });
   const srcOf = (st, k) => RECS[st].man ? (S.manual[st]?.[k] ? '' : src('watch')) : st === 'rhr' ? src('watch') : '';
   if (['weights', 'waist', 'steps', 'sleep', 'rhr'].includes(s)) return Object.keys(S[s]).sort().reverse().map(k => ({ k, t: t(k), v: `${s === 'steps' ? fmt(S[s][k]) : kg(S[s][k])} ${RECS[s].u}`, b: srcOf(s, k), act: `data-act="recedit" data-s="${s}" data-k="${k}"`, sw: `data-s="${s}" data-k="${k}"` }));
-  if (s === 'wx') return Object.keys(S.wx).sort().reverse().map(k => ({ k, t: t(k), v: WXF.filter(f => S.wx[k][f[0]] != null).map(f => `${f[1].split(' ')[0]} ${r1(S.wx[k][f[0]])}${f[2] && f[2] !== '%' ? ' ' + f[2] : f[2]}`).join(' · '), b: src('watch'), act: `data-act="recedit" data-s="wx" data-k="${k}"`, sw: `data-s="wx" data-k="${k}"` }));
+  if (s === 'wx') return Object.keys(S.wx).sort().reverse().map(k => ({ k, t: t(k), v: WXF.concat(WXV).filter(f => S.wx[k][f[0]] != null).map(f => `${f[1].split(' ')[0]} ${r1(S.wx[k][f[0]])}${f[2] && f[2] !== '%' ? ' ' + f[2] : f[2]}`).join(' · '), b: src('watch'), act: `data-act="recedit" data-s="wx" data-k="${k}"`, sw: `data-s="wx" data-k="${k}"` }));
   if (s === 'hrv') return Object.keys(S.hrv).sort().reverse().map(k => ({ k, t: t(k), v: `${r1(S.hrv[k].rmssd)} ms · ${Math.round(S.hrv[k].hr)} bpm${S.hrv[k].q != null ? ` · ${S.hrv[k].q}%` : ''}`, b: src('strap'), act: `data-act="hrinfo" data-k="${k}"`, sw: `data-s="hrv" data-k="${k}"` }));
   if (s === 'lab') return Object.keys(S.lab).sort().reverse().flatMap(k => S.lab[k].slice().reverse().map(x => ({ k, t: `${t(k)} · ${LABS[x.kind]?.n || ''}`, v: labSummary(x), b: '', act: `data-act="labinfo" data-k="${k}" data-t="${x.t}"`, sw: `data-s="lab" data-k="${k}" data-t="${x.t}"` })));
   if (s === 'cardio') return Object.keys(S.cardio).sort().reverse().flatMap(k => S.cardio[k].map((c, i) => [c, i]).reverse().map(([c, i]) => ({ k, t: t(k), v: `${(KINDS.find(x => x[0] === c.kind) || KINDS[KINDS.length - 1])[1]} · ${dur(c.dur / 60)}${c.avg ? ` · ${c.avg} bpm` : ''}${c.hrr != null ? ` · recovery ${c.hrr}` : ''}`, b: src(c.m ? 'typed' : 'strap'), act: `data-act="cardioinfo" data-k="${k}" data-t="${c.t || ''}" data-src="${c.m ? 'manual' : 'strap'}"`, sw: `data-s="cardio" data-k="${k}" data-i="${i}"` })));
@@ -185,8 +187,17 @@ function vDayDetail(p) {
     dayRow('Overnight HRV', x.hv, hist(d => S.wx[d]?.hv), v => Math.round(v), ' ms', 1),
     dayRow('Breathing in sleep', x.br, hist(d => S.wx[d]?.br), v => r1(v), '/min', -1),
     dayRow('Blood oxygen', x.o2, hist(d => S.wx[d]?.o2), v => r1(v), '%', 0),
+    dayRow(`Blood oxygen in sleep${x.o2c ? `<i>${plural(x.o2c, 'reading')}, lowest ${r1(x.o2l)}%</i>` : ''}`, x.o2n, hist(d => S.wx[d]?.o2n), v => r1(v), '%', 0),
+    x.sk != null ? dayRow('Skin temperature in sleep', x.sk, hist(d => S.wx[d]?.sk), v => r1(v), ' °C', 0)
+      : dayRow('Skin temperature in sleep, change', x.skd, hist(d => S.wx[d]?.skd), v => sign(v, 1), ' °C', 0),
+    dayRow('Body temperature, highest', x.bt, hist(d => S.wx[d]?.bt), v => r1(v), ' °C', 0),
     dayRow('Morning HRV (strap)', S.hrv[k]?.rmssd, hist(d => S.hrv[d]?.rmssd), v => Math.round(v), ' ms', 1),
     dayRow('Steps', S.steps[k], hist(d => S.steps[d]), v => fmt(v), '', 1),
+    dayRow('Brisk walking<i>minutes at 100+ steps a minute</i>', x.bm, hist(d => S.wx[d]?.bm), v => fmt(v), ' min', 1),
+    dayRow('Climbed', x.el, hist(d => S.wx[d]?.el), v => fmt(v), ' m', 0),
+    dayRow('Floors', x.fl, hist(d => S.wx[d]?.fl), v => fmt(v), '', 0),
+    dayRow('Stress<i>the watch’s own score</i>', x.ss, hist(d => S.wx[d]?.ss), v => Math.round(v), '', 0),
+    dayRow(`PAI<i>the watch’s own score, last 7 days${x.pat != null ? `; ${x.pat} today` : ''}</i>`, x.pai, hist(d => S.wx[d]?.pai), v => Math.round(v), '', 0),
   ].join('');
   const nav = d => { const to = shift(k, d); return to > todayKey() ? '<span></span>' : `<button class="mini" data-act="dayx" data-k="${to}">${d < 0 ? '‹ ' : ''}${dateLabel(to, { weekday: 'short', day: 'numeric' })}${d > 0 ? ' ›' : ''}</button>`; };
   const curve = dayCurve(k), hyp = hypnogram(sx);

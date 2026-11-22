@@ -896,7 +896,7 @@ atest('the database reader reads tables made WITHOUT ROWID, as Gadgetbridge make
   c.raw = await gbRaw(c);
   run(c, 'db = sqliteOpen(raw)');
   // The counts and sums Python's sqlite3 gives for the same file.
-  assert.deepStrictEqual(run(c, 'Object.fromEntries(Object.keys(db.tables).sort().map(t => [t, db.each(t, () => {})]))'), { BASE_ACTIVITY_SUMMARY: 4, DEVICE: 2, GENERIC_HRV_VALUE_SAMPLE: 624,
+  assert.deepStrictEqual(run(c, 'Object.fromEntries(Object.keys(db.tables).sort().map(t => [t, db.each(t, () => {})]))'), { BASE_ACTIVITY_SUMMARY: 4, DEVICE: 2, GENERIC_HRV_VALUE_SAMPLE: 624, GENERIC_TEMPERATURE_SAMPLE: 117, HUAMI_PAI_SAMPLE: 80,
     GENERIC_WEIGHT_SAMPLE: 2, HUAMI_EXTENDED_ACTIVITY_SAMPLE: 57600, HUAMI_HEART_RATE_RESTING_SAMPLE: 40, HUAMI_SLEEP_RESPIRATORY_RATE_SAMPLE: 40, HUAMI_SLEEP_SESSION_SAMPLE: 41,
     HUAMI_SPO2_SAMPLE: 40, HUAMI_STRESS_SAMPLE: 40, MI_BAND_ACTIVITY_SAMPLE: 720, USER: 1, android_metadata: 1, sqlite_sequence: 3 });
   assert.deepStrictEqual(run(c, '(() => { let a = 0, b = 0, s = 0, k = 0; db.each("HUAMI_EXTENDED_ACTIVITY_SAMPLE", r => { a += r.heart_rate; b += r.timestamp % 1000003; s += r.steps; k += r.raw_kind; }); return [a, b, s, k]; })()'),
@@ -926,6 +926,10 @@ atest('a Gadgetbridge database becomes days exactly as the daily sync makes them
   // HRV from the readings inside the night only: 40–42 overnight, not the 20s at noon; none on the day with no night.
   assert.deepStrictEqual([D['2026-06-01'].hv, D['2026-05-22'].hv], [40.9, undefined]);
   assert.deepStrictEqual([D['2026-05-22'].o2, D['2026-05-23'].o2, D['2026-05-22'].br, D['2026-05-23'].br], [96, 97, 14, 15]);
+  // The watch's own scores: stress as the day's mean, PAI as the day's last reading, wrist temperature only in the night.
+  assert.deepStrictEqual([D['2026-06-01'].ss, D['2026-06-01'].pai, D['2026-06-01'].pat], [30, Math.round(62.5 + 10), 6 + 10 % 3]);
+  assert.deepStrictEqual([D['2026-06-01'].sk, D['2026-06-01'].skc, D['2026-05-22'].sk], [Math.round((33.5 + 0.2 + 33.7 + 0.2) / 2 * 100) / 100, 2, undefined]);
+  assert.strictEqual(D['2026-06-01'].bm, undefined, 'ten steps a minute is not brisk');
   // The 03:00 reading falls in the night on days with one, and becomes that night's blood oxygen in sleep.
   assert.deepStrictEqual([D['2026-06-01'].o2n, D['2026-06-01'].o2c, D['2026-05-22'].o2n], [D['2026-06-01'].o2, 1, undefined]);
   assert.strictEqual(D['2026-06-30'].wt, 81.4, 'the morning weigh-in, not the evening one');
@@ -1490,6 +1494,36 @@ test('history: a chunk read back fills older days, never takes away a workout al
   assert.strictEqual(run(c, `S.ex['${d(1)}']`), undefined, 'a workout deleted in the watch app goes in a normal sync');
   const kt = fs.readFileSync(path.join(root, 'android/app/src/main/java/app/health/HealthReader.kt'), 'utf8');
   assert.ok(/optInt\("end", 0\)/.test(kt) && /LocalDate\.now\(zone\)\.minusDays\(end\.toLong\(\)\)/.test(kt), 'the reader can read a window ending in the past');
+});
+
+atest('Gadgetbridge: minutes at 100 steps a minute or more are counted for the day, from that day’s watch only', async c => {
+  gbBox(c);
+  c.raw = await gbRaw(c);
+  // Half an hour of brisk walking on 1 June from the Bip 6, and the old Bip's 50 a minute stays not brisk.
+  const G = JSON.parse(JSON.stringify(await vm.runInContext(`(() => { const db = sqliteOpen(raw), s = Date.UTC(2026, 5, 1, 8) / 1000;
+    return gbRead({ has: n => db.has(n), tables: db.tables, each: (n, fn) => db.each(n, n === 'HUAMI_EXTENDED_ACTIVITY_SAMPLE' ? r => fn(r.timestamp >= s && r.timestamp < s + 1800 ? Object.assign({}, r, { steps: 112 }) : r) : fn) }); })()`, c)));
+  assert.deepStrictEqual([G.days['2026-06-01'].bm, G.days['2026-06-02'].bm], [30, undefined]);
+});
+
+test('skin temperature in sleep: read only against its own series, a nudge to readiness and a reason beside the illness notice, never the notice alone', c => {
+  const t = run(c, 'todayKey()');
+  run(c, `S.rhr = {}; S.wx = {}; for (let i = 0; i < 40; i++) { const d = shift('${t}', -i); S.rhr[d] = 54 + (i % 3); S.wx[d] = { hv: 45 + (i % 5) * 2.5, sk: 33.4 + (i % 3) * 0.1, skc: 30 }; } memo.clear()`);
+  let K = run(c, 'skinDev(todayKey())');
+  assert.ok(Math.abs(K.m - 33.5) < 0.02 && K.up === false, JSON.stringify(K));
+  run(c, `S.wx['${t}'].sk = 34.3; memo.clear()`);
+  K = run(c, 'skinDev(todayKey())');
+  assert.ok(K.up && Math.abs(K.dev - 0.8) < 0.05);
+  assert.ok(run(c, 'readiness().why').some(w => w[1] === 'Skin temperature in sleep +0.8 °C from your usual'), 'a nudge to the day');
+  // Raised on both nights with HRV and resting HR normal: no illness notice.
+  run(c, `S.wx[shift('${t}', -1)].sk = 34.2; memo.clear()`);
+  assert.deepStrictEqual(run(c, '[illness().on, illness().skinUp]'), [false, true]);
+  // With the pattern, it is one more reason; the absolute and the change-from-baseline series are never mixed.
+  run(c, `S.rhr['${t}'] = 63; S.rhr[shift('${t}', -1)] = 62; S.wx['${t}'].hv = 36; S.wx[shift('${t}', -1)].hv = 37; memo.clear()`);
+  assert.ok(run(c, 'illness().on'));
+  run(c, `S.wx['${t}'] = { hv: 36, skd: 0.9, skc: 30 }; memo.clear()`);
+  assert.deepStrictEqual(run(c, 'skinDev(todayKey())'), { v: 0.9, need: 14 }, 'a change-from-baseline night is not read against absolute nights');
+  run(c, `S.wx['${t}'] = { hv: 36, sk: 34.3, skc: 1 }; memo.clear()`);
+  assert.strictEqual(run(c, 'skinDev(todayKey())'), null, 'one reading is not a night');
 });
 
 (async () => {

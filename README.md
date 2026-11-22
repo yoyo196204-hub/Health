@@ -12,6 +12,21 @@ You lift in [openGym](https://github.com/DuarteSantos8/openGym); Health plans th
 goes to openGym as one file, the sets come back through openGym's backup folder and Health Connect, and they join the
 Amazfit and Polar H9 data that decides how hard each day should be.
 
+## What is captured from Health Connect
+
+Steps, distance, active and total energy, sleep with stages, heart rate, resting heart rate, HRV, weight, body fat,
+workouts, blood oxygen (the day's and, apart, inside the main sleep), breathing rate, VO2max, skin temperature in sleep
+(where the phone's Health Connect has it), metres and floors climbed, step cadence (minutes at 100+ steps a minute, also
+from short step records), and body temperature from a thermometer app. After each sync the app reads 90 more days back
+through history until Health Connect has nothing older (with "access past data" allowed, everything it holds; without
+it, the 30 days before access was given); Data checks says how far back it has read.
+
+How each is used: skin temperature in sleep, against your own usual only (4 weeks, at least 14 nights, one series), is
+a nudge to the day's recovery when 0.5 °C or more above it, and a reason listed beside the early-illness notice (Smarr
+2020, Mason 2022), never the notice alone. Brisk minutes, climbing, stress, PAI and body temperature are shown in a day
+in detail against your own usual and decide nothing. Not read yet from a Health Connect backup file: skin temperature,
+climbing and cadence (their tables there are not checked against a real backup).
+
 ## Two ways to run it
 
 - **Android app**: the full experience. Download `health.apk` from the
@@ -241,6 +256,10 @@ Auto export writes one every day. Pick either. Read on the phone by `gadgetbridg
 - The day's resting heart rate (stamped with the watch's zone), overnight HRV (only the readings inside the night's
   sleep), blood oxygen (the day's average, and separately the readings inside the main sleep: mean, count, lowest), breathing rate in sleep, a paired scale's weight, and each workout's summary with its own
   watch's heart rate.
+- Minutes at 100 steps a minute or more from the day's watch (moderate-intensity walking, Tudor-Locke 2018); the
+  watch's own stress (day's mean) and PAI (7-day total and today's), shown as its own scores and never used to decide
+  anything; wrist temperature readings inside the main sleep (`GENERIC_TEMPERATURE_SAMPLE`), read only as a change from
+  your own usual.
 - Sleep, heart rate and workouts then go through the same code as a Health Connect backup (`hcbNight`, `hcbSleep`,
   `hcbHeart`), so an imported day and a synced day agree.
 

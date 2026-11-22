@@ -159,16 +159,21 @@ function hcbNight(stages, s, e, p) {
   return d + l + r >= 15 ? { s, e, d, l, r, w, seg, p } : null;
 }
 // Readings [time, value, from a watch] that fall inside a main sleep (main[k] = { s, e }, filed under the morning
-// it ends), kept per night as o2n (mean), o2c (how many) and o2l (lowest). The watch's own wherever it wrote any.
-function hcbNightO2(main, pts, day) {
+// it ends), kept per night as their mean, how many, and the lowest (keys [mean, count, lowest]; lowest optional).
+// The watch's own wherever it wrote any. Blood oxygen: o2n, o2c, o2l; skin temperature: sk, skc.
+function hcbNightly(main, pts, day, [km, kc, kl], round = r1) {
   const by = {}, mine = {};
   for (const [t, v, w] of pts) {
     const k0 = dk(new Date(t)), k = [k0, shift(k0, 1)].find(n => main[n] && t >= main[n].s && t <= main[n].e);
     if (!k) continue;
     (by[k] ||= []).push(v); if (w) (mine[k] ||= []).push(v);
   }
-  for (const k of Object.keys(by)) { const v = mine[k] || by[k], o = day(k); if (o) Object.assign(o, { o2n: r1(mean(v)), o2c: v.length, o2l: r1(Math.min(...v)) }); }
+  for (const k of Object.keys(by)) {
+    const v = mine[k] || by[k], o = day(k);
+    if (o) Object.assign(o, { [km]: round(mean(v)), [kc]: v.length }, kl ? { [kl]: round(Math.min(...v)) } : {});
+  }
 }
+const hcbNightO2 = (main, pts, day) => hcbNightly(main, pts, day, ['o2n', 'o2c', 'o2l']);
 // The nights of each morning: the longest of the preferred source's is the main sleep (the others' only when it has
 // none), and the others that do not overlap it are naps. Returns each day's main night.
 function hcbSleep(nights, day, prefer) {

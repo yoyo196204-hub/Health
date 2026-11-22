@@ -11,6 +11,7 @@
 //   - each night as the watch scored it, a binary report with its stages, decoded as Gadgetbridge decodes it; a later
 //     report of the same night replaces the earlier one;
 //   - the day's resting heart rate, and HRV, blood oxygen and breathing-rate readings;
+//   - its stress and PAI scores, and temperature readings where the watch takes them;
 //   - each workout's summary.
 // When two watches cover one day, the one worn more of it is that day's watch, so steps are never counted twice.
 
@@ -27,7 +28,8 @@ const GB_KIND = { 0x10: 'Run', 0x20: 'Walk', 0x40: 'Swim', 0x80: 'Cycle', 0x100:
 const GB_STAGE = { 4: 2, 5: 3, 7: 1, 8: 4 };
 const GB_STEP = { HUAMI_EXTENDED_ACTIVITY_SAMPLE: 'minutes', MI_BAND_ACTIVITY_SAMPLE: 'minutes', HUAMI_SLEEP_SESSION_SAMPLE: 'nights',
   HUAMI_HEART_RATE_RESTING_SAMPLE: 'resting heart rate', GENERIC_HRV_VALUE_SAMPLE: 'HRV', HUAMI_SPO2_SAMPLE: 'blood oxygen', GENERIC_SPO2_SAMPLE: 'blood oxygen',
-  HUAMI_SLEEP_RESPIRATORY_RATE_SAMPLE: 'breathing rate', GENERIC_RESPIRATORY_RATE_SAMPLE: 'breathing rate', GENERIC_WEIGHT_SAMPLE: 'weight', BASE_ACTIVITY_SUMMARY: 'workouts' };
+  HUAMI_SLEEP_RESPIRATORY_RATE_SAMPLE: 'breathing rate', GENERIC_RESPIRATORY_RATE_SAMPLE: 'breathing rate', GENERIC_WEIGHT_SAMPLE: 'weight', BASE_ACTIVITY_SUMMARY: 'workouts',
+  HUAMI_STRESS_SAMPLE: 'stress', HUAMI_PAI_SAMPLE: 'PAI', GENERIC_TEMPERATURE_SAMPLE: 'temperature' };
 
 function gbIs(db) { return db.has('DEVICE') && GB_ACT.some(t => db.has(t)); }
 
@@ -59,8 +61,8 @@ async function gbRead(db, onStep = () => {}) {
     db.each(name, r => {
       const ms = r.timestamp * 1000, id = r.device_id, hr = r.heart_rate, s = r.steps > 0 && r.steps <= 300 ? r.steps : 0, beat = hr >= 30 && hr <= 230;
       if (!(ms > 946684800000) || !(s || beat)) return;
-      const a = (per[dayOf(ms)] ||= {})[id] ||= [0, 0, new Uint8Array(288)], t = new Date(ms);
-      a[0]++; a[1] += s; a[2][Math.floor((t.getHours() * 60 + t.getMinutes()) / 5)] = 1;
+      const a = (per[dayOf(ms)] ||= {})[id] ||= [0, 0, new Uint8Array(288), 0], t = new Date(ms);
+      a[0]++; a[1] += s; if (s >= 100) a[3]++; a[2][Math.floor((t.getHours() * 60 + t.getMinutes()) / 5)] = 1;
       if (dev[id]) dev[id].worn++;
       if (beat && T.length < 3e6) { T.push(ms); B.push(hr); D.push(id); }
     });
@@ -68,9 +70,11 @@ async function gbRead(db, onStep = () => {}) {
   // Each day's watch: the one worn more of it. Its steps are the day's.
   const mainDev = {};
   for (const [k, by] of Object.entries(per)) {
-    const [id, [, st, bins]] = Object.entries(by).reduce((a, b) => (b[1][0] > a[1][0] ? b : a));
+    const [id, [, st, bins, brisk]] = Object.entries(by).reduce((a, b) => (b[1][0] > a[1][0] ? b : a));
     mainDev[k] = +id;
     const o = day(k); if (o && st >= 1) o.st = st;
+    // Minutes at 100 steps a minute or more: moderate-intensity walking (Tudor-Locke 2018).
+    if (o && brisk) o.bm = brisk;
     // Minutes worn: that watch's 5-minute bins with a step or a heart rate, less any hour or more with neither.
     if (o) o.wm = wornMin(bins);
   }
@@ -108,6 +112,21 @@ async function gbRead(db, onStep = () => {}) {
   const o2 = [];
   for (const name of ['HUAMI_SPO2_SAMPLE', 'GENERIC_SPO2_SAMPLE']) db.each(name, r => { const v = r.spo2; if (v >= 70 && v <= 100 && r.timestamp > 946684800000 && own(r.device_id, r.timestamp)) o2.push([r.timestamp, v, true]); });
   hcbNightO2(main, o2, day);
+  // The watch's own scores, kept as it gives them and shown as its own: stress (1–100, from its HRV) and PAI.
+  await avg(['HUAMI_STRESS_SAMPLE'], 'stress', 'ss', Math.round, v => v >= 1 && v <= 100);
+  await step('HUAMI_PAI_SAMPLE');
+  const pai = {};
+  db.each('HUAMI_PAI_SAMPLE', r => {
+    if (!(r.timestamp > 946684800000) || !own(r.device_id, r.timestamp) || !(r.pai_total >= 0)) return;
+    const k = hcbDay(r.timestamp, (r.utc_offset || 0) / 1000);
+    if (!pai[k] || r.timestamp > pai[k].t) pai[k] = { t: r.timestamp, total: r.pai_total, today: r.pai_today };
+  });
+  for (const [k, p] of Object.entries(pai)) { const o = day(k); if (o) { o.pai = Math.round(p.total); if (p.today >= 0) o.pat = Math.round(p.today); } }
+  // Temperature in the night's main sleep: the wrist's skin, read only as a change from your own usual.
+  await step('GENERIC_TEMPERATURE_SAMPLE');
+  const temp = [];
+  db.each('GENERIC_TEMPERATURE_SAMPLE', r => { const v = r.temperature; if (v >= 25 && v <= 42 && r.timestamp > 946684800000 && own(r.device_id, r.timestamp)) temp.push([r.timestamp, v, true]); });
+  hcbNightly(main, temp, day, ['sk', 'skc'], v => Math.round(v * 100) / 100);
   await avg(['HUAMI_SLEEP_RESPIRATORY_RATE_SAMPLE'], 'rate', 'br', r1, v => v >= 4 && v <= 40);
   await avg(['GENERIC_RESPIRATORY_RATE_SAMPLE'], 'respiratory_rate', 'br', r1, v => v >= 4 && v <= 40);
   // HRV: the readings taken during the night's main sleep, so a daytime reading cannot pull the figure down; the

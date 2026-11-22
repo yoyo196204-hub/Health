@@ -224,6 +224,25 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     assert.ok(await page.evaluate(() => !document.querySelector('.callout.ill')), 'nothing on Today with four nights');
     await page.evaluate(() => { S.wx = window.__o2; save(); });
   });
+  await test('a day in detail: the new watch figures appear, each against your own usual, and nothing when they are missing', async () => {
+    const k = await page.evaluate(() => shift(todayKey(), -1));
+    await page.evaluate(k => {
+      window.__nw = JSON.parse(JSON.stringify(S.wx));
+      for (let i = 1; i <= 20; i++) { const d = shift(k, -i); S.wx[d] = Object.assign({}, S.wx[d], { o2n: 95 + (i % 3) * 0.5, o2c: 10, o2l: 91, sk: 33.4 + (i % 3) * 0.1, skc: 20, bm: 20 + i, el: 30 + i, ss: 30 + (i % 5), pai: 60 + i }); }
+      S.wx[k] = Object.assign({}, S.wx[k], { o2n: 95.4, o2c: 12, o2l: 90, sk: 34.2, skc: 20, bm: 42, el: 55, fl: 12, ss: 41, pai: 85, pat: 9 });
+      save(); openPop({ kind: 'dayx', k });
+    }, k);
+    await page.waitForTimeout(600);
+    const t = await page.evaluate(() => document.querySelector('#sheet').textContent.replace(/\s+/g, ' '));
+    for (const re of [/Blood oxygen in sleep12 readings, lowest 90%/, /Skin temperature in sleep/, /34\.2 °C/, /Brisk walking/, /42 min/, /Climbed/, /55 m/, /Floors/, /Stress/, /PAI.*9 today/])
+      assert.ok(re.test(t), `${re} in ${t.slice(0, 400)}`);
+    await shot('daydetail');
+    await page.evaluate(() => closePop()); await page.waitForTimeout(300);
+    await page.evaluate(k => { S.wx = window.__nw; save(); openPop({ kind: 'dayx', k: shift(todayKey(), -40) }); }, k);
+    await page.waitForTimeout(400);
+    assert.ok(!/Brisk walking|Stress|PAI/.test(await page.textContent('#sheet')), 'no rows without data');
+    await page.evaluate(() => closePop()); await page.waitForTimeout(300);
+  });
   await test('wear time: short days are left out of the long game and said so, and the check lists them', async () => {
     const before = await page.evaluate(() => {
       const full = Array(288).fill(62), short = Array(288).fill(0).map((_, i) => i >= 96 && i < 168 ? 70 : 0), old = { hrd: S.hrd, steps: S.steps };

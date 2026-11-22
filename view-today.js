@@ -85,7 +85,8 @@ function trio() {
 function illReasons(I) {
   const [a, b] = I.nights, src = x => x === 'strap' ? 'strap' : 'watch';
   return [`Resting heart rate ${Math.round(a.rhr.v)} and ${Math.round(b.rhr.v)} bpm; your usual is ${Math.round(a.rhr.m)} (${src(b.rhr.src)})`,
-    `HRV ${Math.round(a.hrv.v)} and ${Math.round(b.hrv.v)} ms; your normal range is ${Math.round(b.hrv.lo)}–${Math.round(b.hrv.hi)} (${b.hrv.src === 'strap' ? 'strap, morning' : 'watch, overnight'})`];
+    `HRV ${Math.round(a.hrv.v)} and ${Math.round(b.hrv.v)} ms; your normal range is ${Math.round(b.hrv.lo)}–${Math.round(b.hrv.hi)} (${b.hrv.src === 'strap' ? 'strap, morning' : 'watch, overnight'})`]
+    .concat(I.skinUp ? [`Skin temperature in sleep ${sign(a.skin.dev, 1)} and ${sign(b.skin.dev, 1)} °C from your usual (watch)`] : []);
 }
 function illCard() {
   const I = illness();

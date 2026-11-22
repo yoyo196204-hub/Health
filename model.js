@@ -281,10 +281,32 @@ function readiness(k = todayKey()) {
     else if (!V.now && WH.z != null && WH.z <= -1.5) why.push([1, `No morning check today, and the watch's overnight HRV last night (${Math.round(WH.now)} ms) is well below its usual ${Math.round(WH.base)}`, 'night']);
     // Breathing rate during sleep rises with fever and infection, often before you feel it (Natarajan 2020).
     if (BR.now != null && BR.base != null && BR.now - BR.base >= Math.max(1, 2 * BR.sd)) why.push([1, `Breathing rate in sleep ${r1(BR.now)} a minute, ${r1(BR.now - BR.base)} above your usual ${r1(BR.base)}`, 'night']);
+    // Skin temperature in sleep raised above your own usual: like breathing rate, a nudge only (Smarr 2020).
+    const SK = skinDev(k);
+    if (SK?.up) why.push([1, `Skin temperature in sleep ${sign(SK.dev, 1)} °C from your usual`, 'night']);
     const score = why.reduce((a, w) => a + w[0], 0), known = V.state || WH.state || R.delta != null || sl != null;
     const level = !known ? 'unknown' : score >= 3 ? 'easy' : score >= 1 ? 'care' : 'go';
     const src = { strap: !!V.now, week: !!V.state, night: sl != null || !!sx || !!S.wx[k] };
     return { level, why: why.sort((a, b) => b[0] - a[0]), V, R, WH, BR, src };
+  });
+}
+
+// ---------- skin temperature in sleep ----------
+// The wrist's temperature through the main sleep, as a change from your own usual: it rises with fever and infection,
+// often before symptoms (Smarr 2020, Mason 2022). Wrist temperature is not body temperature, so it is only ever read
+// against itself: one series per night (the absolute figure where the watch app gives one, otherwise its change from
+// the device's baseline, never the two mixed), the four weeks before the last week as the usual, at least 14 nights,
+// each with 2 or more readings inside the sleep and the watch worn through. Raised: 0.5 °C or more and 1.5 SD above.
+const SK_BASE = 14, SK_UP = 0.5;
+function skinOn(d, f) { const x = S.wx[d]; return x?.[f] != null && (x.skc || 0) >= 2 && nightWorn(d) !== false ? x[f] : null; }
+function skinDev(d, ref = shift(d, -1)) {
+  return cached(`SK${d}${ref}`, () => {
+    const f = S.wx[d]?.sk != null ? 'sk' : S.wx[d]?.skd != null ? 'skd' : null, v = f ? skinOn(d, f) : null;
+    if (v == null) return null;
+    const base = range(28, shift(ref, -7)).map(x => skinOn(x, f)).filter(x => x != null);
+    if (base.length < SK_BASE) return { v, need: SK_BASE - base.length };
+    const m = mean(base), s = sd(base), dev = v - m;
+    return { v, m, s, dev, up: dev >= Math.max(SK_UP, 1.5 * s) };
   });
 }
 
@@ -322,7 +344,7 @@ function illHrv(d, ref) {
 }
 function illness(k = todayKey()) {
   return cached('ILL' + k, () => {
-    const ref = shift(k, -1), nights = [ref, k].map(d => ({ k: d, rhr: illRhr(d, ref), hrv: illHrv(d, ref) }));
+    const ref = shift(k, -1), nights = [ref, k].map(d => ({ k: d, rhr: illRhr(d, ref), hrv: illHrv(d, ref), skin: skinDev(d, ref) }));
     const out = { on: false, nights, missing: [] };
     for (const n of nights) {
       const when = n.k === k ? 'last night' : 'the night before';
@@ -333,6 +355,8 @@ function illness(k = todayKey()) {
     out.missing = [...new Set(out.missing)];
     out.ready = !out.missing.length;
     out.on = out.ready && nights.every(n => n.rhr.up && n.hrv.low);
+    // Skin temperature is not part of the rule; raised on both nights, it is one more reason shown with it.
+    out.skinUp = nights.every(n => n.skin?.up);
     return out;
   });
 }
