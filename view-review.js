@@ -1,5 +1,5 @@
 'use strict';
-// Review: every stream on one page, the decisions it triggers, and the numbers that fired them.
+// Insights: what your data says, one part at a time (energy, body, the long game, the links that are real for you).
 
 const grade = (v, hit, part) => v >= hit ? 2 : v >= part ? 1 : 0;
 // Each cell: value shown and 0 (off) / 1 (partial) / 2 (on target); null = no data.
@@ -16,38 +16,6 @@ function dayCells(k, T) {
     hrv: V && V.lo ? { v: Math.round(V.now.rmssd), s: V.day === 'low' ? 0 : 2, x: V.now.rmssd } : V ? { v: Math.round(S.hrv[k].rmssd), s: 1, x: S.hrv[k].rmssd } : null,
   };
 }
-function matrix(T, days, cells) {
-  // Each row's average is written the way its cells are: calories and steps in thousands, like the cells.
-  const k1 = v => (v / 1000).toFixed(1);
-  const rows = [['kcal', 'Calories', `${k1(T.kcal)}k kcal`, 'kcal', k1], ['protein', 'Protein', `${T.protein} g`, 'protein', v => Math.round(v)], ['fibre', 'Fibre', `${T.fibre} g`, 'fibre', v => Math.round(v)],
-    ['steps', 'Steps', `${k1(T.stepGoal)}k`, 'steps', k1], ['sleep', 'Sleep', '7–9 h', 'sleep', v => r1(v)], ['train', 'Training', `${S.profile.days}+ a week`, 'lift', null], ['hrv', 'HRV', 'your range', 'hrv', v => Math.round(v)]];
-  return `<div class="mx"><span></span>${days.map(k => `<span class="dh ${k === todayKey() ? 'now' : ''}">${weekday(k)}</span>`).join('')}<span class="dh">avg</span>
-    ${rows.map(([key, label, goal, ev, f]) => {
-      const vals = cells.map(c => c[key]).filter(c => c && c.x != null);
-      const avg = key === 'train' ? `${cells.filter(c => c.train).length}` : vals.length ? f(mean(vals.map(c => c.x))) : DASH;
-      return `<a class="rl" href="#why-${ev}">${label}<i>${goal}</i></a>${cells.map(c => c[key] ? `<i class="c s${c[key].s} ${c[key].part ? 'part' : ''}">${c[key].v}</i>` : '<i class="c"></i>').join('')}<b class="av num">${avg}</b>`;
-    }).join('')}</div>
-    <p class="key"><i class="c s2"></i>on target<i class="c s1"></i>partial<i class="c s0"></i>off<i class="c"></i>no data</p><p class="sub small">Calories and steps in thousands; training shows the openGym day, or cardio minutes. Averages are over the days with data; a calorie day counts once it is fully logged.</p>`;
-}
-// Rules that turn the week into at most a few actions. Each shows the number that fired it, most important first.
-function decisions(T, cells, E, St) {
-  const out = [], have = key => cells.map(c => c[key]).filter(c => c && c.x != null), avg = key => { const v = have(key); return v.length ? mean(v.map(c => c.x)) : null; };
-  const logged = cells.filter(c => c.kcal && !c.kcal.part).length, rate = T.slope == null ? null : T.slope * 7 / T.wt * 100;
-  const p = avg('protein'), st = avg('steps'), A = activityWeek(), R = readiness(), L = sleepStats(7), L14 = sleepStats(14);
-  if (logged < 4) out.push([3, `${logged} of 7 days fully logged`, 'Too little to judge intake. Log whole days before changing anything.', 'logging']);
-  if (rate != null && rate < -1) out.push([3, `Losing ${(-rate).toFixed(1)}% a week`, 'Faster than 1%: muscle is at risk. Eat 150 kcal more a day.', 'rate']);
-  if (rate != null && rate > -0.25 && logged >= 5) out.push([2, `Losing ${Math.max(0, -rate).toFixed(1)}% a week on ${logged} logged days`, T.trust > 0 ? `Your burn is being re-measured from your data (${Math.round(T.trust * 100)}% weight so far); the target follows.` : 'The target starts following your own data after 7 complete days.', 'balance']);
-  if (E.gap != null && E.gap < -15) out.push([2, `Your data implies ${Math.round(-E.gap)}% less burn than the formula`, 'The usual cause is unlogged oil, snacks or outside meals. Check portions first.', 'balance']);
-  if (p != null && logged >= 4 && p < T.protein * 0.8) out.push([2, `Protein ${Math.round(p)} of ${T.protein} g`, `Add ${Math.ceil((T.protein - p) / 24)} scoop${T.protein - p > 24 ? 's' : ''} of whey, or a katori of usal and dahi at each meal.`, 'protein']);
-  if (A.strengthDays < Math.min(2, S.profile.days)) out.push([2, `Lifted on ${A.strengthDays} of ${S.profile.days} days`, 'In a deficit, lifting is what keeps the loss from being muscle.', 'lift']);
-  if (St && St.pct < -5) out.push([2, `Strength down ${Math.round(-St.pct)}%`, 'Check protein, sleep and rate of loss before pushing harder.', 'comp']);
-  if (R.level === 'easy') out.push([2, R.why[0][1], 'Easy day: walk, or lift lighter. Rule out illness if it persists.', R.why[0][2]]);
-  if (L.avg != null && L.n >= 3 && L.avg < 6) out.push([2, `Sleep ${r1(L.avg)} h average`, 'Expect more hunger and less fat per kg lost. Protect sleep before cutting calories.', 'sleep']);
-  if (L14.midSd != null && L14.midSd > 60) out.push([1, `Sleep timing varies by ±${Math.round(L14.midSd)} min`, 'Anchor the wake time on off days, even after a late night.', 'regular']);
-  if (st != null && st < T.stepGoal * 0.7) out.push([1, `Steps ${fmt(st)} of ${fmt(T.stepGoal)}`, 'A 15-minute walk after lunch and after dinner covers the gap.', 'steps']);
-  if (A.who < 75 && A.n < 3) out.push([1, `${Math.round(A.who)} active minutes this week`, 'Two brisk 25-minute walks with the strap would double it.', 'zones']);
-  return out.sort((a, b) => b[0] - a[0]);
-}
 // The week as text, for sharing with a coach or a doctor.
 function shareWeek(T, cells, E) {
   const avg = key => { const v = cells.map(c => c[key]).filter(c => c && c.x != null); return v.length ? mean(v.map(c => c.x)) : null; };
@@ -61,14 +29,8 @@ function shareWeek(T, cells, E) {
   return lines.join('\n');
 }
 // ---------- Insights ----------
-// What the data says, most useful first: the headlines, the burn your body has shown, the body itself, what moves
-// what in your own data, how you eat across the week, then the week as a matrix and what it asks you to do.
-function headCards() {
-  const H = headline();
-  if (!H.length) return '';
-  const col = { food: 'var(--fuel)', heart: 'var(--heart)', sleep: 'var(--sleep)', body: 'var(--body)', move: 'var(--move)' };
-  return `<div class="heads">${H.slice(0, 4).map(h => `<div class="card head"><span class="ico" style="--c:${col[h.dom] || 'var(--accent)'}">${ic('spark')}</span><span><b>${esc(h.t)}</b><span class="sub">${h.s}</span></span></div>`).join('')}</div>`;
-}
+// What the data says, one part at a time: your energy (the burn your body has shown, and how you eat), the body, the
+// long game, and the links that are real in your own data. The headlines live on Today; nothing here repeats them.
 // The burn the model has learned, its interval over time, and what it means this week.
 function burnCard() {
   const T = targets(), M = T.model, E = energy();
@@ -83,7 +45,6 @@ function burnCard() {
     ${c}${c ? legend([['line c-fuel', 'your burn, learned'], ['band c-fuel', '95% interval'], ['bar c-fuel', 'complete days eaten'], ['goal', 'target']]) : ''}
     ${stats([[fmt(M.formula), 'textbook burn'], [`${sign(M.gap)}<i>%</i>`, 'yours vs textbook'], [fmt(M.rho), 'kcal in 1 kg of change']])}
     ${wk ? para(`Last 7 days: ${fmt(wk.intake)} kcal a day on ${plural(wk.n, 'complete day')}, a ${wk.bal < 0 ? 'deficit' : 'surplus'} of <b>${fmt(Math.abs(wk.bal))}</b> kcal a day: about ${r1(Math.abs(fatWk))} kg a week of body ${wk.bal < 0 ? 'lost' : 'gained'}, ${Math.round(M.fatShare * 100)}% of it fat.`) : ''}
-    ${para(burnWords(M) + (E.watch ? ` The watch puts it at ${fmt(E.watch)}; watch calorie estimates are not used (${why('devices', 'why')}).` : ''), 'sub small')}
     <details class="inner"><summary>The ledger, 21 days</summary>${table([
       trow(`Eaten, ${plural(E.n, 'complete day')}`, E.intake == null ? DASH : `${fmt(E.intake)} kcal`),
       trow(`Weight trend${M.rate == null ? '' : `, ${sign(M.rate, 2)} kg a week`}`, M.rate == null ? DASH : `${sign(M.rate / 7 * M.rho, 0)} kcal`),
@@ -110,21 +71,21 @@ function bodyCard() {
     ${historyList('Every weigh-in', Object.keys(S.weights).sort().reverse().slice(0, 120).map(k => [k, `${kg(S.weights[k])} kg${S.manual.weights[k] ? '' : ' · from the watch or scale'}`]), 'weights')}
     ${historyList('Every waist reading', Object.keys(S.waist).sort().reverse().map(k => [k, `${kg(S.waist[k])} cm`]), 'waist')}</section>`;
 }
-// What moves what: each pair with its effect, its 95% interval drawn around zero, and how to test it.
+// What moves what: only the links that are real in your own data (the 95% interval clear of zero), each with its
+// effect and how to test it. Everything not clear yet is one line that opens.
 function linksCard() {
-  const L = allLinks(), shown = L.filter(l => ['clear', 'hint', 'none'].includes(l.status)), wait = L.filter(l => l.status === 'need');
-  const col = { clear: 'var(--good)', hint: 'var(--mid)', none: 'var(--soft)' };
-  const rows = shown.sort((a, b) => ({ clear: 0, hint: 1, none: 2 }[a.status] - { clear: 0, hint: 1, none: 2 }[b.status])).map(l => {
-    const m = Math.max(Math.abs(l.elo), Math.abs(l.ehi), 1e-6) * 1.12, x = v => (50 + v / m * 50).toFixed(1);
+  const L = allLinks(), clear = L.filter(l => l.status === 'clear'), rest = L.filter(l => ['hint', 'none'].includes(l.status)), wait = L.filter(l => l.status === 'need');
+  const row = l => {
+    const m = Math.max(Math.abs(l.elo), Math.abs(l.ehi), 1e-6) * 1.12, x = v => (50 + v / m * 50).toFixed(1), col = l.status === 'clear' ? 'var(--good)' : 'var(--soft)';
     const lab = l.status === 'clear' ? (l.agrees ? 'Clear' : 'Clear · unexpected') : l.status === 'hint' ? 'Hint' : 'No link yet';
     return `<div class="lrow"><div class="lt"><b>${l.x} → ${l.y}<span class="lst ${l.status === 'clear' && !l.agrees ? 'odd' : l.status}">${lab}</span></b><span class="sub">${l.status === 'none' ? `No clear effect across ${l.n} days` : `<b>${effText(l)}</b> per ${l.xu}, ${l.n} days`}</span></div>
-      <div class="forest" style="--c:${col[l.status]}" aria-hidden="true"><i class="zero"></i><i class="cib" style="left:${x(l.elo)}%;width:${(x(l.ehi) - x(l.elo)).toFixed(1)}%"></i><i class="pt" style="left:${x(l.eff)}%"></i></div>
-      ${l.status !== 'none' ? `<span class="ltest">${l.test}</span>` : ''}</div>`;
-  }).join('');
+      <div class="forest" style="--c:${col}" aria-hidden="true"><i class="zero"></i><i class="cib" style="left:${x(l.elo)}%;width:${(x(l.ehi) - x(l.elo)).toFixed(1)}%"></i><i class="pt" style="left:${x(l.eff)}%"></i></div>
+      ${l.status === 'clear' ? `<span class="ltest">${l.test}</span>` : ''}</div>`;
+  };
+  const more = rest.length + wait.length;
   return `<section class="card" id="in-links">${cardHead('What moves what', 'insight', 'var(--sleep)', why('links', 'read with care'))}
-    <p class="sub small" style="margin:4px 0 2px">Your own day-to-day data, trends removed. The bar is the 95% interval: clear of the centre line means the link is real for you.</p>
-    ${rows ? `<div class="lrows">${rows}</div>` : para('Nothing to read yet: links need 14 days with both halves of a pair.')}
-    ${wait.length ? `<div class="lneed">${wait.map(l => `<span>${l.x} → ${l.y}: ${l.need} more days</span>`).join('')}</div>` : ''}</section>`;
+    ${clear.length ? `<div class="lrows">${clear.map(row).join('')}</div>` : para(L.length ? 'No link is clear in your data yet. The more days you log, the sooner one shows.' : 'Links need 14 days with both halves of a pair.')}
+    ${more ? `<details class="inner"><summary>Not clear yet · ${more}</summary>${rest.length ? `<div class="lrows">${rest.map(row).join('')}</div>` : ''}${wait.length ? `<div class="lneed">${wait.map(l => `<span>${l.x} → ${l.y}: ${l.need} more days</span>`).join('')}</div>` : ''}</details>` : ''}</section>`;
 }
 // How you eat across the week: logging, consistency, the weekday profile, weekends, protein spread.
 function patternsCard() {
@@ -140,19 +101,11 @@ function patternsCard() {
     ${P.protein ? para(`Protein reached ${T.perMeal} g at <b>${P.protein.hit} of ${P.protein.tot}</b> main meals in two weeks${P.pAvg != null ? `; ${Math.round(P.pAvg)} g a day on average against ${T.protein}` : ''}.`) : ''}</section>`;
 }
 function vReview() {
-  const T = targets(), days = range(7), cells = days.map(k => dayCells(k, T));
-  const E = energy(), St = strength(), D = decisions(T, cells, E, St);
+  const parts = [['energy', 'Energy'], ['body', 'Body'], ['long', 'Long game'], ['links', 'Links']];
+  const nav = subnav('review', parts), on = SUB.review;
+  const body = on === 'body' ? part(bodyCard) : on === 'long' ? part(markersCard) : on === 'links' ? part(linksCard) : part(burnCard) + part(patternsCard);
   return `${appbar('Insights', 'What your data says', `<button class="mini" data-act="shareweek" aria-label="Share this week">Share</button>`)}
-    ${part(headCards)}
-    ${sec('Do next', D.length ? `<ul class="dec">${D.slice(0, 5).map(([w, sig, act, ev]) => `<li class="w${w}"><a href="#why-${ev}"><span class="sig">${sig}</span><span class="act">${act}</span></a></li>`).join('')}</ul>` : para('Nothing triggered. Hold the plan.'), { id: 'in-do' })}
-    ${part(checkBanner)}
-    ${part(burnCard)}
-    ${part(bodyCard)}
-    ${part(markersCard)}
-    ${part(linksCard)}
-    ${part(patternsCard)}
-    ${sec('The week', matrix(T, days, cells), { cls: 'first', id: 'in-week' })}
-    ${part(trainInsights)}`;
+    ${part(checkBanner)}${nav}${body}`;
 }
 // Loaded: this file ran to the end.
 (self.LOADED ||= []).push('view-review.js');

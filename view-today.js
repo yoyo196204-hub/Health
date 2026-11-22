@@ -19,7 +19,7 @@ function syncLine() {
   const sub = SYNC.busy || SYNC.err || !S.meta.sync ? '' : lag
     ? `Nothing new from ${esc(W.src || 'the watch')} for ${ago(W.w).replace(/ ago$/, '')}. ${esc(W.src || 'The watch app')} only passes data on when it syncs with the watch: open it, let it sync, and come back.`
     : `Health read it ${ago(F?.read || S.meta.sync)}${F?.err?.length ? ` · ${plural(F.err.length, 'kind')} could not be read` : ''}`;
-  return `<div class="syncline ${SYNC.err ? 'err' : lag ? 'lag' : ''}" id="syncline"><span class="grow"><span>${text}</span>${sub ? `<span class="sub small">${sub}</span>` : ''}</span>${APP?.zepp && (lag || !W) ? '<button class="mini" data-act="zepp">Open Zepp</button>' : ''}<button class="mini" data-act="sync" ${SYNC.busy ? 'disabled' : ''} aria-label="Read Health Connect now">${SYNC.busy ? '…' : '↻'}</button></div>`;
+  return `<div class="syncline ${SYNC.err ? 'err' : lag ? 'lag' : ''}" id="syncline"><span class="grow"><span>${text}</span>${sub ? `<span class="sub small">${sub}</span>` : ''}</span>${watchAppHere() && (lag || !W) ? `<button class="mini" data-act="zepp">Open ${watchApp()}</button>` : ''}<button class="mini" data-act="sync" ${SYNC.busy ? 'disabled' : ''} aria-label="Read Health Connect now">${SYNC.busy ? '…' : '↻'}</button></div>`;
 }
 // A fresh install or a reinstall: offer the backup once. It goes for good when you dismiss it, choose a backup
 // folder, import, or once there is anything in the app at all, including watch data.
@@ -42,7 +42,7 @@ function miniStages(sx) {
 function dueList() {
   const k = todayKey(), h = new Date().getHours(), out = [];
   const strap = S.meta.h9 || Object.keys(S.hrv).length;
-  if (strap && !S.hrv[k] && h >= 4 && h < 12) out.push({ id: 'hrv', t: 'Morning check', s: 'Two minutes lying down with the H9, before getting up. Your HRV range is built from these.', href: '#recovery' });
+  if (strap && !S.hrv[k] && h >= 4 && h < 12) out.push({ id: 'hrv', t: 'Morning check', s: 'Two minutes lying down with the H9, before getting up. Your HRV range is built from these.', href: '#recovery-rec' });
   // A scale that writes to Health Connect fills this in; ask only when nothing has come in today.
   if (S.weights[k] == null && h >= 5) out.push({ id: 'weight', t: 'Weigh in', s: 'After the toilet, before food or water: the same conditions each day are what make the trend honest.', field: 'weights' });
   const lastWaist = Object.keys(S.waist).sort().pop();
@@ -79,9 +79,9 @@ function trio() {
     inner: sl != null ? `<b class="num">${Math.floor(sl)}:${String(Math.round((sl % 1) * 60)).padStart(2, '0')}</b><span>hours</span>` : `<b>${DASH}</b><span>no night</span>` });
   const sleepWord = sl == null ? 'Not synced' : sl >= need - 0.25 ? 'Enough' : sl >= need - 1 ? 'A little short' : 'Short';
   return `<section class="card trio" style="--tint:${zc}">
-    <a class="tri" href="#recovery" style="--c:${zc}">${rec}<span class="tl">Recovery</span><span class="ts">${RS.score != null ? zw : RS.level === 'unknown' ? 'Calibrating' : zw}</span></a>
+    <a class="tri" href="#recovery-rec" style="--c:${zc}">${rec}<span class="tl">Recovery</span><span class="ts">${RS.score != null ? zw : RS.level === 'unknown' ? 'Calibrating' : zw}</span></a>
     <a class="tri" href="#food" data-act="gotoday" style="--c:var(--fuel)">${fuel}<span class="tl">kcal</span><span class="ts" style="color:var(--soft)">${fmt(t.k)} of ${fmt(T.kcal)}</span></a>
-    <a class="tri" href="#recovery" style="--c:var(--sleep)">${slp}<span class="tl">Sleep</span><span class="ts">${sleepWord}</span></a></section>`;
+    <a class="tri" href="#recovery-sleep" style="--c:var(--sleep)">${slp}<span class="tl">Sleep</span><span class="ts">${sleepWord}</span></a></section>`;
 }
 // What is due today, each one tap from being done.
 function todoStrip() {
@@ -141,7 +141,7 @@ function bodyMove() {
       <span class="eyebrow">Weight ${w != null ? '· today' : '· trend'}</span>
       <span class="kpi"><b class="num">${r1(w ?? M.W ?? T.wt)}<i>kg</i></b><span class="sub">${rate != null ? `${sign(rate, 2)} kg a week` : 'trend after a week'}</span></span>${spark}
       <span class="sub">${w == null ? 'Tap to weigh in' : `Trend ${r1(M.W ?? T.wt)} kg`}</span></button>
-    <a class="card tap" href="#review">
+    <a class="card tap" href="#review-long">
       <span class="eyebrow">Move</span>
       <div class="dualrow">${ring('t-steps', st / T.stepGoal, { c: 'var(--move)', size: 58, stroke: 10, inner: `<b class="num">${Math.round(Math.min(999, st / T.stepGoal * 100))}</b>` })}<span class="kpi"><b class="num" style="font-size:22px">${fmt(st)}</b><span class="sub">of ${fmt(T.stepGoal)}</span></span></div>
       <span class="sub">${Math.round(A.who)} of 150 active min this week</span></a></div>`;
@@ -155,19 +155,23 @@ function nightCard() {
     ${stats([[sl != null ? `${Math.floor(sl)}<i>h</i> ${Math.round((sl % 1) * 60)}<i>m</i>` : DASH, 'asleep'], [sx?.hr ? `${Math.round(sx.hr)}<i>bpm</i>` : DASH, `heart rate asleep${H.word && H.word !== 'usual' ? `, ${H.word}` : ''}`], [Q.v != null ? Math.round(Q.v) : DASH, Q.v != null ? 'regularity (SRI)' : 'regularity after 5 nights']])}
     ${sx ? miniStages(sx) : ''}</button>`;
 }
+// Training on Today is one card and two buttons: the next session in openGym (exercises, loads, today's guidance),
+// and what you have lifted. When the plan in openGym is out of date, the card says so in one line.
 function trainCard() {
   const k = todayKey(), did = nextDay(shift(k, 1)), plan = sessionPlan(shift(k, 1), did), R = readiness();
   if (!plan.lifts.length) return '';
-  return `<button class="card tap" data-act="nextgo" style="display:block;width:100%;text-align:left;font:inherit;color:inherit;border:0">${cardHead(S.lifts[k] ? 'Done today · next' : 'Next in openGym', 'train', 'var(--move)', '<span class="chev">›</span>')}
-    <b style="display:block;font-size:17px;margin-top:2px">${esc(plan.name)}</b><span class="sub">${esc(plan.focus)}</span>
-    <p class="sub ease lv-${R.level}" style="margin:10px 0 0"><span class="dot"></span>${EASE[R.level][0]}</p></button>`;
+  const never = !S.meta.ogplan, stale = never || ogPlanStale();
+  return `<section class="card trcard">${cardHead(S.lifts[k] ? 'Done today · next in openGym' : 'Next in openGym', 'train', 'var(--move)')}
+    <div class="trnext"><b>${esc(plan.name)}</b><span class="sub">${esc(plan.focus)}</span></div>
+    <p class="sub ease lv-${R.level}"><span class="dot"></span>${EASE[R.level][0]}</p>
+    <div class="rowb duo2"><button class="solid" data-act="nextgo">Session</button><button class="ghost" data-act="trainlog">History</button></div>
+    ${stale ? `<a class="trplan" href="#set-train">${never ? 'Put your plan in openGym' : 'Plan changed: send it to openGym again'}<span class="chev">›</span></a>` : ''}</section>`;
 }
 function vToday() {
   const h = new Date().getHours(), greet = h < 5 ? 'Late night' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   return `${appbar(greet, dateLabel(todayKey(), { weekday: 'long', day: 'numeric', month: 'long' }), syncPill())}
     ${welcome()}${needsSyncLine() ? syncLine() : ''}
-    ${part(trio)}${part(todoStrip)}${part(insightCard)}${part(fuelCard)}${part(bodyMove)}${part(nightCard)}${part(staleStrip)}${part(shoulderCard)}${part(trainCard)}
-    ${S.profile.shoulder ? `<label class="card check" style="padding:12px 16px"><input type="checkbox" data-act="prehab" ${S.prehab[todayKey()] ? 'checked' : ''}><span>Shoulder routine: stretch and band work</span></label>` : ''}`;
+    ${part(trio)}${part(todoStrip)}${part(insightCard)}${part(fuelCard)}${part(bodyMove)}${part(nightCard)}${part(shoulderCard)}${part(trainCard)}`;
 }
 
 // ---------- the log button ----------
@@ -181,8 +185,10 @@ function vLog() {
   return `${sheetTop(`Log · ${when}`, 'What happened?', 'log')}
     <div class="eyebrow qlabel">Food</div>
     <div class="qgrid">${meals}${tile('bolt', 'var(--fuel)', 'Quick kcal', 'a meal out', `data-act="addto" data-m="${m}" data-k="${k}" data-c="quick"`)}${tile('copy', 'var(--fuel)', 'Plates', `${S.plates.length + THALI.length}`, `data-act="addto" data-m="${m}" data-k="${k}" data-c="thali"`)}${tile('search', 'var(--fuel)', 'Search', 'any food', `data-act="addto" data-m="${m}" data-k="${k}" data-c="find"`)}${tile('scan', 'var(--fuel)', 'Barcode', 'a pack', `data-act="scango" data-m="${m}" data-k="${k}"`)}</div>
-    <div class="eyebrow qlabel">Body and heart</div>
-    <div class="qgrid">${tile('body', 'var(--body)', 'Weight', S.weights[todayKey()] != null ? `${kg(S.weights[todayKey()])} kg` : '', 'data-act="weigh" data-s="weights"')}${tile('tape', 'var(--body)', 'Waist', '', 'data-act="weigh" data-s="waist"')}${tile('heart', 'var(--heart)', strap ? 'Morning check' : 'Strap', S.hrv[todayKey()] ? 'done' : '', 'href="#recovery" data-act="popnav"')}${tile('breathe', 'var(--pro)', 'Breathe', '', 'href="#lab-breathe" data-act="popnav"')}${tile('pulse', 'var(--heart)', 'Spot check', '', 'href="#lab-spot" data-act="popnav"')}${tile('move', 'var(--move)', 'Cardio', '', 'data-act="cardioadd"')}${tile('insight', 'var(--heart)', 'Live', '', 'href="#lab-live" data-act="popnav"')}${tile('sleep', 'var(--sleep)', 'Your day', '', `data-act="dayx" data-k="${todayKey()}"`)}</div></aside>`;
+    <div class="eyebrow qlabel">Body</div>
+    <div class="qgrid">${tile('body', 'var(--body)', 'Weight', S.weights[todayKey()] != null ? `${kg(S.weights[todayKey()])} kg` : '', 'data-act="weigh" data-s="weights"')}${tile('tape', 'var(--body)', 'Waist', '', 'data-act="weigh" data-s="waist"')}${tile('move', 'var(--move)', 'Cardio', '', 'data-act="cardioadd"')}${tile('sleep', 'var(--sleep)', 'Your day', '', `data-act="dayx" data-k="${todayKey()}"`)}</div>
+    <div class="eyebrow qlabel">Heart, with the strap</div>
+    <div class="qgrid">${tile('heart', 'var(--heart)', strap ? 'Morning check' : 'Strap', S.hrv[todayKey()] ? 'done' : '', 'href="#recovery-rec" data-act="popnav"')}${tile('breathe', 'var(--pro)', 'Breathe', '', 'href="#lab-breathe" data-act="popnav"')}${tile('pulse', 'var(--heart)', 'Spot check', '', 'href="#lab-spot" data-act="popnav"')}${tile('insight', 'var(--heart)', 'Live', '', 'href="#lab-live" data-act="popnav"')}${tile('wave', 'var(--good)', 'Resonance', 'finder', 'href="#lab-rf" data-act="popnav"')}${tile('stand', 'var(--sleep)', 'Stand-up', 'test', 'href="#lab-ortho" data-act="popnav"')}</div></aside>`;
 }
 
 // ---------- the scale and the tape ----------

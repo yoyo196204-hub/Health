@@ -13,7 +13,7 @@ function basis(R, short) {
   if (short) return s.strap && s.night ? 'strap + watch' : s.strap ? 'strap' : s.night ? (s.week ? 'watch + strap week' : 'watch standing in') : s.week ? 'strap week' : '';
   if (!strap && !watch) return '';
   const am = new Date().getHours() < 11;
-  return `Based on ${[strap, watch].filter(Boolean).join(' and ')}.${s.strap ? '' : s.night ? ` No morning check today, so the watch stands in: it can advise care, and a strap reading is what settles it.${am ? ' There is still time for one.' : ''}` : ''}${s.night ? '' : ' No night from the watch yet: open Zepp so it syncs.'}`;
+  return `Based on ${[strap, watch].filter(Boolean).join(' and ')}.${s.strap ? '' : s.night ? ` No morning check today, so the watch stands in: it can advise care, and a strap reading is what settles it.${am ? ' There is still time for one.' : ''}` : ''}${s.night ? '' : ` No night from the watch yet: open ${watchApp()} so it syncs.`}`;
 }
 // Recovery as one number, in its zone, with every part it is made of: each part against your own normal, the dot
 // left of centre when it counts against today. Tap a part for its section.
@@ -43,18 +43,10 @@ function hrvSection() {
     : !V.state ? `Your normal range is ${Math.round(V.lo)}–${Math.round(V.hi)} ms${V.provisional ? ' (provisional until 2 weeks of readings)' : ''}. Three readings this week give a 7-day average to compare with it.`
     : `7-day average ${r1(V.roll)} ms is ${V.state === 'low' ? 'below' : V.state === 'high' ? 'above' : 'inside'} your range of ${Math.round(V.lo)}–${Math.round(V.hi)} ms${V.provisional ? ' (provisional)' : ''}.${V.state === 'high' ? ' Usually good; persistently high after hard training can mean saturation.' : ''}`;
   const pat = V.state && V.hrDelta != null ? ` Morning heart rate over the same days: ${sign(V.hrDelta, 1)} bpm against the baseline weeks${V.state === 'low' ? (V.hrDelta >= 3 ? ', the pattern that usually means fatigue, illness, short sleep or alcohol.' : ', so the fall in HRV is the weaker kind of signal.') : '.'}` : '';
-  const cv = V.cv != null ? ` Day-to-day wobble ${r1(V.cv)}%${V.baseCv ? ` against ${r1(V.baseCv)}% usually` : ''}${V.baseCv && V.cv > V.baseCv * 1.5 ? ', higher than usual' : ''}.` : '';
   return sec('Morning HRV', `${stats([[V.now ? r1(V.now.rmssd) : DASH, 'today, ms'], [V.roll ? r1(V.roll) : DASH, '7-day average'], [V.lo ? `${Math.round(V.lo)}–${Math.round(V.hi)}` : DASH, 'normal range']])}
     ${c}${c ? legend([['dot', 'daily'], ['line', '7-day average'], ['band', 'your normal range']]) : ''}
-    ${para(status + pat + cv, V.state === 'low' ? 'flag' : 'sub')}${hrvBreath()}
+    ${para(status + (V.state === 'low' ? pat : ''), V.state === 'low' ? 'flag' : 'sub')}
     ${historyList('Every morning check', Object.keys(S.hrv).sort().reverse().slice(0, 60).map(k => [k, `${r1(S.hrv[k].rmssd)} ms · ${Math.round(S.hrv[k].hr)} bpm${S.hrv[k].q ? ` · ${S.hrv[k].q}% clean` : ''}`]), 'hrv')}`, { why: ['hrv', 'How it is read'], id: 'rc-hrv' });
-}
-// Breathing rate read from the beats of each morning check (the rhythm hidden in them), next to the watch's in sleep.
-function hrvBreath() {
-  const ks = Object.keys(S.hrv).sort().slice(-14).filter(k => S.hrv[k].br), wk = ks.slice(-7);
-  if (wk.length < 3) return '';
-  const w = range(7).map(k => S.wx[k]?.br).filter(Boolean);
-  return para(`Breathing during your morning checks: about ${r1(median(wk.map(k => S.hrv[k].br)))} a minute${w.length >= 3 ? `; the watch measured ${r1(median(w))} in sleep` : ''}. Read from the rise and fall of your heart rate with each breath. ${why('metrics', 'How')}`);
 }
 function rhrSection() {
   const days = range(30), dots = {}, R = rhrTrend(), C = calibration();
@@ -65,23 +57,27 @@ function rhrSection() {
     : mode === 'watch' ? 'From the watch alone until 5 mornings have both a morning check and a watch reading; mixing them earlier would show the change of device as a change in you.'
     : 'From morning checks with the strap.';
   return sec('Resting heart rate', `${stats([[R.now ? Math.round(R.now) : DASH, 'resting, 7 days'], [R.delta != null ? sign(R.delta, 1) : DASH, 'bpm vs 3 weeks before'], [sleepStats(7).hr ? Math.round(sleepStats(7).hr) : DASH, 'sleeping, 7 days']])}
-    ${c}${c ? legend([['dot', 'resting, strap'], ['dot hollow', 'resting, watch'], ['line', 'sleeping, watch']]) : ''}${para(note)}`, { why: ['rhr', 'What moves it'], id: 'rc-rhr' });
+    ${c}${c ? legend([['dot', 'resting, strap'], ['dot hollow', 'resting, watch'], ['line', 'sleeping, watch']]) : ''}${mode === 'both' ? '' : para(note)}`, { why: ['rhr', 'What moves it'], id: 'rc-rhr' });
 }
 function sleepSection() {
   const L = sleepStats(14), days = range(14), bars = {};
   for (const k of days) if (S.sleep[k] != null) bars[k] = { v: S.sleep[k], cls: S.sleep[k] < 6 ? 'low' : S.sleep[k] >= 7 ? 'ok' : '' };
   const c = chart({ days, bars, goal: 7, zero: true, fy: v => r1(v), h: 130 });
-  const spread = L.midSd == null ? DASH : `±${Math.round(L.midSd)}`;
-  const st = L.stages ? para(`Stages across ${L.stages.n} nights: deep ${Math.round(L.stages.d)}%, REM ${Math.round(L.stages.r)}%, light ${Math.round(L.stages.l)}%. For interest only. ${why('stages', 'Why')}`) : '';
+  const Q = sri(), J = socialJetlag();
+  // One line: how long, how regular, and the one thing to change if there is one.
+  const reg = Q.v != null ? `regularity ${Math.round(Q.v)} (${{ high: 'more regular than most', typical: 'typical', low: 'less regular than most', verylow: 'among the least regular' }[Q.band]})`
+    : L.midSd != null ? `timing ±${Math.round(L.midSd)} min` : '';
+  const fix = J.v != null && J.v >= 1 ? `Weekends run ${r1(J.v)} h later: wake within an hour of your weekday time.`
+    : L.avg != null && L.avg < 6.5 ? 'Short: protect sleep before cutting calories.'
+    : (Q.band === 'low' || Q.band === 'verylow' || (L.midSd ?? 0) > 60) ? 'A fixed wake time, days off included, is the lever.' : '';
+  const line = L.avg != null ? `${r1(L.avg)} h a night${reg ? ` · ${reg}` : ''}. ${fix} ${why('sleep', 'Why it matters')}` : `Bars under 6 h are marked. ${why('sleep', 'Why sleep matters here')}`;
   const nights = range(7).reverse().filter(k => S.sleep[k] != null || S.sleepx[k]).map(k => {
     const x = S.sleepx[k], V = versus(S.sleep[k], range(28, shift(k, -1)).map(d => S.sleep[d]));
     return `<li><button class="rowbtn" data-act="dayx" data-k="${k}"><span class="grow"><span class="nm">${dateLabel(k, { weekday: 'short', day: 'numeric', month: 'short' })} · ${S.sleep[k] != null ? `${r1(S.sleep[k])} h` : DASH}${V.word && V.word !== 'usual' ? ` <span class="vw ${V.z < 0 ? 'bad' : 'good'}">${V.word}</span>` : ''}</span>
-      ${x ? miniStages(x) : ''}<span class="sub">${[x?.on != null ? `${hm(x.on)}–${hm(x.off ?? x.on + (x.bed || x.d + x.l + x.r + x.w))}` : '', x?.hr ? `sleeping ${Math.round(x.hr)} bpm` : '', x?.lo ? `low ${x.lo}` : '', S.wx[k]?.br ? `breathing ${r1(S.wx[k].br)}` : ''].filter(Boolean).join(' · ')}</span></span><span class="chev">›</span></button></li>`;
+      ${x ? miniStages(x) : ''}<span class="sub">${[x?.on != null ? `${hm(x.on)}–${hm(x.off ?? x.on + (x.bed || x.d + x.l + x.r + x.w))}` : '', x?.hr ? `sleeping ${Math.round(x.hr)} bpm` : ''].filter(Boolean).join(' · ')}</span></span><span class="chev">›</span></button></li>`;
   }).join('');
-  const Q = sri(), gauge = Q.v != null ? `<h3>Sleep regularity ${why('sri', 'what it is')}</h3><div class="srigauge"><i style="left:${clamp((Q.v + 20) / 120 * 100, 2, 98).toFixed(1)}%"></i><span class="pop" style="left:${((81 + 20) / 120 * 100).toFixed(1)}%">UK Biobank median 81</span></div><p class="sub">Your index over ${Q.n} pairs of nights: <b>${Math.round(Q.v)}</b>, ${{ high: 'more regular than most adults', typical: 'in the typical range (74–86)', low: 'less regular than most', verylow: 'among the least regular fifth' }[Q.band]}. The same lights-out and wake time every day, days off included, moves it most.</p>` : '';
-  return sec('Sleep, 14 nights', `${stats([[L.avg != null ? r1(L.avg) : DASH, 'h a night'], [Q.v != null ? Math.round(Q.v) : spread, Q.v != null ? 'regularity index (0–100)' : `min timing spread${L.mid != null ? `, midpoint ${hm(L.mid)}` : ''}`], [L.eff != null ? Math.round(L.eff) + '%' : DASH, 'asleep while in bed']])}
-    ${c}${gauge}${(J => J.v != null ? para(`Weekend nights centre on <b>${hm(J.msf)}</b>, weekdays on <b>${hm(J.msw)}</b>: <b>${J.v.toFixed(1)} h</b> of social jetlag${J.v >= 1 ? `, a weekly shift of your body clock linked to higher BMI beyond sleep length. Waking within an hour of your weekday time on weekends closes it.` : ', small.'} ${why('sjl', 'The evidence')}`) : '')(socialJetlag())}${para(L.midSd != null ? (L.midSd <= 30 ? 'Regular timing.' : L.midSd <= 60 ? 'Timing moderately irregular.' : 'Timing irregular. A fixed wake time on off days is the lever.') + ` ${why('regular', 'Why timing matters')}` : `Bars under 6 h are marked. ${why('sleep', 'Why sleep matters here')}`)}${st}
-    ${nights ? `<h3>Night by night</h3><p class="sub small">Tap a night for its heart rate across the day, the stages hour by hour, and each number against your usual.</p><ul class="list nights">${nights}</ul>` : ''}`, { why: ['sleep', 'Sleep and fat loss'], id: 'rc-sleep' });
+  return sec('Sleep, 14 nights', `${c}${para(line)}
+    ${nights ? `<h3>Night by night</h3><ul class="list nights">${nights}</ul>` : ''}`, { why: ['regular', 'Timing'], id: 'rc-sleep' });
 }
 // What the Bip measures while you sleep, each against its own normal: overnight HRV, breathing rate, and for interest
 // only SpO2 and the VO2max estimate.
@@ -110,13 +106,11 @@ function devicesSection() {
     ${para(used.join(' '))}`, { why: ['devices', 'How this works'] });
 }
 function vRecovery() {
-  const H = hrProfile();
-  return `${appbar('Heart', `Recovery · resting ${H.rest} · max ${H.max} bpm`, NATIVE ? syncPill() : '')}
-    ${part(recoveryHero)}
-    ${sec('Morning check', strapBlock('morning') + strapMsg(), { why: ['hrv', 'Why mornings'] })}
-    ${part(hrvSection)}${part(cardioHeart)}${part(rhrSection)}${part(sleepSection)}${part(nightSection)}
-    ${sec('Strap lab', `<p class="sub">More from the strap: breathing that trains the heart-rate reflex, your own resonance rate, how you handle standing up, and a full reading any time.</p>${labTiles()}`, { why: ['breathe', 'The evidence'] })}
-    ${part(devicesSection)}`;
+  const H = hrProfile(), nav = subnav('recovery', [['rec', 'Recovery'], ['sleep', 'Sleep'], ['cardio', 'Cardio']]), on = SUB.recovery;
+  const body = on === 'sleep' ? part(sleepSection) + part(nightSection)
+    : on === 'cardio' ? part(cardioHeart) + part(devicesSection)
+    : `${part(recoveryHero)}${sec('Morning check', strapBlock('morning') + strapMsg(), { why: ['hrv', 'Why mornings'] })}${part(hrvSection)}${part(rhrSection)}`;
+  return `${appbar('Heart', `Resting ${H.rest} · max ${H.max} bpm`, NATIVE ? syncPill() : '')}${nav}${body}`;
 }
 // Loaded: this file ran to the end.
 (self.LOADED ||= []).push('view-recovery.js');

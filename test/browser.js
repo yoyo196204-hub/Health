@@ -133,30 +133,41 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
   });
   await test('recovery, training, review: the inputs behind the verdict, nights that end, short session list, honest links', async () => {
     await page.evaluate(() => { const k = shift(todayKey(), -1); S.sleepx[k] = { d: 60, l: 200, r: 60, w: 10, on: -60 }; S.sleep[k] = 5.5; save(); });
-    await go('recovery');
+    const part = async (t, v) => { await page.evaluate(([t, v]) => { SUB[t] = v; renderView(); }, [t, v]); await page.waitForTimeout(300); };
+    await go('recovery'); await part('recovery', 'rec');
     assert.ok(await page.evaluate(() => document.querySelectorAll('.rhero .part').length) >= 2, 'the recovery number shows its parts');
-    assert.ok(await page.evaluate(() => [...document.querySelectorAll('.nights .sub')].some(e => /23:00–04:30/.test(e.textContent))), 'a night with no time in bed ends when its stages do');
     await page.evaluate(() => { const k = todayKey(); S.sleep[k] = 6.2; save(); render(); });
+    // An input of the verdict that lives in another part of Heart: that part comes up, at its section.
     await page.tap('.part[data-to="rc-sleep"]'); await page.waitForTimeout(700);
+    assert.strictEqual(await page.evaluate(() => SUB.recovery), 'sleep');
     assert.ok(await page.evaluate(() => Math.abs(document.getElementById('rc-sleep').getBoundingClientRect().top) < 200), 'tapping an input scrolls to its section');
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll('.nights .sub')].some(e => /23:00–04:30/.test(e.textContent))), 'a night with no time in bed ends when its stages do');
     await shot('recovery');
+    // Heart and Insights are one part at a time, never pages long.
+    for (const [t, parts] of [['recovery', ['rec', 'sleep', 'cardio']], ['review', ['energy', 'body', 'long', 'links']]]) {
+      await go(t);
+      for (const v of parts) { await part(t, v); const h = await page.evaluate(() => document.documentElement.scrollHeight / innerHeight); assert.ok(h < 2.6, `${t} ${v} is ${h.toFixed(1)} screens`); }
+    }
+    await go('recovery'); await page.tap('.subnav button[data-v="cardio"]'); await page.waitForTimeout(400);
     assert.ok(await page.evaluate(() => [...document.querySelectorAll('#view .block h2')].some(h => /Cardio with the H9/.test(h.textContent))), 'strap cardio lives on Heart');
-    // No Train tab: an old link lands on Insights, which carries the training sections, and Today opens the next session.
+    // No Train tab: an old link lands on Today, whose training card is two buttons: the next session and what you lifted.
     assert.strictEqual(await page.evaluate(() => document.querySelectorAll('#tabs a').length), 4);
     await go('training');
-    assert.strictEqual(await page.evaluate(() => tab), 'review');
-    assert.ok(await page.evaluate(() => document.querySelector('#in-train').querySelectorAll(':scope > ul.list > li').length <= 4 + 7), 'short session list');
-    await go('today');
-    if (await page.evaluate(() => !!document.querySelector('[data-act="nextgo"]'))) {
-      await page.tap('[data-act="nextgo"]'); await page.waitForTimeout(600);
-      assert.ok(await page.evaluate(() => pop?.kind === 'next' && !!document.querySelector('#sheet .nextog li')), 'the next session opens as a sheet with its exercises');
-      await page.evaluate(() => closePop()); await page.waitForTimeout(400);
-    }
-    await go('review');
+    assert.strictEqual(await page.evaluate(() => tab), 'today');
+    assert.strictEqual(await page.evaluate(() => document.querySelectorAll('.trcard .rowb button').length), 2, 'two buttons');
+    await page.tap('.trcard [data-act="trainlog"]'); await page.waitForTimeout(600);
+    assert.ok(await page.evaluate(() => pop?.kind === 'train' && document.querySelector('#in-train').querySelectorAll(':scope > ul.list > li').length <= 4 + 7), 'short session list');
+    await page.evaluate(() => closePop()); await page.waitForTimeout(400);
+    await page.tap('.trcard [data-act="nextgo"]'); await page.waitForTimeout(600);
+    assert.ok(await page.evaluate(() => pop?.kind === 'next' && !!document.querySelector('#sheet .nextog li')), 'the next session opens as a sheet with its exercises');
+    await page.evaluate(() => closePop()); await page.waitForTimeout(400);
+    await go('review'); await part('review', 'links');
     const lk = await page.evaluate(() => [...document.querySelectorAll('.lrow, .lneed span')].map(e => e.textContent));
     assert.ok(lk.length >= 5, lk.join(' | '));
     assert.ok(await page.evaluate(() => [...document.querySelectorAll('.lrow')].every(r => /No clear effect|\(.* to .*\)/.test(r.textContent))), 'every link with an effect carries its interval');
     assert.ok(await page.evaluate(() => [...document.querySelectorAll('.lneed span')].every(e => /\d+ more days/.test(e.textContent))), 'links still waiting say how long');
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll('#in-links > .lrows .lrow')].every(r => !/No clear effect|Hint/.test(r.textContent))), 'only real links are in view');
+    await part('review', 'energy');
     assert.ok(await page.evaluate(() => /kcal a day/.test(document.getElementById('in-burn')?.textContent || '')), 'the learned burn is shown');
   });
   await test('food: an Amul pack from its label, weighed by the gram, with carbs and fat on Today', async () => {
@@ -326,11 +337,27 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await page.tap('#toast button'); await page.waitForTimeout(400);
     assert.deepStrictEqual(await page.evaluate(() => [Object.keys(S.steps).length, Object.keys(S.ex).length]), before, 'and undo takes them out');
   });
+  await test('a Gadgetbridge export comes in the same way: the Bip 6 named, its minutes made days, imported, and undone', async () => {
+    await go('set-sources');
+    const before = await page.evaluate(() => [Object.keys(S.steps).length, Object.keys(S.sleepx).length]);
+    await page.setInputFiles('#wfile', { name: 'Gadgetbridge_20260701.zip', mimeType: 'application/zip', buffer: fs.readFileSync(path.join(__dirname, 'fixtures', 'gadgetbridge.zip')) });
+    await page.waitForSelector('[data-act="wsave"]', { timeout: 15000 });
+    const text = await page.textContent('#view');
+    assert.match(text, /Gadgetbridge database\. From Amazfit Bip 6 and Amazfit Bip\./);
+    assert.match(text, /Steps40 days, 22 May 2026 to 30 Jun 2026/);
+    assert.match(text, /the one worn longer that day counts/);
+    await shot('gb-preview');
+    await page.tap('[data-act="wsave"]'); await page.waitForTimeout(500);
+    assert.match(await page.textContent('#toast'), /Imported 40 days and 4 workouts/);
+    assert.ok(await page.evaluate(() => S.sleepx['2026-06-21']?.nap === 45 && S.steps['2026-06-03'] === 8400), 'nights and steps are in, the old watch’s steps not added');
+    await page.tap('#toast button'); await page.waitForTimeout(400);
+    assert.deepStrictEqual(await page.evaluate(() => [Object.keys(S.steps).length, Object.keys(S.sleepx).length]), before, 'and undo takes them out');
+  });
   await test('a sheet is dragged down from its middle, the page sinking behind it until it goes', async () => {
     await go('today'); await page.evaluate(() => scrollTo(0, 0));
     await page.tap('#fab'); await page.waitForTimeout(700);
-    const st = await page.evaluate(() => ({ lift: +getComputedStyle(document.body).getPropertyValue('--lift'), sc: getComputedStyle(document.getElementById('view')).transform }));
-    assert.strictEqual(st.lift, 1, 'an open sheet lifts fully');
+    const st = await page.evaluate(() => ({ up: document.documentElement.classList.contains('sheet-up'), sc: getComputedStyle(document.getElementById('view')).transform }));
+    assert.ok(st.up, 'an open sheet lifts fully');
     assert.notStrictEqual(st.sc, 'none', 'the page behind recedes');
     const r = await page.evaluate(() => { const q = document.querySelector('.sheet .qgrid').getBoundingClientRect(); return [q.left + q.width / 2, q.top + 40]; });
     // A slow drag that stops short springs back.
@@ -341,7 +368,7 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     for (let i = 1; i <= 6; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: r[0], y: r[1] + i * 40 }] }); await page.waitForTimeout(12); }
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await page.waitForTimeout(1400);
-    assert.deepStrictEqual(await page.evaluate(() => [pop, document.body.classList.contains('sheet-open'), +getComputedStyle(document.body).getPropertyValue('--lift')]), [null, false, 0]);
+    assert.deepStrictEqual(await page.evaluate(() => [pop, document.body.classList.contains('sheet-open'), document.getElementById('view').style.transform]), [null, false, '']);
   });
   await test('the insight card is a deck: a fling brings the next', async () => {
     await go('today'); await page.evaluate(() => scrollTo(0, 0));
@@ -398,7 +425,67 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await page.tap(`#rows li[data-id="${wid}"] .grow`); await page.waitForTimeout(300);
     const w = await page.evaluate(id => (S.food[todayKey()] || []).find(x => x.id === id), wid);
     assert.ok(w && w.k > 0 && w.c != null && w.src === 'on', JSON.stringify(w));
+    // Indian recipes from INDB come up under their own heading, first, and log as one serving with its numbers.
+    await page.fill('#q', 'masoor'); await page.waitForTimeout(500);
+    const heads = await page.evaluate(() => [...document.querySelectorAll('#rows .subhead')].map(e => e.textContent.trim()));
+    assert.match(heads[0] || '', /^Indian recipes · INDB$/);
+    const iid = await page.evaluate(() => document.querySelector('#rows li[data-id^="i"]')?.dataset.id);
+    assert.ok(/^i(ASC|BFP|OSR)\d{3}$/.test(iid || ''), `an INDB recipe: ${iid}`);
+    await page.tap(`#rows li[data-id="${iid}"] .grow`); await page.waitForTimeout(300);
+    const r = await page.evaluate(id => (S.food[todayKey()] || []).find(x => x.id === id), iid);
+    assert.ok(r && r.k > 0 && r.p > 0 && r.c != null && r.ft != null && r.g >= 10, JSON.stringify(r));
+    assert.ok(await page.evaluate(id => food(id)?.src === 'indb', iid), 'it is found again by its id after logging');
     await go('today');
+  });
+  await test('a tab opens at the part its link names', async () => {
+    await go('recovery-sleep');
+    assert.deepStrictEqual(await page.evaluate(() => [tab, SUB.recovery, !!document.getElementById('rc-sleep'), document.querySelector('#tabs a.on')?.hash]), ['recovery', 'sleep', true, '#recovery']);
+    await go('review-links');
+    assert.deepStrictEqual(await page.evaluate(() => [tab, SUB.review, !!document.getElementById('in-links')]), ['review', 'links', true]);
+    await go('today');
+  });
+  // Nothing drawn on a screen may sit on top of text: no two runs of text overlap, and no icon, button, meter or
+  // input covers text it does not contain. Rings (text in the middle of a drawn circle) are what they are.
+  await test('no text is covered by other text or by anything drawn, on any main screen or the log sheet', async () => {
+    const audit = () => {
+      const out = [], scope = document.querySelector('#sheet .sheet') || document.getElementById('view');
+      const fixedUp = el => { for (let e = el; e && e !== document.body; e = e.parentElement) { const p = getComputedStyle(e).position; if (p === 'fixed' || p === 'sticky') return true; } return false; };
+      const inSheet = !!scope.closest('#sheet'), boxes = [], tw = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
+      while (tw.nextNode()) {
+        const t = tw.currentNode; if (!t.nodeValue.trim()) continue;
+        const el = t.parentElement, cs = getComputedStyle(el);
+        if (cs.visibility === 'hidden' || +cs.opacity === 0 || el.closest('details:not([open]) > :not(summary)') || (!inSheet && fixedUp(el))) continue;
+        let clip = null; for (let e = el; e && e !== scope; e = e.parentElement) if (getComputedStyle(e).overflowX !== 'visible' && !e.matches('.chips, .seg.scroll, .scrub, .scrub *')) { clip = e.getBoundingClientRect(); break; }
+        const r = document.createRange(); r.selectNodeContents(t);
+        for (const b0 of r.getClientRects()) {
+          const b = clip ? { l: Math.max(b0.left, clip.left), r: Math.min(b0.right, clip.right), t: Math.max(b0.top, clip.top), b: Math.min(b0.bottom, clip.bottom) } : { l: b0.left, r: b0.right, t: b0.top, b: b0.bottom };
+          if (b.r - b.l > 1 && b.b - b.t > 1) boxes.push({ el, b, s: t.nodeValue.trim().slice(0, 24) });
+        }
+      }
+      const hit = (a, b, mx, my) => Math.min(a.r, b.r) - Math.max(a.l, b.l) > mx && Math.min(a.b, b.b) - Math.max(a.t, b.t) > my;
+      for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) if (boxes[i].el !== boxes[j].el && hit(boxes[i].b, boxes[j].b, 2, 3)) out.push(`"${boxes[i].s}" × "${boxes[j].s}"`);
+      for (const o of scope.querySelectorAll('svg, button, input, .ico, .dot, .meter2, .chev, img')) {
+        if (o.closest('.ring, .dr, details:not([open]) > :not(summary)') || (!inSheet && fixedUp(o)) || getComputedStyle(o).display === 'none') continue;
+        const R = o.getBoundingClientRect(), ob = { l: R.left, r: R.right, t: R.top, b: R.bottom };
+        for (const x of boxes) if (!o.contains(x.el) && !x.el.contains(o) && hit(ob, x.b, 3, 4)) out.push(`${o.tagName.toLowerCase()}.${o.className.baseVal ?? o.className} over "${x.s}"`);
+      }
+      return out;
+    };
+    const bad = [];
+    for (const h of ['today', 'food', 'recovery-rec', 'recovery-sleep', 'recovery-cardio', 'review-energy', 'review-body', 'review-long', 'review-links', 'me', 'set-train']) {
+      await go(h); await page.evaluate(() => scrollTo(0, 0)); await page.waitForTimeout(200);
+      bad.push(...(await page.evaluate(audit)).map(x => `${h}: ${x}`));
+      // Scrolled to the end, the last thing on the page clears the tab bar, and the log button sits inside the bar.
+      const end = await page.evaluate(() => { scrollTo(0, 1e6); const v = document.getElementById('view').lastElementChild.getBoundingClientRect(), t = document.getElementById('tabs').getBoundingClientRect(), f = document.getElementById('fab').getBoundingClientRect();
+        if (getComputedStyle(document.getElementById('tabs')).display === 'none') return { last: 0, bar: 0, fab: true };
+        return { last: Math.round(v.bottom), bar: Math.round(t.top), fab: getComputedStyle(document.getElementById('fab')).display === 'none' || (f.top >= t.top - 1 && f.bottom <= t.bottom + 1) }; });
+      if (end.last > end.bar + 1) bad.push(`${h}: the page ends ${end.last - end.bar} px under the tab bar`);
+      if (!end.fab) bad.push(`${h}: the log button floats outside the tab bar`);
+    }
+    await go('today'); await page.evaluate(() => openPop({ kind: 'log' })); await page.waitForTimeout(700);
+    bad.push(...(await page.evaluate(audit)).map(x => `log sheet: ${x}`));
+    await page.evaluate(() => closePop()); await page.waitForTimeout(400);
+    assert.ok(!bad.length, bad.join(' | '));
   });
   await test('no errors were thrown on any screen', async () => assert.deepStrictEqual(errors, []));
 

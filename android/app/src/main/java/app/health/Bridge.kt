@@ -13,6 +13,7 @@ class Bridge(private val a: MainActivity) {
     @JavascriptInterface fun info(): String = JSONObject()
         .put("version", BuildConfig.VERSION_NAME)
         .put("zepp", a.zeppIntent() != null)
+        .put("gb", a.gadgetbridgeIntent() != null)
         .put("ble", a.packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE))
         .toString()
 
@@ -55,4 +56,5 @@ class Bridge(private val a: MainActivity) {
     @JavascriptInterface fun mirrorWrite(json: String) { a.feel.mirrorWrite(json) }
     @JavascriptInterface fun setTheme(dark: Boolean) { a.setTheme(dark) }
     @JavascriptInterface fun openZepp() = a.main.post { a.zeppIntent()?.let { try { a.startActivity(it) } catch (e: Exception) { } } }
+    @JavascriptInterface fun openGadgetbridge() = a.main.post { a.gadgetbridgeIntent()?.let { try { a.startActivity(it) } catch (e: Exception) { } } }
 }

@@ -99,7 +99,7 @@ function niceTicks(a, b) {
   for (let v = Math.ceil(a / step) * step; v <= b + 1e-9; v += step) out.push(+v.toFixed(6));
   return out;
 }
-function legend(items) { return `<p class="key">${items.map(([cls, label]) => `<i class="k ${cls}"></i>${label}`).join('')}</p>`; }
+function legend(items) { return `<p class="key">${items.map(([cls, label]) => `<span class="kk"><i class="k ${cls}"></i>${label}</span>`).join('')}</p>`; }
 
 // A collapsible list of dated readings, each removable (with undo). stream names where they live in S.
 function historyList(title, rows, stream) {
@@ -111,6 +111,8 @@ function historyList(title, rows, stream) {
 // ---------- the new building blocks ----------
 // Icons, drawn on a 24-unit grid with round joins, stroked in currentColor.
 const IC = {
+  wave: '<path d="M2 12c2-6 4-6 6 0s4 6 6 0 4-6 6 0"/><path d="M4 20v-3M9 20v-5M14 20v-7M19 20v-4"/>',
+  stand: '<path d="M3 18h7"/><path d="M15 21V9"/><circle cx="15" cy="5" r="2"/><path d="M12 13l3-3 3 3"/>',
   food: '<path d="M7 3v8a2 2 0 0 0 4 0V3M9 11v10M16 3c-2 2-2 6 0 8v10"/>',
   heart: '<path d="M3 12h4l2-5 3 10 2.5-7 1.5 2H21"/>',
   sleep: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
@@ -168,6 +170,15 @@ function backupDue() {
   if (NATIVE) return !BACKUP.folder || (!!S.meta.backup && gapDays(S.meta.backup, todayKey()) >= 3);
   return !S.meta.exported || gapDays(S.meta.exported, todayKey()) > 14;
 }
+// The long tabs show one part at a time, picked from a row at the top, so a tab is a screen or two and never a
+// document to scroll through. Which part each tab is on is kept while the app is open.
+const SUB = { recovery: 'rec', review: 'energy' };
+function subnav(t, items) {
+  if (!items.some(([v]) => v === SUB[t])) SUB[t] = items[0][0];
+  return `<nav class="subnav" aria-label="Parts of this page"><div class="seg">${items.map(([v, l]) => `<button class="${v === SUB[t] ? 'on' : ''}" aria-pressed="${v === SUB[t]}" data-act="sub" data-t="${t}" data-v="${v}">${l}</button>`).join('')}</div></nav>`;
+}
+// Which part of which tab a section lives in, for links that point straight at a section.
+const SUBOF = { 'rc-hrv': ['recovery', 'rec'], 'rc-rhr': ['recovery', 'rec'], 'rc-sleep': ['recovery', 'sleep'], 'rc-night': ['recovery', 'sleep'] };
 // A card's heading with its domain icon in its colour.
 function cardHead(title, icon, c, right = '') { return `<div class="mh"><span class="ico" style="--c:${c}">${ic(icon)}</span><h2>${title}</h2>${right}</div>`; }
 // Loaded: this file ran to the end.

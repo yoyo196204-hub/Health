@@ -56,7 +56,7 @@ function amAuto() {
   HR.amTry = 0;
   if (!fresh || S.settings.amAuto === 'off' || HR.mode || S.hrv[todayKey()] || h < 3 || h >= 11) return;
   if (HR.contact === false || overlay || !['today', 'recovery'].includes(tab) || HR.bpm > hrProfile().rest + 30) return;
-  if (tab !== 'recovery') location.hash = 'recovery';
+  if (tab !== 'recovery' || SUB.recovery !== 'rec') { SUB.recovery = 'rec'; location.hash = 'recovery-rec'; }
   hrStart('morning');
   toast('Morning check started. Lie still.');
 }

@@ -62,17 +62,30 @@ function springEasing(zeta, steps = 48) {
 })();
 
 // ---------- the sheet as a layer ----------
-// --lift on the body is how far the top sheet is open (0 to 1); styles.css recedes the page by it. While a finger
-// holds the sheet it follows the finger; otherwise CSS eases it.
+// How far the top sheet is open (0 to 1) is written straight onto the few things that show it: the page behind
+// recedes (a little smaller and lower) and the scrim darkens. Only transform and opacity change, on those elements
+// alone, so a drag never makes the browser restyle or repaint the page: it stays at the screen's refresh rate.
+// While a finger holds the sheet they follow the finger; otherwise CSS eases them.
+let liftP = 0;
 function liftTo(p, live) {
-  const b = document.body;
+  const b = document.body, v = document.getElementById('view'), scrim = document.querySelector('#sheet .scrim');
+  p = clamp(p, 0, 1); liftP = p;
   b.classList.toggle('lifting', !!live);
-  b.style.setProperty('--lift', clamp(p, 0, 1).toFixed(4));
-  // The page shrinks toward the middle of what is on screen, not toward the middle of the whole long page.
-  b.style.setProperty('--lift-y', `${Math.round(scrollY + innerHeight / 2)}px`);
+  const page = v && !b.classList.contains('adding') && !b.classList.contains('setting');
+  if (page) {
+    // The page shrinks toward the middle of what is on screen, not toward the middle of the whole long page.
+    if (!live || !v.style.transformOrigin) v.style.transformOrigin = `50% ${Math.round(scrollY + innerHeight / 2)}px`;
+    v.style.transform = p > 0.001 ? `translate3d(0, ${(p * 10).toFixed(1)}px, 0) scale(${(1 - p * 0.05).toFixed(4)})` : '';
+    if (p <= 0.001 && !live) v.style.transformOrigin = '';
+  }
+  if (scrim) scrim.style.opacity = live ? p.toFixed(3) : '';
 }
 // The sheet slides in on a spring when it first appears (feel.js sheetEntered adds .enter) and the page recedes.
-function sheetLift() { const open = document.body.classList.contains('sheet-open'); if (!document.body.classList.contains('lifting')) liftTo(open ? 1 : 0, false); }
+function sheetLift() {
+  const open = document.body.classList.contains('sheet-open');
+  if (document.body.classList.contains('lifting')) return;
+  if (open || liftP) liftTo(open ? 1 : 0, false);
+}
 
 (() => {
   let g = null;
@@ -81,11 +94,11 @@ function sheetLift() { const open = document.body.classList.contains('sheet-open
     const h = sh.offsetHeight, from = g?.off || 0;
     buzz('tick');
     springRun({ from, to: h + 40, v: Math.max(v, 600), k: 300, c: 34, eps: 2,
-      onUpdate: x => { sh.style.transform = `translateY(${x.toFixed(1)}px)`; liftTo(1 - x / h, true); },
+      onUpdate: x => { sh.style.transform = `translate3d(0, ${x.toFixed(1)}px, 0)`; liftTo(1 - x / h, true); },
       onDone: () => { document.body.classList.remove('lifting'); liftTo(0, false); pop ? closePop() : overlay?.type === 'why' ? goBack() : closeSheet(); } });
   };
   const back = (sh, v) => springRun({ from: g?.off || 0, to: 0, v, k: 520, c: 30,
-    onUpdate: x => { sh.style.transform = x ? `translateY(${x.toFixed(1)}px)` : ''; liftTo(1 - Math.max(0, x) / sh.offsetHeight, true); },
+    onUpdate: x => { sh.style.transform = x ? `translate3d(0, ${x.toFixed(1)}px, 0)` : ''; liftTo(1 - Math.max(0, x) / sh.offsetHeight, true); },
     onDone: () => { sh.style.transform = ''; document.body.classList.remove('lifting'); liftTo(1, false); } });
   document.addEventListener('touchstart', e => {
     g = null;
@@ -113,7 +126,7 @@ function sheetLift() { const open = document.body.classList.contains('sheet-open
     // Down follows the finger; up past where it sits stretches a little and resists.
     g.off = d >= 0 ? d : -rubber(-d, 120);
     g.sh.style.transition = 'none';
-    g.sh.style.transform = `translateY(${g.off.toFixed(1)}px)`;
+    g.sh.style.transform = `translate3d(0, ${g.off.toFixed(1)}px, 0)`;
     liftTo(1 - Math.max(0, g.off) / g.h, true);
     const armed = g.off > g.h * 0.35;
     if (armed !== !!g.armed) { g.armed = armed; buzz('tick'); }
@@ -140,7 +153,7 @@ function sheetLift() { const open = document.body.classList.contains('sheet-open
   document.addEventListener('pointermove', e => {
     if (!m) return;
     m.tr.add(e.clientX, e.clientY); m.off = Math.max(0, e.clientY - m.y0);
-    m.sh.style.transition = 'none'; m.sh.style.transform = `translateY(${m.off}px)`; liftTo(1 - m.off / m.h, true);
+    m.sh.style.transition = 'none'; m.sh.style.transform = `translate3d(0, ${m.off}px, 0)`; liftTo(1 - m.off / m.h, true);
   });
   document.addEventListener('pointerup', () => {
     if (!m) return;
@@ -163,7 +176,7 @@ const FLING = {};      // what a fling on [data-fling] does, filled in by each s
   const NOT = 'input, textarea, select, [data-scrub], .chips, .seg, .wave, .trace, .bx';
   const place = (el, x, y = 0) => {
     const w = el.offsetWidth || 300, rot = x / w * 7, o = 1 - Math.min(0.6, Math.abs(x) / w * 0.6 + Math.max(0, y) / 300);
-    el.style.transform = el.id === 'toast' ? `translate(calc(-50% + ${x.toFixed(1)}px), ${y.toFixed(1)}px)` : `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${rot.toFixed(2)}deg)`;
+    el.style.transform = el.id === 'toast' ? `translate(calc(-50% + ${x.toFixed(1)}px), ${y.toFixed(1)}px)` : `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) rotate(${rot.toFixed(2)}deg)`;
     el.style.opacity = o.toFixed(3);
   };
   const done = el => {
@@ -204,7 +217,7 @@ const FLING = {};      // what a fling on [data-fling] does, filled in by each s
       if (Math.hypot(dx, dy) < 8) return;
       g.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : g.toast && dy > 0 ? 'y' : null;
       if (!g.axis) { g = null; return; }
-      g.el.style.transition = 'none'; g.el.classList.add('flinging');
+      g.el.style.transition = 'none'; g.el.classList.remove('pressed'); g.el.classList.add('flinging');
     }
     e.preventDefault();
     g.x = g.axis === 'x' ? dx : 0; g.y = g.axis === 'y' ? Math.max(-rubber(-Math.min(0, dy), 60), dy) : 0;
@@ -241,36 +254,37 @@ FLING.deck = () => { deckI = (deckI ?? 0) + 1; buzz('tick'); renderView(); };
 FLING.deck.stay = true;
 
 // ---------- pressing ----------
-// A card under the finger tips toward it a little and sinks, as a thing on a soft surface does, and rises back on
-// a spring when let go. Only cards that do something when tapped respond.
+// A card that does something when tapped sinks a little under the finger and rises back on a spring when let go.
+// Once the finger travels it is a drag or a fling, not a press: the card lets go, so it can move with the finger.
 (() => {
-  let el = null;
-  const off = () => { if (!el) return; el.style.setProperty('--tx', '0deg'); el.style.setProperty('--ty', '0deg'); el.classList.remove('pressed'); el = null; };
+  let el = null, x0 = 0, y0 = 0;
+  const off = () => { if (!el) return; el.classList.remove('pressed'); el = null; };
   document.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' || !motionOK()) return;
     const c = e.target.closest('.card.tap, .tile, .ds, .duo > .card, .meal.card');
     if (!c || e.target.closest('button, input, [data-swipe], [data-press]')) return;
-    const r = c.getBoundingClientRect(), px = (e.clientX - r.left) / r.width - 0.5, py = (e.clientY - r.top) / r.height - 0.5;
-    el = c;
-    c.style.setProperty('--tx', `${(-py * 5).toFixed(2)}deg`); c.style.setProperty('--ty', `${(px * 5).toFixed(2)}deg`);
-    c.classList.add('pressed');
+    el = c; x0 = e.clientX; y0 = e.clientY; c.classList.add('pressed');
   }, { passive: true });
+  document.addEventListener('pointermove', e => { if (el && Math.hypot(e.clientX - x0, e.clientY - y0) > 8) off(); }, { passive: true });
   ['pointerup', 'pointercancel', 'scroll'].forEach(t => document.addEventListener(t, off, { capture: true, passive: true }));
-  document.addEventListener('pointermove', e => { if (el && e.pointerType !== 'mouse') { const r = el.getBoundingClientRect(); if (e.clientY < r.top - 10 || e.clientY > r.bottom + 10) off(); } }, { passive: true });
 })();
 
 // ---------- scrolling ----------
 // The big title of a tab folds into a small one in a bar that stays at the top, so the page reads as content
 // sliding under a fixed lid. The amount is a CSS variable, so the fold follows the finger exactly.
 (() => {
-  let ticking = false;
+  let ticking = false, last = -1, bar = null;
   const upd = () => {
     ticking = false;
     const p = clamp((scrollY - 8) / 56, 0, 1);
-    document.body.style.setProperty('--fold', p.toFixed(3));
-    document.body.classList.toggle('folded', p >= 1);
+    if (!bar || !bar.isConnected) { bar = document.querySelector('#view > .appbar'); last = -1; }
+    if (!bar || p === last) return;
+    last = p;
+    // Only the title bar uses it: set there, nothing else on the page has to be restyled while scrolling.
+    bar.style.setProperty('--fold', p.toFixed(3));
   };
   addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(upd); } }, { passive: true });
+  self.foldNow = upd;
   upd();
 })();
 // Loaded: this file ran to the end.

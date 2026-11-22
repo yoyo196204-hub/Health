@@ -11,9 +11,15 @@ function assets() {
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   return [...html.matchAll(/(?:src|href)="([a-z0-9-]+\.(?:js|css|webmanifest))(?:\?v=[a-z0-9]+)?"/g)].map(m => m[1]);
 }
+// Files the page loads only when needed (the food lists): in the offline copy list, not in index.html. They are
+// fetched with the same stamp, so a change to one must change it too.
+function lazy() {
+  const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8'), shell = [...sw.matchAll(/'([a-z0-9-]+\.js)'/g)].map(m => m[1]), a = new Set(assets());
+  return shell.filter(f => f !== 'sw.js' && !a.has(f));
+}
 function stamp() {
   const h = crypto.createHash('sha256');
-  for (const f of assets()) h.update(f).update(fs.readFileSync(path.join(root, f)));
+  for (const f of [...assets(), ...lazy()]) h.update(f).update(fs.readFileSync(path.join(root, f)));
   return h.digest('hex').slice(0, 10);
 }
 function apply(v) {

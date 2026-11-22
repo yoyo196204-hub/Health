@@ -222,15 +222,15 @@ function intakePatterns(end = todayKey()) {
 function headline() {
   return cached('headline', () => {
     const out = [], M = energyModel(), P = intakePatterns(), T = targets(), L = allLinks().filter(l => l.status === 'clear');
-    if (M.E != null && M.conf !== 'calibrating' && Math.abs(M.gap) >= 8) out.push({ dom: 'food', t: `You burn about ${fmt(M.E)} kcal a day`, s: `${sign(M.gap)}% from the textbook ${fmt(M.formula)}, learned from your scale and your log. ${burnWords(M)}`, href: '#review' });
-    if (P.weekend && P.weekend.lo > 100) out.push({ dom: 'food', t: `Weekends run ${fmt(P.weekend.d)} kcal higher`, s: `Over ${P.weekend.n} complete days (95% interval ${fmt(P.weekend.lo)} to ${fmt(P.weekend.hi)}). Two such days a week take back about ${fmt(P.weekend.d * 2 / 7)} kcal a day of the deficit.`, href: '#review' });
-    for (const l of L.slice(0, 2)) out.push({ dom: l.dom[1] === 'heart' ? 'heart' : l.dom[1], t: `${l.x} → ${l.y}`, s: `${effText(l, false)} per ${l.xu}, across ${l.n} days. ${l.agrees ? 'Matches the research.' : 'Opposite to what the research expects; worth a closer look.'}`, href: '#review' });
+    if (M.E != null && M.conf !== 'calibrating' && Math.abs(M.gap) >= 8) out.push({ dom: 'food', t: `You burn about ${fmt(M.E)} kcal a day`, s: `${sign(M.gap)}% from the textbook ${fmt(M.formula)}, learned from your scale and your log. ${burnWords(M)}`, href: '#review-energy' });
+    if (P.weekend && P.weekend.lo > 100) out.push({ dom: 'food', t: `Weekends run ${fmt(P.weekend.d)} kcal higher`, s: `Over ${P.weekend.n} complete days (95% interval ${fmt(P.weekend.lo)} to ${fmt(P.weekend.hi)}). Two such days a week take back about ${fmt(P.weekend.d * 2 / 7)} kcal a day of the deficit.`, href: '#review-energy' });
+    for (const l of L.slice(0, 2)) out.push({ dom: l.dom[1] === 'heart' ? 'heart' : l.dom[1], t: `${l.x} → ${l.y}`, s: `${effText(l, false)} per ${l.xu}, across ${l.n} days. ${l.agrees ? 'Matches the research.' : 'Opposite to what the research expects; worth a closer look.'}`, href: '#review-links' });
     const Q = sri();
-    if (Q.v != null && Q.v < 74) out.push({ dom: 'sleep', t: `Sleep regularity ${Math.round(Q.v)}`, s: `Below the typical 74–86. Regularity predicted survival more strongly than sleep length in 61,000 adults.`, href: '#recovery' });
+    if (Q.v != null && Q.v < 74) out.push({ dom: 'sleep', t: `Sleep regularity ${Math.round(Q.v)}`, s: `Below the typical 74–86. Regularity predicted survival more strongly than sleep length in 61,000 adults.`, href: '#recovery-sleep' });
     if (P.protein && P.protein.pct < 50) out.push({ dom: 'food', t: `${P.protein.hit} of ${P.protein.tot} main meals reached ${T.perMeal} g protein`, s: 'Spreading protein across meals (about 0.4 g/kg each) supports muscle better than one large serving.', href: '#food' });
     // The long game's biggest lever (markers.js), when there is one worth naming.
     const B = self.bestLever ? bestLever() : null;
-    if (B) out.push({ dom: 'heart', t: B.t, s: B.s, href: '#review' });
+    if (B) out.push({ dom: 'heart', t: B.t, s: B.s, href: '#review-long' });
     return out;
   });
 }

@@ -45,7 +45,7 @@ function vRecords() {
     ${['weights', 'waist', 'steps', 'sleep', 'rhr'].includes(REC.s) ? `<div class="rowb tight"><button class="ghost" data-act="recadd" data-s="${REC.s}">Add a ${RECS[REC.s].n.toLowerCase()} for another day</button></div>` : ''}
     ${rows.length ? `<ul class="list swipelist recs">${rows.slice(0, REC.n).map(r => `<li data-swipe="recdel" ${r.sw}><button class="rowbtn" ${r.act}><span class="grow"><span class="nm">${r.t} ${r.b}</span><span class="sub">${r.v}</span></span><span class="chev">›</span></button></li>`).join('')}</ul>
       ${more ? `<button class="ghost wide" data-act="recmore">Show ${Math.min(60, rows.length - REC.n)} more of ${rows.length}</button>` : ''}` : para('Nothing of this kind yet.')}
-    ${REC.s === 'lifts' ? para('A session that came from openGym returns with openGym’s next backup if it is still there: delete it in openGym too.') : REC.s === 'ex' ? para('The workout stays deleted here even if it is still in Zepp or Health Connect.') : ''}`;
+    ${REC.s === 'lifts' ? para('A session that came from openGym returns with openGym’s next backup if it is still there: delete it in openGym too.') : REC.s === 'ex' ? para('The workout stays deleted here even if it is still in the watch app or Health Connect.') : ''}`;
 }
 
 // ---------- editing one value ----------

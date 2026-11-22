@@ -851,6 +851,117 @@ atest('importing a Health Connect backup: what you typed, synced or deleted stay
   assert.deepStrictEqual(run(c, '[Object.keys(S.steps).length, Object.keys(S.ex).length, S.weights["2026-03-03"]]'), [0, 1, 88.8], 'undo takes it all out again');
 });
 
+atest('moving from Zepp to Gadgetbridge: each day takes the watch app that wrote it, never the phone’s own count', async c => {
+  hcBox(c);
+  // A backup as rows: Zepp wrote until 9 June, Gadgetbridge from 10 June; the phone counted steps on both days, more
+  // than either watch; a chest strap app wrote a few heart-rate samples on the Gadgetbridge day.
+  const at = (k, h, m = 0) => Date.parse(`${k}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00Z`);
+  const apps = [[1, 'com.huami.watch.hmwatchmanager'], [2, 'nodomain.freeyourgadget.gadgetbridge'], [3, 'android'], [4, 'fi.polar.polarflow']];
+  const T = { application_info_table: apps.map(([row_id, package_name]) => ({ row_id, package_name })), steps_record_table: [], sleep_session_record_table: [], sleep_stages_table: [], heart_rate_record_table: [], heart_rate_record_series_table: [] };
+  const steps = (app, k, n, mod) => T.steps_record_table.push({ app_info_id: app, start_time: at(k, 9), end_time: at(k, 18), start_zone_offset: 0, count: n, last_modified_time: mod });
+  steps(1, '2026-06-09', 7000, at('2026-06-09', 20)); steps(3, '2026-06-09', 9500, at('2026-06-09', 20));
+  steps(2, '2026-06-10', 6000, at('2026-06-10', 20)); steps(3, '2026-06-10', 9900, at('2026-06-10', 20));
+  let id = 0;
+  const night = (app, k) => { id++; T.sleep_session_record_table.push({ row_id: id, app_info_id: app, start_time: at(k, 0), end_time: at(k, 7), end_zone_offset: 0, last_modified_time: at(k, 8) }); T.sleep_stages_table.push({ parent_key: id, stage_start_time: at(k, 0), stage_end_time: at(k, 7), stage_type: 4 }); };
+  night(1, '2026-06-09'); night(2, '2026-06-10'); night(3, '2026-06-10');
+  T.sleep_session_record_table[2].start_time = at('2026-06-09', 22); T.sleep_stages_table[2].stage_start_time = at('2026-06-09', 22);   // the phone's longer guess
+  const beats = (app, k, h, n, bpm) => { id++; T.heart_rate_record_table.push({ row_id: id, app_info_id: app, last_modified_time: at(k, 21) }); for (let i = 0; i < n; i++) T.heart_rate_record_series_table.push({ parent_key: id, epoch_millis: at(k, h) + i * 60000, beats_per_minute: bpm }); };
+  beats(1, '2026-06-09', 8, 300, 60); beats(2, '2026-06-10', 8, 300, 62); beats(4, '2026-06-10', 12, 40, 140);
+  c.T = T;
+  const H = JSON.parse(JSON.stringify(await vm.runInContext('hcBackup({ each: (n, fn) => (T[n] || []).forEach(fn) || (T[n] || []).length })', c)));
+  assert.strictEqual(H.watch, 'Gadgetbridge', 'the watch app still writing is the one named');
+  assert.deepStrictEqual([H.days['2026-06-09'].st, H.days['2026-06-10'].st], [7000, 6000], 'each day the watch app that wrote it, not the phone');
+  assert.deepStrictEqual([H.days['2026-06-09'].sl.l, H.days['2026-06-10'].sl.l], [420, 420], 'the watch’s night, not the phone’s longer guess');
+  assert.strictEqual(H.days['2026-06-10'].rp, 62, 'the strap’s workout samples are not mixed into the watch’s day');
+});
+// ---- a Gadgetbridge database: the open-source app that runs an Amazfit watch without Zepp ----
+// Fixture: test/fixtures/gadgetbridge.zip, Gadgetbridge's "Export zip", made by test/make-gb-fixture.py with the tables
+// exactly as Gadgetbridge creates them (WITHOUT ROWID): 40 made-up days of an Amazfit Bip 6, and an old Amazfit Bip
+// worn alongside it for three hours on four of them.
+function gbBox(c) {
+  const fx = hcBox(c);
+  vm.runInContext(fs.readFileSync(path.join(root, 'gadgetbridge.js'), 'utf8'), c, { filename: 'gadgetbridge.js' });
+  c.u8 = fx('gadgetbridge.zip');
+  return fx;
+}
+const gbRaw = c => vm.runInContext('(async () => { const e = zipEntries(u8).find(e => e.name === "database/Gadgetbridge"); return zipBytes(u8, e, null); })()', c);
+const gbOut = async c => { c.raw = await gbRaw(c); return JSON.parse(JSON.stringify(await vm.runInContext('gbRead(sqliteOpen(raw))', c))); };
+atest('the database reader reads tables made WITHOUT ROWID, as Gadgetbridge makes them: every row and value, long rows too', async c => {
+  gbBox(c);
+  c.raw = await gbRaw(c);
+  run(c, 'db = sqliteOpen(raw)');
+  // The counts and sums Python's sqlite3 gives for the same file.
+  assert.deepStrictEqual(run(c, 'Object.fromEntries(Object.keys(db.tables).sort().map(t => [t, db.each(t, () => {})]))'), { BASE_ACTIVITY_SUMMARY: 4, DEVICE: 2, GENERIC_HRV_VALUE_SAMPLE: 624,
+    GENERIC_WEIGHT_SAMPLE: 2, HUAMI_EXTENDED_ACTIVITY_SAMPLE: 57600, HUAMI_HEART_RATE_RESTING_SAMPLE: 40, HUAMI_SLEEP_RESPIRATORY_RATE_SAMPLE: 40, HUAMI_SLEEP_SESSION_SAMPLE: 41,
+    HUAMI_SPO2_SAMPLE: 40, HUAMI_STRESS_SAMPLE: 40, MI_BAND_ACTIVITY_SAMPLE: 720, USER: 1, android_metadata: 1, sqlite_sequence: 3 });
+  assert.deepStrictEqual(run(c, '(() => { let a = 0, b = 0, s = 0, k = 0; db.each("HUAMI_EXTENDED_ACTIVITY_SAMPLE", r => { a += r.heart_rate; b += r.timestamp % 1000003; s += r.steps; k += r.raw_kind; }); return [a, b, s, k]; })()'),
+    [3888120, 29793182007, 336000, 1914000], 'the key columns and the others land in the right places');
+  assert.deepStrictEqual(run(c, '(() => { let n = 0, len = 0, max = 0, sum = 0; db.each("HUAMI_SLEEP_SESSION_SAMPLE", r => { n++; len += r.data.length; max = Math.max(max, r.data.length); for (const x of r.data) sum += x; }); return [n, len, max, sum]; })()'),
+    [41, 34456, 2600, 114180], 'a 2600-byte report read across its overflow pages');
+  assert.deepStrictEqual(run(c, '(() => { const o = []; db.each("DEVICE", r => o.push([r._id, r.name, r.type_name])); return o; })()'), [[1, 'Amazfit Bip', 'AMAZFITBIP'], [2, 'Amazfit Bip 6', 'AMAZFITBIP6']]);
+  assert.strictEqual(run(c, 'gbIs(db)'), true);
+});
+atest('a Gadgetbridge database becomes days exactly as the daily sync makes them', async c => {
+  gbBox(c);
+  const G = await gbOut(c), D = G.days;
+  assert.strictEqual(G.watch, 'Amazfit Bip 6');
+  assert.deepStrictEqual(G.apps, ['Amazfit Bip 6', 'Amazfit Bip']);
+  assert.strictEqual(Object.keys(D).length, 40);
+  // Steps: the watch worn more of the day; the old Bip's steps on the four days it was worn too are not added.
+  assert.deepStrictEqual(['2026-05-22', '2026-06-01', '2026-06-03', '2026-06-30'].map(k => D[k].st), [8400, 8400, 8400, 8400]);
+  // Sleep: the night from the report's stages, filed under the morning; deep, light, REM and awake minutes, the
+  // night as it happened, and the heart rate asleep from that night's minutes.
+  assert.deepStrictEqual(D['2026-06-01'].sl, { d: 90, l: 255, r: 90, w: 15, on: -60, off: 390, bed: 450, nap: 0,
+    seg: [[0, 60, 2], [60, 90, 3], [150, 90, 2], [240, 15, 1], [255, 90, 4], [345, 105, 2]], hr: 54.8, lo: 52 });
+  assert.strictEqual(D['2026-05-22'].sl, undefined, 'no report, no night');
+  assert.strictEqual(D['2026-06-11'].sl.d + D['2026-06-11'].sl.l + D['2026-06-11'].sl.r, 435, 'a revised report replaces the first, shorter one');
+  assert.strictEqual(D['2026-06-21'].sl.nap, 45, 'a second report that afternoon is a nap beside the night');
+  // Resting heart rate: the day's figure; the last one stamped at midnight in UTC+5:30 is still that day's.
+  assert.deepStrictEqual([D['2026-05-22'].rh, D['2026-05-23'].rh, D['2026-06-30'].rh], [50, 51, 49]);
+  // HRV from the readings inside the night only: 40–42 overnight, not the 20s at noon; none on the day with no night.
+  assert.deepStrictEqual([D['2026-06-01'].hv, D['2026-05-22'].hv], [40.9, undefined]);
+  assert.deepStrictEqual([D['2026-05-22'].o2, D['2026-05-23'].o2, D['2026-05-22'].br, D['2026-05-23'].br], [96, 97, 14, 15]);
+  assert.strictEqual(D['2026-06-30'].wt, 81.4, 'the morning weigh-in, not the evening one');
+  // Heart rate: the 24-hour curve, with the hour the watch was off left empty.
+  assert.deepStrictEqual([D['2026-06-01'].hd.filter(Boolean).length, D['2026-05-27'].hd.filter(Boolean).length], [288, 276]);
+  // Workouts: Gadgetbridge's kinds become the sync's names, an unnamed kind keeps its own name, and each workout has
+  // its own watch's heart rate, so the old Bip's run is at its 90 bpm, not the Bip 6's.
+  const ex = G.ex.map(w => [new Date(w.s).toISOString().slice(0, 16), w.k, w.kcal ?? null, w.h.reduce((a, x) => a + x[1], 0)]);
+  assert.deepStrictEqual(ex, [['2026-06-28T18:00', 'Run', 310, 1800], ['2026-06-29T17:00', 'Strength training', null, 2700], ['2026-06-30T19:00', 'Evening stroll', 80, 1200], ['2026-06-01T09:00', 'Run', null, 2400]]);
+  assert.deepStrictEqual(G.ex[3].h, [[90, 2400]]);
+  assert.ok(G.ex.every(w => w.src === 'Gadgetbridge'));
+});
+atest('importing Gadgetbridge: its zip or the bare database file, previewed, merged as a sync, and undone', async c => {
+  const fx = gbBox(c);
+  c.render = () => {}; c.buzz = () => {}; c.toast = msg => { c.said = msg; };
+  run(c, "S = sanitize({}); setManual('steps', '2026-06-02', 12345);");
+  c.raw = await gbRaw(c);
+  // The zip as Gadgetbridge's "Export zip" writes it, and the database alone, named just "Gadgetbridge".
+  for (const [file, name] of [[fx('gadgetbridge.zip'), 'Gadgetbridge_2026-07-01.zip'], [c.raw, 'Gadgetbridge']]) {
+    c.file = Object.assign(new Blob([file]), { name });
+    await vm.runInContext('watchRead([file])', c);
+    const P = run(c, 'watchPreview[0]');
+    assert.ok(P && P.lines, `${name}: ${run(c, 'WZIP.err')}`);
+    assert.strictEqual(P.name, 'Gadgetbridge database');
+    assert.deepStrictEqual(P.lines.find(x => x[0] === 'Weight'), ['Weight', '1 day, 30 Jun 2026']);
+    assert.deepStrictEqual(P.lines.map(x => x[0]), ['Steps', 'Sleep', 'Heart rate', 'Overnight HRV', 'Breathing in sleep', 'Blood oxygen', 'Weight', 'Workouts']);
+    assert.deepStrictEqual(P.lines[0], ['Steps', '40 days, 22 May 2026 to 30 Jun 2026']);
+  }
+  run(c, 'watchAct("wsave")');
+  const S = run(c, "({ steps: Object.keys(S.steps).length, typed: S.steps['2026-06-02'], sleep: Object.keys(S.sleepx).length, rhr: Object.keys(S.rhr).length, ex: Object.values(S.ex).flat().length, hv: S.wx['2026-06-01'].hv })");
+  assert.deepStrictEqual(S, { steps: 40, typed: 12345, sleep: 39, rhr: 40, ex: 4, hv: 40.9 }, 'steps you typed stay as they are');
+  assert.match(c.said, /^Imported 40 days and 4 workouts$/);
+  run(c, 'restoreSnapshot()');
+  assert.deepStrictEqual(run(c, "[Object.keys(S.sleepx).length, S.steps['2026-06-02']]"), [0, 12345], 'undo takes it all out again');
+  // Any other database is refused in plain words.
+  c.console = Object.assign({}, console, { error() {} });
+  run(c, 'watchPreview = null; gbIs = () => false');
+  c.file = Object.assign(new Blob([c.raw]), { name: 'other.db' });
+  await vm.runInContext('dbImport(file)', c);
+  assert.strictEqual(run(c, 'WZIP.err'), 'This database is not one the app reads: pick a Gadgetbridge export or a Health Connect backup.');
+  assert.strictEqual(run(c, 'watchPreview'), null);
+});
+
 // ---- the web app as files: these guard against the failures that only show up on a phone ----
 const scripts = [...fs.readFileSync(path.join(root, 'index.html'), 'utf8').matchAll(/<script src="([a-z0-9-]+\.js)/g)].map(m => m[1]);
 test('a logged food keeps its carbs, fat and weight through saving and loading; unknown stays unknown', c => {
@@ -1046,6 +1157,27 @@ test('whole foods from OpenNutrition: every one traced to a food table, and its 
   }
   assert.deepStrictEqual(bad.slice(0, 5), []);
   assert.ok(L.length > 3000, `${L.length} foods`);
+});
+test('Indian recipes from INDB: each with a serving, energy that agrees with its macros, and no frying oil counted as eaten', () => {
+  const ctx = { self: {} }; ctx.self = ctx; vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(path.join(root, 'indb.js'), 'utf8'), ctx);
+  const L = ctx.INDBD.split('\n'), bad = [];
+  for (const line of L) {
+    const [id, n, u, g, k, p, c, ft, fb] = line.split('|').map((v, i) => (i > 2 && v !== '' ? +v : v));
+    if (!/^(ASC|BFP|OSR)\d{3}$/.test(id) || !n || !u || !(g >= 10 && g <= 500)) bad.push(line);
+    if (k > 30 && Math.abs(4 * p + 4 * c + 9 * ft + 2 * (fb || 0) - k) / k > 0.3) bad.push(`${n}: ${k} kcal`);
+    if (ft > 35 && !/mayonnaise|dressing|tartare/i.test(n)) bad.push(`${n}: ${ft} g fat`);
+  }
+  assert.deepStrictEqual(bad.slice(0, 5), []);
+  assert.ok(L.length > 800, `${L.length} recipes`);
+  assert.ok(L.some(l => /^ASC144\|Idli\|1 idli \(25 g\)/.test(l)), 'an idli is one idli');
+  assert.ok(!L.some(l => /\|Poori\|/.test(l)), 'a poori with its whole kadai of oil is left out');
+});
+test('every file the app loads later is in the version stamp, so none can be served stale', () => {
+  const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+  for (const f of ['products.js', 'whole.js', 'indb.js']) assert.ok(sw.includes(`'${f}'`), f);
+  const { stamp } = require('./stamp.js'), before = stamp(), p = path.join(root, 'indb.js'), t = fs.readFileSync(p);
+  try { fs.appendFileSync(p, '\n'); assert.notStrictEqual(stamp(), before, 'a change to indb.js changes the stamp'); } finally { fs.writeFileSync(p, t); }
 });
 test('a script that fails to load is caught before the app starts', () => {
   const t = fs.readFileSync(path.join(root, 'app.js'), 'utf8');

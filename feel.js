@@ -38,24 +38,19 @@ function motionOK() {
 }
 
 // ---------- moving between screens ----------
-// The View Transitions API animates from the old screen to the new; dir is 'fwd', 'back', 'push' or 'pop'.
-// The incoming screen's parts then settle in one after another (.fresh), once: re-renders while you stay on a screen
-// never replay an entrance.
+// A new screen is there on the next frame: no snapshot of the old one first (the View Transitions API captures the
+// whole screen before it can draw the new one, which a phone feels as lag). It fades in over a sixth of a second;
+// a page pushed on top slides in a little from the side it came from. dir is 'fwd', 'back', 'push' or 'pop'.
 function transition(dir, fn) {
-  const go = () => { fn(); fresh(dir); };
-  if (!motionOK() || document.hidden) return fn();
-  document.documentElement.dataset.dir = dir;
-  if (!document.startViewTransition) return go();
-  // A transition the browser abandons (the keyboard or the window resizing mid-way) is harmless: the new screen is
-  // already in place. Its promises are caught so it never surfaces as an error.
-  try { const vt = document.startViewTransition(go); for (const pr of [vt.ready, vt.finished, vt.updateCallbackDone]) pr?.catch?.(() => {}); } catch (e) { go(); }
+  fn();
+  if (motionOK() && !document.hidden) fresh(dir);
 }
 function fresh(dir) {
   const v = $('#view');
   if (!v || !motionOK()) return;
   v.classList.remove('fresh'); void v.offsetWidth;
   v.dataset.dir = dir || ''; v.classList.add('fresh');
-  clearTimeout(fresh.t); fresh.t = setTimeout(() => v.classList.remove('fresh'), 900);
+  clearTimeout(fresh.t); fresh.t = setTimeout(() => v.classList.remove('fresh'), 400);
 }
 
 // ---------- toast ----------
@@ -127,30 +122,30 @@ addEventListener('keydown', e => { if (e.key === 'Escape') { if (pop) closePop()
     st.dx = dx;
     if (st.kind === 'tab') {
       const i = TABS.indexOf(tab), edge = (dx > 0 && i === 0) || (dx < 0 && i === TABS.length - 1);
-      st.el.style.transform = `translateX(${(edge ? dx * 0.12 : dx * 0.45).toFixed(1)}px)`;
+      st.el.style.transform = `translate3d(${(edge ? dx * 0.12 : dx * 0.45).toFixed(1)}px, 0, 0)`;
       st.el.style.opacity = (1 - Math.min(0.35, Math.abs(dx) / 900)).toFixed(3);
       const now = Math.abs(dx) > 80 && !edge;
       if (now !== !!st.armed) { st.armed = now; buzz('tick'); }
     } else if (st.kind === 'day') {
       const fut = dx < 0 && day >= todayKey();
-      st.el.style.transform = `translateX(${(fut ? dx * 0.1 : dx * 0.5).toFixed(1)}px)`;
+      st.el.style.transform = `translate3d(${(fut ? dx * 0.1 : dx * 0.5).toFixed(1)}px, 0, 0)`;
       st.el.style.opacity = (1 - Math.min(0.3, Math.abs(dx) / 900)).toFixed(3);
       const now = Math.abs(dx) > 70 && !fut;
       if (now !== !!st.armed) { st.armed = now; buzz('tick'); }
     } else if (st.kind === 'amount') {
       const d = Math.max(0, dx), r = d < 70 ? d : 70 + (d - 70) * 0.25;
-      st.el.style.transform = `translateX(${r.toFixed(1)}px)`;
+      st.el.style.transform = `translate3d(${r.toFixed(1)}px, 0, 0)`;
       const now = d > 64;
       if (now !== !!st.armed) { st.armed = now; st.el.classList.toggle('pressing', now); buzz('tick'); }
     } else if (st.kind === 'back') {
       const d = Math.max(0, dx);
-      st.el.style.transform = `translateX(${(d * 0.6).toFixed(1)}px)`;
+      st.el.style.transform = `translate3d(${(d * 0.6).toFixed(1)}px, 0, 0)`;
       st.el.style.opacity = (1 - Math.min(0.4, d / 700)).toFixed(3);
       const now = d > 90;
       if (now !== !!st.armed) { st.armed = now; buzz('tick'); }
     } else if (st.kind === 'row') {
       const two = st.el.dataset.swipe === 'hrresdone', d = two ? dx : Math.min(0, dx);
-      st.el.style.transform = `translateX(${d.toFixed(1)}px)`;
+      st.el.style.transform = `translate3d(${d.toFixed(1)}px, 0, 0)`;
       st.el.classList.add('swiping');
       const now = Math.abs(d) > st.el.offsetWidth * (two ? 0.28 : 0.33);
       st.el.classList.toggle('armed', now);
@@ -368,44 +363,6 @@ let repeated = '';
   });
   ['pointerup', 'pointercancel'].forEach(x => document.addEventListener(x, stop, true));
 })();
-
-// ---------- the section bar ----------
-// The long tabs (Heart, Insights) get a row of their sections that stays at the top while you scroll:
-// tap one to go straight to it, and the one you are reading lights up as you pass it. Built from the sections
-// themselves, so a section a screen adds or drops is never out of step with the bar.
-let jumpObs = null;
-function jumpbar() {
-  jumpObs?.disconnect(); jumpObs = null;
-  const v = $('#view');
-  if (!v || overlay || !['recovery', 'review'].includes(tab)) return;
-  if (v.querySelector(':scope > .jumpbar')) v.querySelector(':scope > .jumpbar').remove();
-  const secs = [...v.querySelectorAll(':scope > section.block, :scope > section.card')].filter(x => x.querySelector(':scope > .mh > h2'));
-  if (secs.length < 3) return;
-  const byTitle = new Map(), owner = new Map();
-  secs.forEach((x, i) => {
-    const t = x.querySelector(':scope > .mh > h2').textContent.split(/,| with | from | in your /)[0].trim();
-    x.id ||= `j-${tab}-${i}`;
-    if (!byTitle.has(t)) byTitle.set(t, x.id);
-    owner.set(x, byTitle.get(t));
-  });
-  const bar = document.createElement('nav');
-  bar.className = 'jumpbar chips'; bar.setAttribute('aria-label', 'Sections on this page');
-  bar.innerHTML = [...byTitle].map(([t, id]) => `<button data-act="jump" data-to="${id}">${esc(t)}</button>`).join('');
-  const head = v.querySelector(':scope > header');
-  head ? head.after(bar) : v.prepend(bar);
-  const vis = new Set();
-  const mark = () => {
-    const cur = secs.find(x => vis.has(x));
-    const id = cur ? owner.get(cur) : null;
-    for (const b of bar.children) {
-      const on = b.dataset.to === id;
-      if (on && !b.classList.contains('on')) b.scrollIntoView?.({ inline: 'center', block: 'nearest', behavior: motionOK() ? 'smooth' : 'auto' });
-      b.classList.toggle('on', on);
-    }
-  };
-  jumpObs = new IntersectionObserver(es => { for (const e of es) e.isIntersecting ? vis.add(e.target) : vis.delete(e.target); mark(); }, { rootMargin: '-90px 0px -55% 0px' });
-  secs.forEach(x => jumpObs.observe(x));
-}
 
 // ---------- numbers that move ----------
 // Elements with data-to count from data-from; arcs with data-dash ease from their old length to the new one.

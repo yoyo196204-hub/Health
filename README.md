@@ -22,7 +22,7 @@ Amazfit and Polar H9 data that decides how hard each day should be.
   arrive as notifications, only when the thing is still undone. A daily backup can go to a folder you choose. The app has
   **no internet permission**, so nothing in it can leave the phone.
 - **In Chrome** (`index.html`, served by GitHub Pages): the same screens, with the H9 over Web Bluetooth and
-  Amazfit data from the Zepp export. "Move my data to the app" in You hands everything to the Android app
+  Amazfit data from a Gadgetbridge or Zepp export. "Move my data to the app" in You hands everything to the Android app
   in one step.
 
 ## Installing and updating, from the phone
@@ -58,7 +58,7 @@ progression, the next loads, rest times, the cues and the weekdays, and also:
 
 openGym's double progression is the same rule as Health's, so the loads keep moving the same way there.
 
-1. Health: You › Training › **Save the plan file** (in the app, with openGym's folder linked: **Put the plan in the openGym folder**).
+1. Health: You › Training › **Save the plan file** (in the app, with openGym's folder linked: **Put it there**).
 2. openGym: **Plan** › share icon (top right) › **Import a plan file** › pick `Health plan for openGym.json`.
 3. Turn on **Use this weekly schedule**, then **Add to my plan**. The routines are named "Day A (Health)" and so on.
    To run the block: Plan › menu › Programmes › the Health block › Start programme.
@@ -71,7 +71,7 @@ openGym's double progression is the same rule as Health's, so the loads keep mov
 - **Health Connect**: in openGym, Settings › Integrations › Health Connect › turn on workouts and heart rate from your
   watch. Each finished openGym workout appears in Health straight away, with the heart rate the Bip saved during it.
 - **openGym's backup folder** brings the sets themselves: every completed work set (no warm-ups, no unticked sets), timed holds, cardio,
-and the weigh-ins you typed in openGym. Sessions count in Review, the muscle map, strength and Health's next targets.
+and the weigh-ins you typed in openGym. Sessions count in Today › History (the week, the sessions, strength per lift, the muscle map) and in Health's next targets.
 After a session with shoulder-loading exercises, Today asks how the shoulder felt; pain swaps the exercise next time
 and the plan file says it needs sending again.
 A day you logged in Health is never overwritten; a session that came from openGym follows openGym's later edits, moves
@@ -92,17 +92,17 @@ you log in openGym arrives with its name and the muscles it trains, from `opengy
 
 | Tab | What it is for |
 | --- | --- |
-| Today | Three rings: recovery (0–100, in its green/yellow/red zone), calories left, and last night's sleep; what is due today as a row of one-tap actions (weigh in, the morning check, the next meal); the one thing your data most wants you to know; Fuel: eaten against the target, protein, carbs, fat and fibre, the four meals as tiles (kcal and protein in each, the one due now lit, one tap to add), and one concrete suggestion; weight trend and steps; last night with its stages, heart rate asleep and regularity; the shoulder check after an openGym session; the next openGym session, which opens as a sheet with its exercises, loads and today's recovery guidance |
+| Today | Three rings: recovery (0–100, in its green/yellow/red zone), calories left, and last night's sleep; what is due today as a row of one-tap actions (weigh in, the morning check, the next meal); the one thing your data most wants you to know; Fuel: eaten against the target, protein, carbs, fat and fibre, the four meals as tiles (kcal and protein in each, the one due now lit, one tap to add), and one concrete suggestion; weight trend and steps; last night with its stages, heart rate asleep and regularity; the shoulder check after an openGym session; training as one card with two buttons: Session (the next openGym session as a sheet: its exercises, loads, today's recovery guidance and the shoulder routine) and History (the week against the WHO, the sessions with their sets and watch heart rate, strength per lift, the muscle map); a line when the plan in openGym is out of date |
 | Food | The diary. The week as a strip of rings (green within 10% of target, red over it, saffron under); swipe across the page for the day before or after. What is left as a ring, with eaten, target and the burn the model has learned; the four macros; a suggestion. Each meal as a card: tap an entry to change it, hold it, or swipe it left to remove it (with undo); an empty meal offers "same as yesterday" and your usual foods, one tap each. Then where the day's protein and energy went, meal by meal, and the week as bars against the target |
-| Heart | Recovery as one number, with each part it is made of (HRV, resting heart rate, sleep, breathing) drawn against your own normal;  the H9 morning check (1–5 minutes, lying or sitting) with live beats, skin contact and signal quality, and a result with its tachogram, Poincaré plot and every measure; the strap Lab; night by night, each opening a day in detail; HRV against your normal range, read with morning heart rate; resting and sleeping heart rate; sleep; the watch's overnight HRV and breathing rate against their own baselines; cardio with the H9 (live trace, zones, α1), the cardio of the last 14 days, and the aerobic threshold it gives; watch-vs-strap agreement |
-| Insights | The headlines from your data; what the data says to do next; your energy: the burn learned from your scale and log, its 95% interval over time against what you ate, and what this week's balance means in kilograms; the body: weigh-ins with the filtered trend, body fat from your waist, strength, and where the trend leads, each date with its 95% range; the long game: fitness, steps, resting heart rate, waist ÷ height, sleep length and regularity, social jetlag, strength and active minutes, each read against the cohort studies, with the one change worth the most named first; what moves what: each link in your own data with its effect in real units, its interval drawn around zero, and how to test it; how you eat across the week (logging, consistency, weekdays against weekends, protein at each meal); the week as a matrix and what it asks you to do; training: active minutes and strength days against the WHO, the sessions with their sets and watch heart rate, the muscle map, and strength per lift |
-| The log button (every tab) | Everything you might log, from anywhere: each meal (the one due now first), quick kcal, plates, search, your own foods, weight, waist, the morning check, breathing, a spot check, cardio, a Live session |
+| Heart | One part at a time, picked at the top. **Recovery**: recovery as one number, with each part it is made of (HRV, resting heart rate, sleep, breathing) drawn against your own normal (tap one to go to it); the H9 morning check (1–5 minutes, lying or sitting) with live beats, skin contact and signal quality, and a result with its tachogram, Poincaré plot and every measure; morning HRV against your normal range; resting and sleeping heart rate. **Sleep**: 14 nights as a chart and one line (length, regularity, and the one thing to change), night by night (each opening a day in detail), and the watch's overnight HRV and breathing rate against their own baselines. **Cardio**: cardio with the H9 (live trace, zones, α1), the cardio of the last 14 days, the aerobic threshold it gives, and watch-vs-strap agreement |
+| Insights | One part at a time, picked at the top (the headlines are Today's insight deck). **Energy**: the burn learned from your scale and log, its 95% interval over time against what you ate, what this week's balance means in kilograms, and how you eat across the week (logging, consistency, weekdays against weekends, protein at each meal). **Body**: weigh-ins with the filtered trend, body fat from your waist, strength, and where the trend leads, each date with its 95% range. **Long game**: one line each for fitness, steps, resting heart rate, waist ÷ height, sleep length and regularity, social jetlag, strength and active minutes, read against the cohort studies (tap one for its study), with the one change worth the most named first. **Links**: only the links that are real in your own data, each with its effect in real units, its interval drawn around zero, and how to test it; the rest behind one line |
+| The log button (every tab) | Everything you might log, from anywhere: each meal (the one due now first), quick kcal, plates, search, a pack by barcode; weight, waist, cardio, your day; and the strap: the morning check, breathing, a spot check, a Live session, the resonance finder and the stand-up test |
 | Weigh in / waist | A big number set with steppers, a ruler you drag, or the keyboard; it starts at your trend, says how far from it you are, and asks before keeping a reading that looks like a typo |
 | Automation (Android app) | The remembered strap connects by itself when the app opens with it on your chest, and before 11 with no check yet that day the morning check starts by itself; both can be turned off under the morning check. On a day without a morning check the watch's night stands in for it in the verdict, and the verdict says what it rests on |
-| Lab (from Recovery or Today) | Breathe (resonance, cyclic sighing, box; with or without the strap, haptic cues per breath), the resonance finder, the orthostatic test, spot checks, and Live: an open-ended session with RMSSD, SDNN, pNN50, SD1/SD2, breathing rate and α1 moving as you watch, marks for what you are doing, each marked stretch read on its own and against your earlier ones, and the beats saved as a CSV file for other HRV software; every session kept |
+| Lab (from the log button) | Breathe (resonance, cyclic sighing, box; with or without the strap, haptic cues per breath), the resonance finder, the orthostatic test, spot checks, and Live: an open-ended session with RMSSD, SDNN, pNN50, SD1/SD2, breathing rate and α1 moving as you watch, marks for what you are doing, each marked stretch read on its own and against your earlier ones, and the beats saved as a CSV file for other HRV software; every session kept |
 | A day in detail (tap a night, or Your day) | The watch's heart rate across 24 hours with sleep and workouts marked, the night stage by stage, and every number against your previous four weeks |
 | Beat by beat (from any morning check or Lab session) | The recording beat by beat: one finger reads each beat (time to the millisecond, RR, bpm, change from the last, and what correction it needed), a pinch zooms, the strip below moves the window; RMSSD, SDNN, pNN50, SD1/SD2, the Poincaré plot and the spectrum are worked out again for the stretch on screen |
-| Data checks (Me, and a line in Review when something needs a look) | About twenty fixed-rule checks across every dataset: food energy against its own macros, sleep stages against the night's total, watch resting and workout heart rate against the strap (Bland–Altman), saved RMSSD against its own beats, steps against distance, active against total energy, duplicate workouts, load typos, and how fresh the watch data is. Each gives its numbers and lists the records that failed |
+| Data checks (You, and a line on Insights when something needs a look) | About twenty fixed-rule checks across every dataset: food energy against its own macros, sleep stages against the night's total, watch resting and workout heart rate against the strap (Bland–Altman), saved RMSSD against its own beats, steps against distance, active against total energy, duplicate workouts, load typos, and how fresh the watch data is. Each gives its numbers and lists the records that failed |
 | Pack by barcode (the log button, or the barcode button in Add food's search) | Type the number under the bars; as soon as it is whole the pack is looked up on the phone in 16,000 packaged foods from Open Food Facts (every Indian product with a nutrition panel, and the most-scanned ones worldwide) and in your own foods. It shows the panel per 100 g, and three things that matter on a fixed budget: protein per 100 kcal, energy density, and the share of energy from sugars, with ultra-processing (NOVA 4) said plainly; then what one serving is of what is left today. Choose amount opens the usual amount sheet. A pack that is not in the list is entered once from its label with its barcode, and is known from then on. Packs also come up by name in the food search, under their own heading. Fling the card away for the next |
 | Adding food | A switch between the four meals at the top; search that understands Marathi, Hindi and English names (roti, chawal, anda, chaas, aloo, kombdi…) and forgives a typo; chips for Usual, Recent (exactly as you last logged it), Plates (yours first), Quick add, Mine, and every group from home food to Pune street food, pizza and Chinese, bakery and Irani café, and upvas. Tap adds one (the list keeps its order while you add, so nothing jumps from under your finger); hold any food, or swipe it right, for any amount: steppers, a ruler you drag (a light detent each quarter; a flick keeps it rolling), or by weight, into any meal. The bar at the bottom shows the meal and the day as you go |
 | A logged food (tap it) | Type any amount, step it, or drag its ruler, weigh it, change the meal, change its own numbers (it then becomes your own entry and the library food stays as it was), move or copy it to another day, or save it as your own food |
@@ -110,22 +110,27 @@ you log in openGym arrives with its name and the muscles it trains, from `opengy
 
 Gestures: swipe sideways to change tab (on Food: to change day), swipe right on a page to go back, swipe a row left to delete it (with undo), hold or swipe right on a food for its amount, drag any ruler, hold a stepper to repeat, fling a banner, a callout, a result card or a toast away, fling the insight card on Today for the next one, drag a sheet down from anywhere on it (once its content is at the top) or tap outside it to close.
 
-Everything a finger moves is physical (`motion.js`): it follows the finger exactly, and on release it carries the finger's speed into a spring, so a flick travels and a slow drag settles back with a small overshoot. Every CSS transition uses the same springs (sampled into `linear()` easings). A sheet is a layer: as it rises the page sinks back under it, smaller, dimmer and rounded against black, and comes forward again as you pull the sheet down. Cards tip toward the finger when pressed, and the title of a tab drifts up slower than the page so the cards slide over it. Heart and Insights carry a section bar that stays at the top and follows your reading.
+Everything a finger moves is physical (`motion.js`): it follows the finger exactly, and on release it carries the finger's speed into a spring, so a flick travels and a slow drag settles back with a small overshoot. Every CSS transition uses the same springs (sampled into `linear()` easings). A sheet is a layer: as it rises the page sinks back under it, a little smaller against black under a darkening scrim, and comes forward again as you pull the sheet down; only the page's transform and the scrim's opacity change while you drag, so the drag never makes the page restyle or repaint. Cards sink a little when pressed, and the title of a tab drifts up slower than the page so the cards slide over it. Heart and Insights show one part at a time from a row that stays at the top.
 
 Haptics follow one vocabulary everywhere: a press under the finger, a tick when a choice changes, a light detent for each step of a ruler, a double pulse for something saved, a rising triple when protein reaches its target, and a firm double when the day passes its calorie target or a value is refused.
 
 The screen is redrawn as a patch, not from scratch: only what changed is touched, so rings ease to their new length,
 numbers count to their new value, and the scroll, the keyboard and anything half-typed stay where they are. Moving
-between tabs reuses what was already worked out from the data; anything that changes the data recalculates it.
+between tabs reuses what was already worked out from the data; anything that changes the data recalculates it. A new screen is drawn at once and fades in over a sixth of a second: no snapshot of the old screen first, no cards arriving one by one.
 
 ## How the numbers are made
 
-- **Watch data, and how fresh it is**: Zepp passes the watch's data to Health Connect only when the Zepp app syncs with the
-  watch, so Today shows two times: when Zepp last wrote to Health Connect, and when Health last read it. Health reads
-  Health Connect on opening (after two minutes away), every five minutes while open, on pull-down, and twice on coming
-  back from "Open Zepp". Steps, distance, sleep, resting heart rate, HRV and heart samples come from the watch app's own
-  records on any day it wrote them, so they match Zepp rather than Health Connect's merge of every app (on Android 14+
-  the phone counts steps too); the merged step count is kept beside it and Data checks lists days where they differ.
+- **Watch data, and how fresh it is**: the watch's app (Zepp, or Gadgetbridge, the open-source app that runs an
+  Amazfit watch without Zepp) passes the watch's data to Health Connect only when it syncs with the watch, so Today shows
+  two times: when the watch app last wrote to Health Connect, and when Health last read it. Health reads Health Connect
+  on opening (after two minutes away), every five minutes while open, on pull-down, and twice on coming back from
+  "Open Zepp" or "Open Gadgetbridge". Steps, distance, sleep, resting heart rate, HRV and heart samples come from the
+  watch app's own records on any day it wrote them, so they match the watch rather than Health Connect's merge of every
+  app (on Android 14+ the phone counts steps too); the merged step count is kept beside it and Data checks lists days
+  where they differ. On a day two watch apps wrote (the day you move from Zepp to Gadgetbridge), the one with more of
+  that day counts; the one named on screen is the one still writing.
+  In Gadgetbridge: Settings › External integrations › Health Connect, turn it on, allow every type, and turn on Sync
+  after device sync.
 - **Food**: every food carries protein, available carbohydrate, fat and fibre, and the grams in its household unit, so a
   portion can be weighed. Home dishes are recipe estimates; packaged foods come from their label panels (Open Food Facts,
   barcode given), or only what the maker states when that is all there is (carbs and fat then stay unknown, never
@@ -195,15 +200,42 @@ between tabs reuses what was already worked out from the data; anything that cha
   swaps the exercise next time, pain twice takes it out of the plan until you bring it back.
 - **Volume**: one set counts 1 for the muscle an exercise is for and 0.5 for one it trains on the way.
 
-## Your older history (Zepp export or Health Connect backup)
+## Your older history (Gadgetbridge, Zepp export or Health Connect backup)
 
-Health Connect brings the recent weeks from Zepp by itself, but only as far back as Zepp has been writing to it, and
-the app reads at most 120 days of it. Zepp's own export fills in everything before that: steps, every night with its
-stages and times, heart rate through the day (a resting estimate for each day), and a Zepp scale's weight and body fat.
+Health Connect brings the recent weeks from the watch app by itself, but only as far back as it has been writing to it,
+and the app reads at most 120 days of it. A file fills in everything before that. In Health: You (the face at the top)
+› Data sources › History files › **Choose a file**. The file is recognised by what is in it, not by its name.
+
+### Gadgetbridge
+
+Gadgetbridge keeps every minute the watch sends in one SQLite database. Data management › **Export zip** (the database
+is inside as `database/Gadgetbridge`), or **Export Data** for the database alone (a file called just `Gadgetbridge`);
+Auto export writes one every day. Pick either. Read on the phone by `gadgetbridge.js`:
+
+- Each minute's steps and heart rate (`HUAMI_EXTENDED_ACTIVITY_SAMPLE` for Zepp OS watches such as the Bip 5 and Bip 6;
+  `MI_BAND_ACTIVITY_SAMPLE` for older Amazfit and Mi Band watches). When two watches cover one day, the one worn more of
+  it (minutes with a step or a heart rate) is that day's, so steps are never counted twice and two sensors never mixed.
+- Each night from the watch's own sleep report, decoded as Gadgetbridge decodes it: the stages (light, deep, REM, awake)
+  minute by minute, filed under the morning; a later report of the same night replaces the earlier one, and a second
+  sleep that day is a nap.
+- The day's resting heart rate (stamped with the watch's zone), overnight HRV (only the readings inside the night's
+  sleep), blood oxygen, breathing rate in sleep, a paired scale's weight, and each workout's summary with its own
+  watch's heart rate.
+- Sleep, heart rate and workouts then go through the same code as a Health Connect backup (`hcbNight`, `hcbSleep`,
+  `hcbHeart`), so an imported day and a synced day agree.
+
+Gadgetbridge's sample tables are `WITHOUT ROWID` tables, which SQLite stores as index B-trees; `sqlite.js` reads those
+too (interior cells hold rows, index pages keep less of a row before its overflow pages).
+Tests: `python3 test/make-gb-fixture.py` writes `test/fixtures/gadgetbridge.zip`, 40 made-up days of a Bip 6 and an
+older Bip in Gadgetbridge's exact table layout; the engine tests check the reader against Python's sqlite3.
+
+### Zepp export
+
+Zepp's own export brings steps, every night with its stages and times, heart rate through the day (a resting estimate
+for each day), and a Zepp scale's weight and body fat.
 
 1. Zepp › Profile › Settings › Account › Export data. Zepp emails a zip and shows its password.
-2. In Health: You (the face at the top) › Data sources › History files › **Choose a Zepp or Health Connect zip**, and
-   pick the zip itself; there is no need to unzip it. The password is asked for in the app.
+2. Pick the zip itself; there is no need to unzip it. The password is asked for in the app.
 3. Everything is read on the phone, file by file and line by line, so a large export does not run out of memory. Files
    are recognised by their columns, so a renamed folder or a newer layout still works; workouts, minute-by-minute steps
    and the profile are left aside.
@@ -273,16 +305,17 @@ Plain JavaScript, no build step. Scripts load in this order:
 | `feel.js` | Haptics, screen transitions, sheets, undo toasts, press and hold, the ruler, swipes, pull to refresh |
 | `motion.js` | The physics: springs, flick projection, rubber-banding; sheets as layers, fling to dismiss, the insight deck, pressing, scroll depth |
 | `ui.js` | Shared building blocks: rings, meters, icons, the chart (with interval bands) and the muscle map |
-| `styles.css`, `inter.woff2` | The design: graphite surfaces lit from above (a lighter top edge, a hairline rim, a grounding shadow), raised controls in sunken tracks, a floating glass tab bar whose indicator takes each tab's colour, one saffron accent and a colour per domain glowing faintly from its cards; Inter with optical sizing, bundled |
+| `styles.css`, `inter.woff2` | The design: flat surfaces in warm neutrals, each a solid tone edged by a hairline (no gradients, glows or bevels), one saffron accent and a colour per domain; a solid tab bar with the log button in its middle, so nothing floats over the page; Inter with optical sizing, bundled |
 | `h9.js` | The strap: connection, the beat timeline, live trace, morning HRV check, cardio with α1, heart-rate recovery, crash-safe drafts |
 | `beats.js` | The beat explorer |
 | `lab.js` | The Lab: breathing pacer, resonance finder, orthostatic test, spot check, Live sessions and the beat export |
 | `zip.js` | Reading a zip on the phone: its table of contents, the PKWARE and WinZip AES locks, inflating with the browser's own DecompressionStream, line by line |
-| `watch.js` | The Zepp export (the zip as emailed, or its CSV files): each file recognised by its columns, reduced to days, previewed, merged |
+| `watch.js` | History files: the Zepp export (the zip as emailed, or its CSV files, each recognised by its columns), and databases in or out of a zip, each reduced to days, previewed, merged |
+| `sqlite.js`, `hcbackup.js`, `gadgetbridge.js` | Reading an SQLite file on the phone (rowid and WITHOUT ROWID tables); a Health Connect backup and a Gadgetbridge database made into days by the sync's rules |
 | `opengym.js` | openGym: its backup and CSV coming in, the folder link, Health's plan as an openGym plan file with backups and the block |
 | `view-*.js` | One file per screen; `view-food.js` is the diary and everything about adding and changing food, `view-review.js` is Insights, `view-recovery.js` is Heart, `view-records.js` is all your data and a day in detail, `view-checks.js` the data checks |
 | `scan.js` | Packs by barcode: the offline lookup, and what a pack says per 100 kcal |
-| `products.js`, `whole.js` | Loaded only when a barcode or the food search needs them: the Open Food Facts list (built by `test/build-products.py`) and everyday whole foods from OpenNutrition (`test/build-whole.py`) |
+| `products.js`, `whole.js`, `indb.js` | Loaded only when a barcode or the food search needs them: the Open Food Facts list (built by `test/build-products.py`), everyday whole foods from OpenNutrition (`test/build-whole.py`) and Indian recipes from INDB (`test/build-indb.py`) |
 | `app.js` | State, routing, events, and the patching renderer |
 
 Exercise animations live in openGym. Tests: `node test/run.js` (the engine) and `node test/browser.js` (the screens in a real browser: that a finger scrolls every tab, fixed bars stay put, a Live session runs end to end; needs Playwright). Both run on GitHub before every build.
@@ -312,7 +345,7 @@ the 1,324 entries whose names and muscles come from ExerciseDB v1 by AscendAPI v
 No openGym code, descriptions, pictures or animations are copied into Health.
 
 Packaged foods in `products.js` come from [Open Food Facts](https://world.openfoodfacts.org), under the Open Database
-License (`licenses/OpenFoodFacts-ODbL.txt`). Everyday whole foods in `whole.js` (3,248: meats, fish, grains, fruit, vegetables, dairy, tofu and the like) come from
+License (`licenses/OpenFoodFacts-ODbL.txt`). Indian recipes in `indb.js` (857 of the Indian Nutrient Databank's 1,014: dals, sabzis, rice, breads, snacks, sweets, drinks, each with its own serving) come from [INDB](https://github.com/lindsayjaacks/Indian-Nutrient-Databank-INDB-) (Vijayakumar, Jaacks et al., 2024; `licenses/INDB.txt`), computed from IFCT 2017; recipes over 35 g fat per 100 g are left out, because INDB counts all of a deep fry's oil as eaten (built by `test/build-indb.py`). Everyday whole foods in `whole.js` (3,248: meats, fish, grains, fruit, vegetables, dairy, tofu and the like) come from
 [OpenNutrition](https://www.opennutrition.app), under the Open Database License (`licenses/OpenNutrition-ODbL.txt`); only
 foods traced to a national food table (USDA, Canadian Nutrient File, Australian Nutrient Database, Frida) are included.
 Its barcoded products are North American and are not included.

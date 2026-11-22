@@ -87,15 +87,15 @@ function nutritionCard(T, t) {
   return `<section class="card">${cardHead('Where it went', 'bowl', 'var(--pro)', why('spread', 'why'))}
     <h3>Protein at each meal <span class="muted" style="font-weight:500">· ${T.perMeal} g each is about 0.4 g/kg</span></h3><div class="pbars">${pb}</div>
     <h3>Energy by meal</h3>${kcalSplit}
-    <h3>Macro split</h3>${macroLine(t)}</section>`;
+    ${(m => m ? `<h3>Macro split</h3>${m}` : '')(macroLine(t))}</section>`;
 }
 // The week the day is in: intake bars against the target line, tap a bar to go to the day.
 function weekCard(T) {
   const ws = weekStart(day), ks = range(7, shift(ws, 6)), vals = ks.map(k => totals(k).k), top = Math.max(T.kcal * 1.25, ...vals);
   const logged = ks.filter(k => S.food[k] && k <= todayKey()), done = ks.filter(k => S.food[k] && isComplete(k));
   const avg = done.length ? mean(done.map(k => totals(k).k)) : null, on = done.filter(k => Math.abs(totals(k).k - T.kcal) <= T.kcal * 0.1).length;
-  return `<section class="card">${cardHead('This week', 'cal', 'var(--fuel)', `<a class="more-link" href="#review">Trends ›</a>`)}
-    <div class="wkbars"><span class="tgt" style="bottom:${(T.kcal / top * 96 + 22).toFixed(1)}px"><span>${fmt(T.kcal)}</span></span>${ks.map((k, i) => `<button class="wb ${!vals[i] ? 'empty' : ''} ${k === day ? 'on' : ''}" data-act="gday" data-k="${k}" ${k > todayKey() ? 'disabled' : ''} style="--c:${dayColor(k, T)}"><i style="height:${Math.max(3, vals[i] / top * 96).toFixed(1)}px;animation-delay:${i * 40}ms"></i><span>${weekday(k)}</span></button>`).join('')}</div>
+  return `<section class="card">${cardHead('This week', 'cal', 'var(--fuel)', `<a class="more-link" href="#review-energy">Trends ›</a>`)}
+    <div class="wkbars"><span class="tgt" style="bottom:${(T.kcal / top * 96 + 22).toFixed(1)}px" title="Target ${fmt(T.kcal)} kcal"></span>${ks.map((k, i) => `<button class="wb ${!vals[i] ? 'empty' : ''} ${k === day ? 'on' : ''}" data-act="gday" data-k="${k}" ${k > todayKey() ? 'disabled' : ''} style="--c:${dayColor(k, T)}"><i style="height:${Math.max(3, vals[i] / top * 96).toFixed(1)}px;animation-delay:${i * 40}ms"></i><span>${weekday(k)}</span></button>`).join('')}</div>
     ${stats([[avg != null ? fmt(avg) : DASH, 'kcal a day, complete days'], [`${on}<i>/ ${done.length}</i>`, 'within 10% of target'], [`${logged.length}<i>/ 7</i>`, 'days logged']])}</section>`;
 }
 function vFood() {
@@ -118,7 +118,7 @@ const ADDORDER = { meal: null, day: null, ids: [] };
 // "1 katori · about 150 g" when a unit's weight is known and not already written in it.
 function unitText(f) { return f.g && !/\d\s*(g|ml)\b/.test(f.u) ? `${f.u} · about ${Math.round(f.g)} ${/glass|cup|ml/.test(f.u) ? 'ml' : 'g'}` : f.u; }
 // Where a packaged or raw food's numbers come from, in a word; home dishes are recipe estimates and say nothing.
-function srcTag(f) { const L = { label: 'pack label', brand: 'maker', derived: 'maker', ifct: 'IFCT', usda: 'USDA', on: 'OpenNutrition' }; return L[f.src] ? ` · <i class="srct">${L[f.src]}</i>` : ''; }
+function srcTag(f) { const L = { label: 'pack label', brand: 'maker', derived: 'maker', ifct: 'IFCT', usda: 'USDA', on: 'OpenNutrition', indb: 'INDB' }; return L[f.src] ? ` · <i class="srct">${L[f.src]}</i>` : ''; }
 // The day's carbs and fat, and how the energy splits, only as far as the logged foods know them.
 function macroLine(t) {
   if (!t.n || !t.kn) return '';
@@ -192,9 +192,11 @@ function addRows(meal) {
         : `${mine ? `<button class="x" data-act="cedit" data-id="${esc(f.id)}" aria-label="Change ${esc(f.n)}">✎</button>` : ''}<span class="add" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="1" aria-hidden="true">+</span>`}</li>`;
   };
   // Packs from Open Food Facts follow the library's own foods, under their own heading.
-  // Then everyday whole foods from OpenNutrition, each traced to a national food table.
-  const packs = q ? offSearch(q).filter(f => !S.custom.some(c => c.bc === f.bc)) : [], whole = q ? wholeSearch(q) : [];
-  if (q && (packs.length || whole.length)) return searchFoods(q).map(f => row(f, S.custom.includes(f))).join('')
+  // Then everyday whole foods from OpenNutrition, each traced to a national food table;
+  // Indian recipes from INDB come before them.
+  const packs = q ? offSearch(q).filter(f => !S.custom.some(c => c.bc === f.bc)) : [], whole = q ? wholeSearch(q) : [], indb = q ? indbSearch(q) : [];
+  if (q && (packs.length || whole.length || indb.length)) return searchFoods(q).map(f => row(f, S.custom.includes(f))).join('')
+    + (indb.length ? `<li class="subhead"><span class="eyebrow">Indian recipes · <a href="https://github.com/lindsayjaacks/Indian-Nutrient-Databank-INDB-" target="_blank" rel="noopener">INDB</a></span></li>${indb.map(f => row(f)).join('')}` : '')
     + (whole.length ? `<li class="subhead"><span class="eyebrow">More foods · <a href="https://www.opennutrition.app" target="_blank" rel="noopener">OpenNutrition</a></span></li>${whole.map(f => row(f)).join('')}` : '')
     + (packs.length ? `<li class="subhead"><span class="eyebrow">Packs · <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a></span></li>${packs.map(f => row(f)).join('')}` : '');
   if (q) return searchFoods(q).map(f => row(f, S.custom.includes(f))).join('')
