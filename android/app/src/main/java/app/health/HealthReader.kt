@@ -90,9 +90,11 @@ class HealthReader(private val a: MainActivity) {
     fun read(json: String) {
         val req = try { JSONObject(json) } catch (e: Exception) { JSONObject() }
         val days = req.optInt("days", 30).coerceIn(1, 120)
+        // How many days before today the read ends: 0 for a normal sync, more when the page walks back through history.
+        val end = req.optInt("end", 0).coerceIn(0, 3650)
         val windows = req.optJSONArray("windows") ?: JSONArray()
         a.lifecycleScope.launch(Dispatchers.IO) {
-            val out = try { collect(days, windows) } catch (e: Throwable) {
+            val out = try { collect(days, windows, end) } catch (e: Throwable) {
                 JSONObject().put("error", "Could not read Health Connect: ${e.message ?: e.javaClass.simpleName}")
             }
             a.emit("hc-data", out.toString())
@@ -128,12 +130,13 @@ class HealthReader(private val a: MainActivity) {
         } while (token != null && ++pages < 300)
     }
 
-    private suspend fun collect(n: Int, windows: JSONArray): JSONObject {
+    private suspend fun collect(n: Int, windows: JSONArray, end: Int = 0): JSONObject {
         val c = client()
         val granted = c.permissionController.getGrantedPermissions()
         fun has(t: String) = perm[t] in granted
         val zone = ZoneId.systemDefault()
-        val today = LocalDate.now(zone)
+        // "today" is the last day read: today itself for a sync, an earlier day when reading back through history.
+        val today = LocalDate.now(zone).minusDays(end.toLong())
         val from = today.minusDays(n - 1L)
         val days = TreeMap<LocalDate, JSONObject>()
         fun day(d: LocalDate): JSONObject? = if (d < from || d > today) null else days.getOrPut(d) { JSONObject() }

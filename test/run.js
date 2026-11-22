@@ -1464,6 +1464,34 @@ test('low blood oxygen in sleep: only from nights with enough readings and the w
   assert.deepStrictEqual(run(c, 'cleanWx({ o2n: 60, o2c: 0, o2l: 40 })'), null, 'impossible values are not kept');
 });
 
+test('history: a chunk read back fills older days, never takes away a workout already here, and stops after two empty chunks', c => {
+  run(c, 'var renderSoft = () => {}, paintSync = () => {}, widgetPush = () => {}');
+  const t = run(c, 'todayKey()'), d = n => run(c, `shift('${t}', -${n})`);
+  run(c, `S.ex['${d(100)}'] = [{ s: Date.parse('${d(100)}T08:00'), e: Date.parse('${d(100)}T09:00'), k: 'Run', src: 'Zepp', h: [] }]; S.ex['${d(105)}'] = [{ s: Date.parse('${d(105)}T08:00'), e: Date.parse('${d(105)}T09:00'), k: 'Walk', src: 'Zepp', h: [] }]`);
+  run(c, 'S.meta.sync = Date.now() - 6e4; S.meta.fresh = null');
+  const before = run(c, 'S.meta.sync');
+  c.P = { from: d(120), to: d(31), days: { [d(100)]: { st: 9000 }, [d(110)]: { st: 7000, rh: 55 } }, ex: [{ s: Date.parse(`${d(110)}T07:00`), e: Date.parse(`${d(110)}T07:40`), k: 'Walk', src: 'Gadgetbridge', h: [] }, { s: Date.parse(`${d(100)}T18:00`), e: Date.parse(`${d(100)}T18:30`), k: 'Walk', src: 'Gadgetbridge', h: [] }], win: [], read: Date.now() };
+  run(c, `NEV['hc-data'](P)`);
+  assert.deepStrictEqual(run(c, `[S.steps['${d(100)}'], S.steps['${d(110)}'], S.rhr['${d(110)}']]`), [9000, 7000, 55]);
+  assert.deepStrictEqual(run(c, `S.ex['${d(100)}'].map(x => x.k)`), ['Run'], 'a day with a workout keeps it');
+  assert.deepStrictEqual(run(c, `S.ex['${d(105)}'].map(x => x.k)`), ['Walk'], 'a day the chunk has nothing for keeps its own');
+  assert.deepStrictEqual(run(c, `S.ex['${d(110)}'].map(x => x.k)`), ['Walk'], 'an empty day is filled');
+  assert.deepStrictEqual(run(c, 'S.meta.back'), { to: d(120), empty: 0, done: false, at: run(c, 'S.meta.back.at') });
+  assert.strictEqual(run(c, 'S.meta.sync'), before, 'a chunk from the past is not a sync');
+  assert.strictEqual(run(c, 'S.meta.fresh'), null, 'and says nothing about how fresh the watch data is');
+  c.E = { from: d(210), to: d(121), days: {}, ex: [], win: [] };
+  run(c, `NEV['hc-data'](E)`); assert.deepStrictEqual(run(c, '[S.meta.back.empty, S.meta.back.done]'), [1, false]);
+  c.E2 = { from: d(300), to: d(211), days: {}, ex: [], win: [] };
+  run(c, `NEV['hc-data'](E2)`); assert.deepStrictEqual(run(c, '[S.meta.back.empty, S.meta.back.done, S.meta.back.to]'), [2, true, d(300)]);
+  // It survives a reload, and a normal sync still replaces its own range of workouts as before.
+  assert.deepStrictEqual(run(c, 'sanitize(JSON.parse(JSON.stringify(S))).meta.back.done'), true);
+  c.N = { from: d(2), to: t, days: {}, ex: [], win: [] };
+  run(c, `S.ex['${d(1)}'] = [{ s: Date.parse('${d(1)}T08:00'), e: Date.parse('${d(1)}T09:00'), k: 'Run', src: 'Zepp', h: [] }]; NEV['hc-data'](N)`);
+  assert.strictEqual(run(c, `S.ex['${d(1)}']`), undefined, 'a workout deleted in the watch app goes in a normal sync');
+  const kt = fs.readFileSync(path.join(root, 'android/app/src/main/java/app/health/HealthReader.kt'), 'utf8');
+  assert.ok(/optInt\("end", 0\)/.test(kt) && /LocalDate\.now\(zone\)\.minusDays\(end\.toLong\(\)\)/.test(kt), 'the reader can read a window ending in the past');
+});
+
 (async () => {
   for (const [name, fn] of later) {
     try { await fn(sandbox()); passed++; console.log('  ok  ', name); }

@@ -174,6 +174,11 @@ function runChecks() {
       out.push(chk('sync', 'Sources', 'Watch data is current', !F ? 'na' : watchLagging() ? 'look' : F.err?.length ? 'look' : 'ok',
         !F ? 'Not read from Health Connect yet.' : `${W ? `${esc(W.src)} last passed data to Health Connect ${ago(W.w)}` : 'Nothing from a watch app yet'}; Health read it ${ago(F.read)}.${F.apps?.length ? ` Apps writing: ${F.apps.map(esc).join(', ')}.` : ''}`,
         (F?.err || []).map(e => ({ t: esc(e) })), `${watchApp()} passes the watch’s data to Health Connect only when it syncs with the watch. Health reads Health Connect when it opens, every five minutes while open, and when you pull down.`));
+      const B = S.meta.back, hist = SYNC.status?.history;
+      if (F) out.push(chk('back', 'Sources', 'History read from Health Connect', B?.done ? 'ok' : 'na',
+        B ? `${B.done ? 'All of it' : 'So far'}: back to ${dateLabel(B.to, { day: 'numeric', month: 'short', year: 'numeric' })}.${B.done ? '' : ' 90 more days after each sync.'}` : 'Starts after the next sync, 90 days at a time.',
+        hist === false ? [{ t: 'Health Connect gives only the 30 days before access was allowed. To read further back, allow access to past data for Health in Health Connect’s settings.' }] : [],
+        'Everything Health Connect holds is read once, back to its oldest day, and merged like any sync; days you typed keep what you typed.'));
     }
     return out;
   });

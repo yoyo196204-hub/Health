@@ -294,6 +294,8 @@ function sanitize(raw) {
       h9: h9 && str(h9.id, 64) ? { id: str(h9.id, 64), name: str(h9.name, 40) } : null,
       tgt: tg && num(tg.k, 800, 6000) != null && DATE.test(tg.at) ? { k: +tg.k, p: num(tg.p, 20, 400) || 0, at: tg.at, sig: str(tg.sig, 80) } : null,
       welcomed: meta.welcomed === true, imported: str(meta.imported, 40) || null,
+      // Reading back through Health Connect's history: the oldest day read so far, empty chunks in a row, and whether it is done.
+      back: obj(meta.back) && DATE.test(meta.back.to) ? { to: meta.back.to, empty: num(meta.back.empty, 0, 99) || 0, done: meta.back.done === true, at: num(meta.back.at, 1e12, 1e13) } : null,
       og: obj(meta.og) && num(meta.og.at, 1e12, 1e13) != null ? { at: +meta.og.at, file: str(meta.og.file, 60), seen: str(meta.og.seen, 90) } : null,
       rf: obj(meta.rf) && num(meta.rf.rate, 3, 10) != null && DATE.test(meta.rf.at) ? { rate: +meta.rf.rate, at: meta.rf.at } : null,
       ogplan: obj(meta.ogplan) && DATE.test(meta.ogplan.at) ? { sig: str(meta.ogplan.sig, 16), at: meta.ogplan.at } : null,
