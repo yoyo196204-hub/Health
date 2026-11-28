@@ -1477,3 +1477,5 @@ html.still .wkfocus { animation: none; }
 .pg.good { color: var(--good); background: color-mix(in srgb, var(--good) 12%, transparent); }
 .pg.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 11%, transparent); }
 .pg.mid { color: var(--mid); background: color-mix(in srgb, var(--mid) 14%, transparent); }
+.grouph { font: 650 12px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--soft); margin: 22px 4px 0; }
+.grouph + .group { margin-top: 8px; }

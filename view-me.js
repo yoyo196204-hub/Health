@@ -27,18 +27,25 @@ function vMe() {
       trow(why('zones', 'Heart-rate zones'), `${H.zones[0]} / ${H.zones[1]} / ${H.zones[2]}`),
       trow(why('waist', 'BMI, Indian cut-offs'), `${r1(T.bmi)}, ${cls}`)]) +
       (T.measured != null && Math.abs(T.measured - T.tdee) >= 25 ? para(`Measured is ${fmt(Math.abs(T.measured - T.formula))} kcal ${T.measured < T.formula ? 'below' : 'above'} the formula; the target moves at most 25% from it, since a gap that large is usually unlogged food. ${why('burn', 'Why')}`) : '') + (T.locked ? para(`Targets hold until ${dateLabel(T.next, { weekday: 'long', day: 'numeric', month: 'short' })}. ${why('lock', 'Why')}`) : ''))}
-    <nav class="group" aria-label="Settings">
+    <h3 class="grouph">Your plan</h3>
+    <nav class="group" aria-label="Your plan">
       ${navrow('#set-goal', 'Goal and targets', `${PACE[S.settings.pace][0]}${PACE[S.settings.pace][1] ? ` · ${PACE[S.settings.pace][1]}% a week` : ''} · protein ${S.settings.protein === 'high' ? 'higher' : 'standard'}`, ICON.goal)}
       ${navrow('#set-train', 'Training', `${esc(P.short)} · ${p.equip === 'home' ? 'home' : 'gym'}${p.shoulder ? ' · shoulder care' : ''}${ogPlanStale() ? ' · plan changed: send it to openGym' : ''}`, ICON.lift)}
       ${navrow('#set-profile', 'Profile', `${p.sex === 'm' ? 'Male' : 'Female'} · ${p.h} cm · started at ${p.w0} kg`, ICON.person)}
+    </nav>
+    <h3 class="grouph">Your data</h3>
+    <nav class="group" aria-label="Your data">
       ${navrow('#set-sources', 'Data sources', (NATIVE ? (SYNC.status?.granted?.length ? `Health Connect · synced ${S.meta.sync ? ago(S.meta.sync) : 'not yet'}` : 'Health Connect not connected') : 'Watch files, H9') + (OGF.folder || S.meta.og ? ' · openGym' : ''), ICON.link)}
       ${navrow('#watch', 'Watch history', 'Every figure by week, month, year', `<svg viewBox="0 0 24 24">${IC.watch}</svg>`)}
       ${navrow('#set-records', 'All your data', 'See, change or delete any record', ICON.list)}
       ${navrow('#set-checks', 'Data checks', checkLine(), ICON.check)}
       ${navrow('#set-data', 'Backup and data', bk, ICON.box)}
+    </nav>
+    <h3 class="grouph">The app</h3>
+    <nav class="group" aria-label="The app">
       ${navrow('#set-remind', 'Reminders', !NATIVE ? 'In the Android app' : remindOn() ? [S.settings.remAm !== 'off' && `morning ${S.settings.remAm}`, S.settings.remWk !== 'off' && `waist ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][+S.settings.remWk]}`, S.settings.remPm !== 'off' && `food ${S.settings.remPm}`].filter(Boolean).join(' · ') : 'Off', ICON.bell)}
-      ${navrow('#set-feel', 'Feel', `Haptics ${S.settings.haptics} · sound ${({ key: 'key moments', all: 'every touch', off: 'off' })[S.settings.sound]} · motion ${S.settings.motion} · ${S.settings.theme} theme`, ICON.hand)}
-      ${navrow('#set-update', 'Updates', updateLine(), ICON.box)}
+      ${navrow('#set-feel', 'Feel', `Haptics ${S.settings.haptics} · sound ${({ key: 'key', all: 'all', off: 'off' })[S.settings.sound]} · ${S.settings.theme} theme`, ICON.hand)}
+      ${navrow('#set-update', 'Updates', updateLine(), ICON.update)}
       ${navrow('#set-evid', 'The evidence', `${Object.keys(EVID).length} topics, each with its sources`, ICON.book)}
     </nav>
     ${standalone ? '' : sec('Use as an app in Chrome', installEvt ? '<button class="solid" data-act="install">Install</button>' : para('Open this page in Chrome itself, not inside another app. Tap ⋮ at the top right, then <b>Add to Home screen</b>.'))}
