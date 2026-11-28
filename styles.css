@@ -1471,3 +1471,9 @@ table.wk tr.muted td:first-child { color: var(--soft); }
 .wknav .fwd svg { transform: scaleX(-1); }
 .wknav .nav:disabled { opacity: .3; }
 html.still .wkfocus { animation: none; }
+.srct.odd { color: var(--bad); font-style: normal; }
+.pgs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.pg { font-style: normal; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 99px; background: var(--bg3); color: var(--ink2); }
+.pg.good { color: var(--good); background: color-mix(in srgb, var(--good) 12%, transparent); }
+.pg.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 11%, transparent); }
+.pg.mid { color: var(--mid); background: color-mix(in srgb, var(--mid) 14%, transparent); }

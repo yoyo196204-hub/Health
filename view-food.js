@@ -118,7 +118,7 @@ const ADDORDER = { meal: null, day: null, ids: [] };
 // "1 katori · about 150 g" when a unit's weight is known and not already written in it.
 function unitText(f) { return f.g && !/\d\s*(g|ml)\b/.test(f.u) ? `${f.u} · about ${Math.round(f.g)} ${/glass|cup|ml/.test(f.u) ? 'ml' : 'g'}` : f.u; }
 // Where a packaged or raw food's numbers come from, in a word; home dishes are recipe estimates and say nothing.
-function srcTag(f) { const L = { label: 'pack label', brand: 'maker', derived: 'maker', ifct: 'IFCT', usda: 'USDA', on: 'OpenNutrition', indb: 'INDB' }; return L[f.src] ? ` · <i class="srct">${L[f.src]}</i>` : ''; }
+function srcTag(f) { const L = { label: 'pack label', brand: 'maker', derived: 'maker', ifct: 'IFCT', usda: 'USDA', on: 'OpenNutrition', indb: 'INDB' }; return (L[f.src] ? ` · <i class="srct">${L[f.src]}</i>` : '') + (f.odd ? ` · <i class="srct odd" title="${esc(f.odd)}">label does not add up: check the pack</i>` : ''); }
 // The day's carbs and fat, and how the energy splits, only as far as the logged foods know them.
 function macroLine(t) {
   if (!t.n || !t.kn) return '';
@@ -151,20 +151,25 @@ function searchFoods(q) {
     if (seen.has(f.id)) continue;
     seen.add(f.id);
     const name = fnorm(f.n), toks = name.split(' '), hay = `${name} ${fnorm(catName[f.cat] || '')} ${fnorm(f.u || '')}`;
-    let score = 0;
+    let score = 0, fuzzy = false;
     for (const w of words) {
-      let best = 0;
+      let best = 0, fz = false;
       [w, ...(FOOD_ALIAS[w] || '').split(' ').filter(Boolean)].forEach((v, i) => {
-        const s = name.startsWith(v) ? 4 : toks.some(t => t.startsWith(v)) ? 3 : hay.includes(v) ? 1.6
-          : v.length >= 4 && toks.some(t => Math.min(...[-1, 0, 1].map(d => lev(t.slice(0, v.length + d), v))) <= (v.length >= 7 ? 2 : 1)) ? 1 : 0;
-        best = Math.max(best, s * (i ? 0.7 : 1));
+        // Inside a word only for 4 letters or more ("dal" must not find "mandal"); a typo only for the word you typed
+        // (never an alias), from 5 letters, with the first letter right.
+        const s = name.startsWith(v) ? 4 : toks.some(t => t.startsWith(v)) ? 3 : v.length >= 4 && hay.includes(v) ? 1.6 : 0;
+        const f = !s && !i && v.length >= 5 && toks.some(t => t[0] === v[0] && Math.min(...[-1, 0, 1].map(d => lev(t.slice(0, v.length + d), v))) <= (v.length >= 8 ? 2 : 1)) ? 1 : 0;
+        const x = (s || f) * (i ? 0.7 : 1);
+        if (x > best) { best = x; fz = !s; }
       });
       if (!best) { score = 0; break; }
-      score += best;
+      score += best; fuzzy ||= fz;
     }
-    if (score) out.push([score + Math.min(1.5, Math.log1p(often(f.id)) / 3) - name.length / 300, f]);
+    if (score) out.push([score + Math.min(1.5, Math.log1p(often(f.id)) / 3) - name.length / 300, f, fuzzy]);
   }
-  return out.sort((a, b) => b[0] - a[0]).slice(0, 60).map(x => x[1]);
+  // Near-spellings are offered only when the exact words find little: they are for typos, not for widening a search.
+  const exact = out.filter(x => !x[2]);
+  return (exact.length >= 5 ? exact : out).sort((a, b) => b[0] - a[0]).slice(0, 60).map(x => x[1]);
 }
 // Every different food logged in the last three weeks, newest first, with its numbers as you last logged it, so an
 // edited entry or a quick add comes back exactly as it was.
@@ -186,7 +191,7 @@ function addRows(meal) {
   const q = query.trim(), list = S.food[day] || [];
   const row = (f, mine) => {
     const e = list.find(x => x.m === meal && x.id === f.id);
-    return `<li class="${e ? 'on' : ''}" data-flash="${esc(meal + f.id)}" data-press="food" data-id="${esc(f.id)}" data-m="${meal}"><div class="grow" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="1"><span class="nm">${esc(f.n)}</span><span class="sub">${esc(unitText(f))} · ${r1(f.p)} g protein${srcTag(f)}</span></div>
+    return `<li class="${e ? 'on' : ''}" data-flash="${esc(meal + f.id)}" data-press="food" data-id="${esc(f.id)}" data-m="${meal}"><div class="grow" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="1"><span class="nm">${esc(f.n)}</span><span class="sub">${esc(unitText(f))} · ${r1(f.p)} g protein${srcTag(f)}</span>${f.per100 ? packGrade(f) : ''}</div>
       <div class="fk" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="1"><b>${fmt(f.k)}</b><i>kcal</i></div>
       ${e ? `<button class="step" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="-0.5" aria-label="Less">−</button><b class="qty num">${qtxt(e.q)}</b><button class="step" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="0.5" aria-label="More">+</button>`
         : `${mine ? `<button class="x" data-act="cedit" data-id="${esc(f.id)}" aria-label="Change ${esc(f.n)}">✎</button>` : ''}<span class="add" data-act="q" data-m="${meal}" data-id="${esc(f.id)}" data-d="1" aria-hidden="true">+</span>`}</li>`;
