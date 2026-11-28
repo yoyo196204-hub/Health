@@ -32,6 +32,7 @@ function vMe() {
       ${navrow('#set-train', 'Training', `${esc(P.short)} · ${p.equip === 'home' ? 'home' : 'gym'}${p.shoulder ? ' · shoulder care' : ''}${ogPlanStale() ? ' · plan changed: send it to openGym' : ''}`, ICON.lift)}
       ${navrow('#set-profile', 'Profile', `${p.sex === 'm' ? 'Male' : 'Female'} · ${p.h} cm · started at ${p.w0} kg`, ICON.person)}
       ${navrow('#set-sources', 'Data sources', (NATIVE ? (SYNC.status?.granted?.length ? `Health Connect · synced ${S.meta.sync ? ago(S.meta.sync) : 'not yet'}` : 'Health Connect not connected') : 'Watch files, H9') + (OGF.folder || S.meta.og ? ' · openGym' : ''), ICON.link)}
+      ${navrow('#watch', 'Watch history', 'Every figure by week, month, year', `<svg viewBox="0 0 24 24">${IC.watch}</svg>`)}
       ${navrow('#set-records', 'All your data', 'See, change or delete any record', ICON.list)}
       ${navrow('#set-checks', 'Data checks', checkLine(), ICON.check)}
       ${navrow('#set-data', 'Backup and data', bk, ICON.box)}

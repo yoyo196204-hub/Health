@@ -29,7 +29,7 @@ function offLoad() {
     }
     self.OFFDB = '';
     OFF = { map, rows };
-    if (overlay?.type === 'add' && query) refreshAdd();
+    if (overlay?.type === 'add' && (query || cat === 'kirana')) refreshAdd();
     return OFF;
   });
 }
@@ -49,16 +49,38 @@ function offFood(id) {
   if (x(c) != null && x(ft) != null) Object.assign(food, { c: r1(x(c) * f), ft: r1(x(ft) * f) });
   return food;
 }
-// Packs by name, for the search on Add food: every word must be in the name or the brand.
+// A pack at a portion you name, from its panel per 100 g: the Kirana shelf's plain names and usual amounts.
+function offPortion(code, n, g) {
+  const f = offFood('b' + code);
+  if (!f || f.per100?.k == null) return null;
+  const P = f.per100, x = g / 100;
+  const o = Object.assign({}, f, { n, g, u: `${g} ${f.unit}`, k: Math.round(P.k * x * 10) / 10, p: r1((P.p || 0) * x), fb: r1((P.fb || 0) * x) });
+  if (P.c != null && P.ft != null) Object.assign(o, { c: r1(P.c * x), ft: r1(P.ft * x) });
+  return o;
+}
+// A shelf pack by its id, as the shelf shows it, so what is tapped is what is logged.
+const KIRANA_IDX = new Map(KIRANA.flatMap(([, items]) => items.map(([c, n, g]) => [c, [n, g]])));
+function kiranaFood(id) { const x = /^b\d{8,14}$/.test(id || '') && KIRANA_IDX.get(id.slice(1)); return x ? offPortion(id.slice(1), ...x) : null; }
+// Packs by name, for the search on Add food: every word (or a word it stands for in FOOD_ALIAS: "wafers" finds chips)
+// in the name or the brand. Ranked, not first-found: a name that starts with the first word, then an Indian barcode
+// (890…), then a shorter name, so "good day" brings Britannia's Good Day before a long import with the words inside.
 function offSearch(q, n = 12) {
   if (!OFF) return [];
   const words = fnorm(q).split(' ').filter(w => w.length > 1);
   if (!words.length || words.join('').length < 3) return [];
-  const out = [];
+  const alts = words.map(w => [w, ...String(FOOD_ALIAS[w] || '').split(' ').filter(a => a.length > 1)]);
+  const hits = [];
   for (const [hay, code] of OFF.rows) {
-    if (words.every(w => hay.includes(w))) { out.push(offFood('b' + code)); if (out.length >= n) break; }
+    if (alts.every(a => a.some(w => hay.includes(w)))) hits.push([(hay.startsWith(words[0]) ? 0 : 2) + (code.startsWith('890') ? 0 : 1) + hay.length / 200 + (alts.every((a, i) => hay.includes(words[i])) ? 0 : 0.5), code]);
+    if (hits.length > 4000) break;
   }
-  return out.filter(Boolean);
+  // The same pack entered many times over (each size, each scan) shows once: its best-ranked entry.
+  const seen = new Set(), out = [];
+  for (const [, code] of hits.sort((a, b) => a[0] - b[0])) {
+    const f = offFood('b' + code), key = f && fnorm(f.n);
+    if (f && !seen.has(key)) { seen.add(key); out.push(f); if (out.length >= n) break; }
+  }
+  return out;
 }
 // The check digit of an EAN or UPC: a misread digit almost never passes it.
 function eanOK(code) {

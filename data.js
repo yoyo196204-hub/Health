@@ -10,9 +10,9 @@ const MEALS = [['breakfast', 'Breakfast'], ['lunch', 'Lunch'], ['snack', 'Snacks
 // The order is the order of the chips: what you log most, then home food, then out, then packs and raw weights.
 const CATS = [['usual', 'Usual'], ['recent', 'Recent'], ['thali', 'Plates'], ['quick', 'Quick add'], ['mine', 'Mine'],
   ['roti', 'Poli & bhaat'], ['dal', 'Dal & usal'], ['bhaji', 'Bhaji & sides'], ['protein', 'Protein'], ['nashta', 'Nashta'], ['nonveg', 'Egg & non-veg'],
-  ['street', 'Pune street'], ['out', 'Pizza, Chinese & out'], ['bakery', 'Bakery & Irani'], ['snack', 'out'], ['kerala', 'South Indian'],
+  ['street', 'Pune street'], ['out', 'Pizza, Chinese & out'], ['bakery', 'Bakery & Irani'], ['snack', 'Namkeen & snacks'], ['kerala', 'South Indian'],
   ['upvas', 'Upvas'], ['sweet', 'God'], ['festival', 'Faral & sana'], ['drink', 'Drinks'], ['fruit', 'Fruit'],
-  ['amul', 'Amul'], ['powder', 'Protein products'], ['raw', 'By weight']];
+  ['kirana', 'Kirana packs'], ['amul', 'Amul'], ['powder', 'Protein products'], ['staples', 'Dhanya, dal & tel'], ['market', 'Bhaji market'], ['raw', 'By weight']];
 
 // [id, name, household unit, kcal, protein, available carbs (fibre not included), fat, fibre, category]
 // Raw ingredients follow IFCT 2017 (ICMR-NIN). Cooked dishes are estimates from
@@ -466,6 +466,79 @@ const PANELS = [
   ['egg_raw', 'Egg, whole', '1 large (50 g)', 50, 'raw', 'usda', 'USDA SR Legacy', [143, 12.6, 0.72, 9.51, 0]],
   ['egg_white', 'Egg white', '1 large white (33 g)', 33, 'raw', 'usda', 'USDA SR Legacy', [52, 10.9, 0.73, 0.17, 0]],
   ['chicken_raw', 'Chicken breast, raw, skinless', '100 g', 100, 'raw', 'usda', 'USDA SR Legacy', [120, 22.5, 0, 2.62, 0]],
+  // What a Maharashtrian kirana and bhaji market sell, raw, from IFCT 2017 (ICMR-NIN) as test/build-ifct.py takes it.
+  ['if_pohe', 'Pohe, raw (rice flakes)', '1 katori (50 g)', 50, 'staples', 'ifct', 'IFCT 2017 A011', [null, 7.44, 76.75, 1.14, 3.46]],
+  ['if_ukda', 'Ukda tandul (parboiled rice), raw', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 A014', [null, 7.81, 77.16, 0.55, 3.74]],
+  ['if_brown', 'Rice, brown, raw', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 A013', [null, 9.16, 74.8, 1.24, 4.43]],
+  ['if_maida', 'Maida (refined flour)', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 A018', [null, 10.36, 74.27, 0.76, 2.76]],
+  ['if_gahu', 'Gahu (whole wheat grain)', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 A020', [null, 10.59, 64.72, 1.47, 11.23]],
+  ['if_dalia', 'Dalia (broken wheat), raw', '1 katori (40 g)', 40, 'staples', 'ifct', 'IFCT 2017 A021', [null, 10.84, 69.06, 1.45, 8.81]],
+  ['if_rava', 'Rava / suji (semolina), raw', '1 katori (40 g)', 40, 'staples', 'ifct', 'IFCT 2017 A022', [null, 11.38, 68.43, 0.74, 9.72]],
+  ['if_shevaya', 'Shevaya (vermicelli), raw', '1 katori (40 g)', 40, 'staples', 'ifct', 'IFCT 2017 A023', [null, 9.7, 70.39, 0.45, 9.28]],
+  ['if_rajgira', 'Rajgira (amaranth seed)', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 A001', [null, 14.59, 59.98, 5.74, 7.02]],
+  ['if_jav', 'Jav (barley)', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 A004', [null, 10.94, 61.29, 1.3, 15.64]],
+  ['if_makka', 'Makka (dry maize)', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 A006', [null, 8.8, 64.77, 3.77, 12.24]],
+  ['if_quinoa', 'Quinoa, raw', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 A009', [null, 13.11, 53.65, 5.5, 14.66]],
+  ['if_chanadal', 'Chana dal, raw', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 B001', [null, 21.55, 46.72, 5.31, 15.15]],
+  ['if_kalachana', 'Kala chana (whole), raw', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 B002', [null, 18.77, 39.56, 5.11, 25.22]],
+  ['if_udiddal', 'Udid dal, raw', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 B003', [null, 23.06, 51.0, 1.69, 11.93]],
+  ['if_udid', 'Udid, whole, raw', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 B004', [null, 21.97, 43.99, 1.58, 20.41]],
+  ['if_moongdal', 'Moong dal, raw', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 B010', [null, 23.88, 52.59, 1.35, 9.37]],
+  ['if_kulith', 'Kulith (horse gram), raw', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 B012', [null, 21.73, 57.24, 0.62, 7.88]],
+  ['if_masoordal', 'Masoor dal, raw', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 B013', [null, 24.35, 52.53, 0.75, 10.43]],
+  ['if_matki', 'Matki (moth bean), raw', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 B016', [null, 19.75, 52.09, 1.76, 15.12]],
+  ['if_chavli', 'Chavli (cowpea), raw', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 B006', [null, 21.25, 53.77, 1.14, 11.7]],
+  ['if_val', 'Val / pavta (field bean), raw', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 B009', [null, 19.84, 44.53, 0.94, 22.99]],
+  ['if_vatana', 'Vatana (dried peas), raw', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 B017', [null, 20.43, 48.93, 1.89, 17.01]],
+  ['if_soybean', 'Soybean, raw', '100 g', 100, 'staples', 'ifct', 'IFCT 2017 B025', [null, 37.8, 10.16, 19.42, 22.63]],
+  ['if_kaju', 'Kaju (cashew)', '10 pieces (15 g)', 15, 'staples', 'ifct', 'IFCT 2017 H005', [null, 18.78, 25.46, 45.2, 3.86]],
+  ['if_pista', 'Pista', '1 handful (15 g)', 15, 'staples', 'ifct', 'IFCT 2017 H018', [null, 23.35, 15.82, 42.49, 10.64]],
+  ['if_akrod', 'Akrod (walnut)', '4 halves (15 g)', 15, 'staples', 'ifct', 'IFCT 2017 H021', [null, 14.92, 10.14, 64.27, 5.39]],
+  ['if_khobra', 'Khobra (dry coconut)', '1 tbsp grated (10 g)', 10, 'staples', 'ifct', 'IFCT 2017 H006', [null, 7.27, 8.01, 63.26, 15.88]],
+  ['if_naral', 'Ola naral (fresh coconut)', '1/4 cup grated (25 g)', 25, 'staples', 'ifct', 'IFCT 2017 H007', [null, 3.84, 6.3, 41.38, 10.42]],
+  ['if_til', 'Til (white sesame)', '1 tbsp (10 g)', 10, 'staples', 'ifct', 'IFCT 2017 H011', [null, 21.7, 10.83, 43.05, 16.99]],
+  ['if_javas', 'Javas / alsi (flax seeds)', '1 tbsp (10 g)', 10, 'staples', 'ifct', 'IFCT 2017 H014', [null, 18.55, 10.99, 35.67, 26.17]],
+  ['if_sunflower', 'Sunflower seeds', '1 tbsp (10 g)', 10, 'staples', 'ifct', 'IFCT 2017 H020', [null, 23.53, 6.85, 51.85, 10.8]],
+  ['if_halim', 'Halim (garden cress seeds)', '1 tsp (5 g)', 5, 'staples', 'ifct', 'IFCT 2017 H008', [null, 23.36, 33.66, 23.74, 8.27]],
+  ['if_gul', 'Gul (jaggery)', '1 piece (10 g)', 10, 'staples', 'ifct', 'IFCT 2017 I001', [null, 1.85, 84.87, 0.16, 0.0]],
+  ['if_chinch', 'Chinch (tamarind pulp)', '1 tsp (10 g)', 10, 'staples', 'ifct', 'IFCT 2017 E064', [null, 2.92, 67.35, 0.15, 5.31]],
+  ['if_mhais', 'Mhashiche doodh (buffalo milk)', '1 glass (200 ml)', 200, 'staples', 'ifct', 'IFCT 2017 L001', [null, 3.68, 8.39, 6.58, 0.0]],
+  ['if_gay', 'Gayiche doodh (cow milk)', '1 glass (200 ml)', 200, 'staples', 'ifct', 'IFCT 2017 L002', [null, 3.26, 4.94, 4.48, 0.0]],
+  ['if_khava', 'Khava (khoa)', '30 g', 30, 'staples', 'ifct', 'IFCT 2017 L004', [null, 16.34, 16.53, 20.62, 0.0]],
+  ['if_shengtel', 'Shengdana tel (groundnut oil)', '1 tsp (5 g)', 5, 'staples', 'ifct', 'IFCT 2017 T005', [null, 0.0, 0.0, 100.0, 0.0]],
+  ['if_sunoil', 'Sunflower oil', '1 tsp (5 g)', 5, 'staples', 'ifct', 'IFCT 2017 T012', [null, 0.0, 0.0, 100.0, 0.0]],
+  ['if_ricebran', 'Rice bran oil', '1 tsp (5 g)', 5, 'staples', 'ifct', 'IFCT 2017 T008', [null, 0.0, 0.0, 100.0, 0.0]],
+  ['if_khobreltel', 'Khobrel tel (coconut oil)', '1 tsp (5 g)', 5, 'staples', 'ifct', 'IFCT 2017 T001', [null, 0.0, 0.0, 100.0, 0.0]],
+  ['if_tiltel', 'Tilache tel (sesame oil)', '1 tsp (5 g)', 5, 'staples', 'ifct', 'IFCT 2017 T004', [null, 0.0, 0.0, 100.0, 0.0]],
+  ['if_dalda', 'Vanaspati / Dalda', '1 tsp (5 g)', 5, 'staples', 'ifct', 'IFCT 2017 T014', [null, 0.0, 0.0, 100.0, 0.0]],
+  ['if_batata', 'Batata (potato), raw', '1 medium (150 g)', 150, 'market', 'ifct', 'IFCT 2017 F006', [null, 1.54, 14.89, 0.23, 1.71]],
+  ['if_kanda', 'Kanda (onion), raw', '1 medium (100 g)', 100, 'market', 'ifct', 'IFCT 2017 G017', [null, 1.5, 9.56, 0.24, 2.45]],
+  ['if_tomato', 'Tomato, raw', '1 medium (100 g)', 100, 'market', 'ifct', 'IFCT 2017 D075', [null, 0.76, 3.2, 0.25, 1.58]],
+  ['if_bhendi', 'Bhendi (okra), raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 D056', [null, 2.08, 3.62, 0.22, 4.08]],
+  ['if_vangi', 'Vangi (brinjal), raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 D031', [null, 1.48, 3.52, 0.32, 3.98]],
+  ['if_flower', 'Flower (cauliflower), raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 D036', [null, 2.15, 2.03, 0.44, 3.71]],
+  ['if_kobi', 'Kobi (cabbage), raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 C015', [null, 1.36, 3.25, 0.12, 2.76]],
+  ['if_methi', 'Methi (fenugreek leaves), raw', '1 judi (100 g)', 100, 'market', 'ifct', 'IFCT 2017 C020', [null, 3.68, 2.17, 0.83, 4.9]],
+  ['if_palak', 'Palak (spinach), raw', '1 judi (100 g)', 100, 'market', 'ifct', 'IFCT 2017 C033', [null, 2.14, 2.05, 0.64, 2.38]],
+  ['if_gavar', 'Gavar (cluster beans), raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 D039', [null, 3.55, 4.91, 0.37, 4.83]],
+  ['if_farasbi', 'Farasbi (French beans), raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 D049', [null, 2.49, 2.68, 0.26, 4.38]],
+  ['if_matar', 'Matar (fresh peas), raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 D061', [null, 7.25, 11.88, 0.13, 6.32]],
+  ['if_shevga', 'Shevgyachya shenga (drumstick), raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 D046', [null, 2.62, 3.76, 0.12, 6.83]],
+  ['if_dudhi', 'Dudhi (bottle gourd), raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 D007', [null, 0.53, 1.68, 0.13, 2.12]],
+  ['if_karle', 'Karle (bitter gourd), raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 D004', [null, 1.44, 2.82, 0.24, 3.78]],
+  ['if_bhopla', 'Lal bhopla (pumpkin), raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 D066', [null, 0.84, 4.0, 0.16, 2.56]],
+  ['if_gajar', 'Gajar (carrot), raw', '1 medium (80 g)', 80, 'market', 'ifct', 'IFCT 2017 F002', [null, 0.95, 5.55, 0.47, 4.18]],
+  ['if_beet', 'Beet, raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 F001', [null, 1.95, 6.18, 0.14, 3.31]],
+  ['if_shingada', 'Shingada (water chestnut)', '100 g', 100, 'market', 'ifct', 'IFCT 2017 F016', [null, 0.86, 21.46, 0.37, 3.02]],
+  ['if_mushroom', 'Mushroom (button), raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 J001', [null, 3.68, 1.98, 0.42, 3.11]],
+  ['if_chleg', 'Chicken leg, skinless, raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 N001', [null, 19.44, 0.0, 12.64, 0.0]],
+  ['if_mutton', 'Mutton (goat leg), raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 O003', [null, 22.07, 0.0, 7.94, 0.0]],
+  ['if_bangda', 'Bangda (mackerel), raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 P034', [null, 21.51, 0.0, 1.53, 0.0]],
+  ['if_paplet', 'Paplet (white pomfret), raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 P057', [null, 19.02, 0.0, 5.12, 0.0]],
+  ['if_bombil', 'Bombil (Bombay duck), raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 P007', [null, 13.53, 0.0, 1.03, 0.0]],
+  ['if_kolambi', 'Kolambi (prawns), raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 S008', [null, 19.24, 0.0, 0.52, 0.0]],
+  ['if_khekda', 'Khekda (crab), raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 Q001', [null, 10.23, 0.0, 1.41, 0.0]],
+  ['if_tisrya', 'Tisrya (clams), raw', '100 g', 100, 'market', 'ifct', 'IFCT 2017 R001', [null, 12.14, 0.0, 0.98, 0.0]],
 ];
 // Only what the maker states for one serving: [id, name, unit, grams, category, ref, kcal, protein].
 const STATED = [
@@ -477,8 +550,30 @@ const STATED = [
 function panelKcal(p, c, f, fb) { return (17 * p + 17 * c + 37 * f + 8 * fb) / 4.184; }
 const PANEL_FOODS = PANELS.map(([id, n, u, g, cat, src, ref, [k, p, c, f, fb]]) => {
   const x = g / 100, kc = k == null ? panelKcal(p, c, f, fb) : k;
-  return { id, n, u, k: Math.round(kc * x), p: r1(p * x), c: r1(c * x), ft: r1(f * x), fb: r1(fb * x), cat, g, src, ref, per: [r1(kc), p, c, f, fb] };
+  return { id, n, u, k: Math.round(r1(kc) * x), p: r1(p * x), c: r1(c * x), ft: r1(f * x), fb: r1(fb * x), cat, g, src, ref, per: [r1(kc), p, c, f, fb] };
 }).concat(STATED.map(([id, n, u, g, cat, ref, k, p]) => ({ id, n, u, k, p, c: null, ft: null, fb: 0, cat, g, src: 'brand', ref, per: null })));
+
+// The Kirana shelf: what a Pune kirana or D-Mart sells in a pack, by its Open Food Facts barcode (products.js), so
+// each is its own printed panel per 100 g, shown under a plain name at a usual portion in grams (the ruler changes it).
+// Grouped as the shop shelves them. A barcode that is no longer in products.js is skipped, never guessed.
+const KIRANA = [
+  ['Biscuits & bread', [['8901719100956', 'Parle-G', 25], ['8901063162143', 'Britannia Marie Gold', 25], ['8901063093287', 'Britannia Good Day cashew', 25], ['8901063136311', 'Britannia Bourbon', 33],
+    ['8901719102035', 'Parle Monaco', 29], ['8901719135248', 'Parle Krackjack', 25], ['8901719100826', 'Parle Hide & Seek', 25], ['8901233027555', 'Oreo', 25], ['8901725136215', 'Sunfeast Dark Fantasy Choco Fills', 25],
+    ['8901063142022', 'Britannia NutriChoice digestive', 30], ['8901063342910', 'Britannia brown bread', 50], ['8904043551586', 'Modern brown bread', 50]]],
+  ['Namkeen & chips', [['8904004400731', 'Haldiram’s aloo bhujia', 30], ['8904004403725', 'Haldiram’s moong dal', 30], ['8904004401721', 'Haldiram’s navratan', 30], ['8906010500535', 'Balaji wafers chaat chaska', 30],
+    ['8901491001021', 'Lay’s classic salted', 30], ['8901491001168', 'Kurkure masala munch', 30], ['8901725120375', 'Bingo Mad Angles', 30], ['8906090571241', 'Too Yumm multigrain chips', 30], ['8906074180001', 'Chitale bakarwadi', 25]]],
+  ['Noodles, oats & mixes', [['8901058851304', 'Maggi masala noodles', 70], ['8901725116736', 'Sunfeast Yippee magic masala', 60], ['8901014002566', 'Top Ramen masala', 70], ['8901088068734', 'Saffola masala oats', 38],
+    ['8901491702409', 'Quaker oats', 40], ['8901499008183', 'Kellogg’s corn flakes', 30], ['8901499008169', 'Kellogg’s Chocos', 30], ['8901499010483', 'Kellogg’s muesli', 40], ['8901042957074', 'MTR rava idli mix', 50],
+    ['8901155106321', 'Gits khatta dhokla mix', 50], ['8907734006112', 'Idli / dosa batter', 100]]],
+  ['Milk & dairy', [['8908000794054', 'Gokul cow milk', 200], ['8908000794023', 'Gokul full cream milk', 200], ['8906009501031', 'Chitale cow milk', 200], ['8906009501017', 'Chitale full cream milk', 200],
+    ['8901648026167', 'Mother Dairy dahi', 100], ['8908015845147', 'Gokul taak (buttermilk)', 200], ['8906041150136', 'Katraj cow ghee', 5], ['8901058100600', 'Milkmaid condensed milk', 20]]],
+  ['Drinks & health drinks', [['8902579100025', 'Frooti', 200], ['8901764175022', 'Maaza', 200], ['8901764042706', 'Thums Up', 250], ['8901764032912', 'Sprite', 250], ['8901233023724', 'Bournvita (powder)', 20],
+    ['8901030807176', 'Horlicks classic malt (powder)', 27], ['8901571000043', 'Boost (powder)', 20], ['8901542000058', 'Complan (powder)', 33], ['8901542001642', 'Glucon-D (powder)', 30], ['8901030084140', 'Bru coffee (powder)', 2],
+    ['8906019270002', 'Yakult', 65]]],
+  ['Spreads & sauces', [['8908010900056', 'Pintola peanut butter, unsweetened', 16], ['8901030831720', 'Kissan mixed fruit jam', 20], ['8901030532832', 'Kissan tomato ketchup', 15]]],
+  ['Chocolate & mithai', [['8901233025612', 'Cadbury Dairy Milk', 25], ['8901233036625', 'Cadbury 5 Star', 22], ['8901058868036', 'Nestlé KitKat (4 finger)', 37], ['8901058869002', 'Nestlé Munch', 20],
+    ['8904063251077', 'Haldiram’s soan papdi', 25], ['8904004405729', 'Haldiram’s rasgulla (1 with syrup)', 50], ['8906002730018', 'Chitale gulab jamun mix', 25]]],
+];
 
 // One tap logs the whole plate; adjust the pieces afterwards.
 const THALI = [
@@ -526,6 +621,12 @@ const FOOD_ALIAS = {
   juice: 'sarbat ras', sugarcane: 'usacha', shake: 'milkshake mastani', icecream: 'ice cream kulfi', pizza: 'margherita', chips: 'wafers',
   breakfast: 'nashta pohe upma', nashta: 'pohe upma', poha: 'pohe', pohe: 'poha', sheera: 'shira', shira: 'sheera', khichadi: 'khichdi',
   cucumber: 'kakdi', guava: 'peru', jowar: 'jwarichi', bajra: 'bajrichi', ragi: 'nachni', nachni: 'ragi', protein: 'whey soya paneer',
+  suji: 'rava', sooji: 'rava', semolina: 'rava', maida: 'refined', flour: 'atta maida besan', kulthi: 'kulith', horsegram: 'kulith', urad: 'udid', udad: 'udid',
+  dalda: 'vanaspati', vanaspati: 'dalda', tel: 'oil', gur: 'gul', imli: 'chinch tamarind', tamarind: 'chinch', cashew: 'kaju', kaju: 'cashew', walnut: 'akrod',
+  flax: 'javas alsi', alsi: 'javas', sesame: 'til', coconut: 'naral khobra', nariyal: 'naral', okra: 'bhendi', bhindi: 'bhendi', brinjal: 'vangi', baingan: 'vangi', eggplant: 'vangi',
+  cauliflower: 'flower', gobi: 'flower kobi', cabbage: 'kobi', patta: 'kobi', methi: 'fenugreek', spinach: 'palak', drumstick: 'shevga', lauki: 'dudhi', karela: 'karle',
+  pumpkin: 'bhopla', carrot: 'gajar', peas: 'matar vatana', mackerel: 'bangda', pomfret: 'paplet', crab: 'khekda', clams: 'tisrya', goat: 'mutton', khoa: 'khava', mawa: 'khava',
+  wafers: 'chips', namkeen: 'bhujia mixture chivda farsan', cookies: 'biscuit', cold: 'drink', soda: 'drink', noodle: 'noodles', instant: 'maggi noodles oats',
 };
 
 // The reasoning behind every number.

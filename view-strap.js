@@ -9,7 +9,7 @@
 // was recorded, and files to share.
 
 const STU = { part: 'live', run: null, fWho: 'all', fKind: 'all', panel: 'measures', markAt: 0, open: {} };
-const STU_PARTS = [['live', 'Live'], ['sessions', 'Sessions'], ['people', 'People']];
+const STU_PARTS = [['live', 'Live'], ['sessions', 'Sessions'], ['trends', 'Trends'], ['cal', 'Calibrate'], ['people', 'People']];
 const REST_KINDS = ['morning', 'spot', 'live', 'breathe', 'rf', 'ortho', 'raw'];
 // What each session is for, in a line, and where it runs.
 const STARTS = [
@@ -124,7 +124,7 @@ function stuPeople() {
 function vStrap(part) {
   if (part && STU_PARTS.some(p => p[0] === part)) STU.part = part;
   const back = `<button class="nav" data-act="close" aria-label="Back">${ic('back')}</button>`;
-  const body = STU.part === 'sessions' ? part2(stuSessions) : STU.part === 'people' ? part2(stuPeople) : `${part2(stuWearer)}${part2(stuLive)}`;
+  const body = STU.part === 'sessions' ? part2(stuSessions) : STU.part === 'people' ? part2(stuPeople) : STU.part === 'trends' ? part2(stuTrends) : STU.part === 'cal' ? part2(stuCal) : `${part2(calNudge)}${part2(stuWearer)}${part2(stuLive)}`;
   return `${masthead('Strap', HR.conn === 'on' ? `${esc(HR.name || 'Strap')} · ${HR.bpm ?? DASH} bpm` : 'Polar H9 · every session, beat by beat', { before: back, after: why('metrics', 'The measures') })}
     ${part2(stuDevice)}${seg('stupart', STU_PARTS, STU.part, 'subnav2')}<div class="stu stu-${STU.part}">${body}</div>`;
 }
@@ -505,6 +505,8 @@ function stuAct(a, el) {
   const v = el.dataset.v, r = overlay?.type === 'rec' ? recGet(overlay.key) : null;
   switch (a) {
     case 'stupart': STU.part = v; buzz('tick'); if (overlay?.type === 'strap') { history.replaceState(null, '', `#strap-${v}`); overlay.key = v; } renderView(); scrollTo(0, 0); break;
+    // The calibration session is a cardio session worn with the watch: the pair is made when the two meet.
+    case 'stucal': STU.part = 'live'; STU.run = 'workout'; HR.result = null; if (overlay?.type === 'strap') { history.replaceState(null, '', '#strap-live'); overlay.key = 'live'; } buzz('tick'); render(); scrollTo(0, 0); break;
     case 'stuwear': WEAR.who = v; buzz('tick'); render(); break;
     case 'sturun': STU.run = v || null; if (!v || !HR.result || (v === 'morning') !== (HR.result.type === 'morning')) HR.result = null; buzz('tick'); render(); scrollTo(0, 0); break;
     case 'stufwho': STU.fWho = v; buzz('tick'); renderView(); break;

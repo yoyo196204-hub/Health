@@ -131,7 +131,12 @@ function vRecovery() {
   const body = on === 'sleep' ? part(sleepSection) + part(nightSection)
     : on === 'cardio' ? part(cardioHeart) + part(devicesSection)
     : `${part(recoveryHero)}${sec('Morning check', strapBlock('morning') + strapMsg() + `<a class="navrow strapnav" href="#strap-sessions"><span class="ic" style="--c:var(--heart)">${ic('strap')}</span><span class="grow"><span class="nm">Every strap session</span><span class="sub">${plural(recList().length, 'recording')}, beat by beat, for you and anyone else</span></span><span class="chev">›</span></a>`, { why: ['hrv', 'Why mornings'] })}${part(hrvSection)}${part(rhrSection)}${part(illLine)}`;
-  return `${appbar('Heart', `Resting ${H.rest} · max ${H.max} bpm`, `${strapPill()}${NATIVE ? syncPill() : ''}`)}${nav}${body}`;
+  return `${appbar('Heart', `Resting ${H.rest} · max ${H.max} bpm`, `${strapPill()}${NATIVE ? syncPill() : ''}`)}${nav}${body}${watchRow()}`;
+}
+// The watch's own page, next to the strap's.
+function watchRow() {
+  const n = Object.keys(S.wx).length + Object.keys(S.steps).length ? Math.max(Object.keys(S.wx).length, Object.keys(S.steps).length) : 0;
+  return `<section class="card wvnav"><a class="navrow strapnav watchnav" href="#watch"><span class="ic" style="--c:var(--move)">${ic('watch')}</span><span class="grow"><span class="nm">Everything the watch recorded</span><span class="sub">${n ? `${plural(n, 'day')} · by week, month and year` : 'Every figure by week, month and year, once the watch syncs'}</span></span><span class="chev">›</span></a></section>`;
 }
 // The strap at the top of Heart: its state at a glance, and the way into its own page.
 function strapPill() {
