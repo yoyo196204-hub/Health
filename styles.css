@@ -1358,3 +1358,58 @@ body.lifting #view, body.lifting .scrim { transition: none !important; animation
 .scanman.big input { min-height: 58px; font-size: 22px; letter-spacing: .06em; }
 .scanman input { flex: 1; min-width: 0; }
 .scanman input { min-height: 46px; padding: 0 14px; border-radius: 14px; border: 1px solid transparent; background: var(--bg3); outline: none; font-variant-numeric: tabular-nums; } .scanman input:focus { border-color: var(--accent); }
+
+/* ---------- the watch's page (view-watch.js) ---------- */
+.wvseg { margin-top: 10px; }
+.wvsrc { margin: 2px 2px 0; }
+.wvcats button { gap: 7px; }
+.wvcats button svg { width: 17px; height: 17px; fill: none; stroke: var(--c); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.wvcats button.on svg { stroke: currentColor; }
+.wvcats button.none { opacity: .4; }
+.wvbody { animation: wvin .32s var(--ease) both; }
+@keyframes wvin { from { opacity: 0; transform: translateY(6px); } }
+.wvlist .list { margin: 4px -16px -16px; }
+.wvlist .list li { padding: 0; border: 0; display: block; }
+.list li > a.wvrow { display: flex; }
+.wvrow { display: flex; align-items: center; gap: 12px; padding: 13px 16px; text-decoration: none; color: inherit; border-top: 1px solid var(--line); min-height: 62px; transition: background var(--quick); }
+.wvlist li:first-child .wvrow { border-top: 0; }
+.wvrow:active { background: var(--bg3); }
+.wvrow .chev { color: var(--faint); }
+.wvspark { width: 64px; height: 28px; flex: none; overflow: visible; }
+.wvspark path { fill: none; stroke: var(--c); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; stroke-dasharray: 1; stroke-dashoffset: 1; animation: wvdraw .7s var(--ease) .08s forwards; }
+.wvval { display: flex; flex-direction: column; align-items: flex-end; min-width: 76px; text-align: right; }
+.wvval b { font: 700 19px/1.1 var(--sans); letter-spacing: -.02em; }
+.wvval i { font-style: normal; font-size: 11.5px; color: var(--soft); }
+.wvchg { font: 600 11.5px/1.3 var(--sans); color: var(--soft); white-space: nowrap; }
+.wvchg.good { color: var(--good); } .wvchg.bad { color: var(--bad); }
+.wvhero .wvread { min-height: 54px; }
+.wvread b { display: block; font: 700 34px/1.05 var(--sans); letter-spacing: -.03em; }
+.wvread b i { font: 600 15px var(--sans); font-style: normal; color: var(--soft); letter-spacing: 0; }
+.wvchart { display: block; width: 100%; height: auto; margin: 10px 0 6px; overflow: visible; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.wvchart text { font: 500 10px var(--sans); fill: var(--faint); font-variant-numeric: tabular-nums; }
+.wvchart .grid { stroke: var(--line); }
+.wvchart .b { fill: var(--c); opacity: .85; transform-box: fill-box; transform-origin: bottom; animation: wvgrow .55s var(--spring) both; animation-delay: var(--d); }
+.wvchart .ln { fill: none; stroke: var(--c); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; animation: wvdraw .9s var(--ease) forwards; }
+.wvchart circle { fill: var(--c); }
+.wvchart .avg { stroke: var(--ink2); stroke-dasharray: 3 4; opacity: .45; }
+.wvchart .cur { stroke: var(--ink); stroke-width: 1; transition: opacity .15s; }
+.wvchart .curdot { fill: var(--bg2); stroke: var(--c); stroke-width: 2.5; transition: opacity .15s; }
+.wvchart .hit { fill: transparent; cursor: crosshair; }
+@keyframes wvgrow { from { transform: scaleY(0); } }
+@keyframes wvdraw { to { stroke-dashoffset: 0; } }
+.wvwk { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; align-items: end; height: 118px; margin: 6px 0 4px; }
+.wvwk div { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; }
+.wvwk i { display: block; width: 100%; max-width: 30px; height: var(--h); min-height: 3px; border-radius: 6px 6px 3px 3px; background: color-mix(in srgb, var(--c) 70%, transparent); transform-origin: bottom; animation: wvgrow .5s var(--spring) both; }
+.wvwk b { font: 600 10.5px var(--sans); color: var(--ink2); }
+.wvwk span { font: 600 11px var(--sans); color: var(--soft); }
+.wvwk.dev div { position: relative; }
+.wvwk.dev div::before { content: ''; position: absolute; left: 0; right: 0; top: 40%; border-top: 1px dashed var(--line2); }
+.wvwk.dev i { position: absolute; height: calc(var(--h) * .36); min-height: 2px; border-radius: 4px; }
+.wvwk.dev i.pos { bottom: 60%; transform-origin: bottom; }
+.wvwk.dev i.neg { top: 40%; transform-origin: top; }
+.wvwk.dev b { position: absolute; bottom: 17px; } .wvwk.dev span { position: absolute; bottom: 0; }
+.wvev p { margin: 0; }
+html.still .wvbody, html.still .wvchart .b, html.still .wvwk i { animation: none; }
+html.still .wvchart .ln, html.still .wvspark path { animation: none; stroke-dashoffset: 0; }
+@media (prefers-reduced-motion: reduce) { .wvbody, .wvchart .b, .wvwk i { animation: none; } .wvchart .ln, .wvspark path { animation: none; stroke-dashoffset: 0; } }
+.wvnav { padding: 2px 16px; } .wvnav .navrow { margin: 0; border: 0; }

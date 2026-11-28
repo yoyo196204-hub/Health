@@ -32,8 +32,8 @@ const TABS = ['today', 'food', 'recovery', 'review'];
 const ALIAS = { heart: 'recovery', trend: 'review', insights: 'review', train: 'today', training: 'today', diary: 'food' };
 const POPS = { fedit: p => vFoodEdit(p.i), portion: p => vPortion(p), cedit: p => vCustomEdit(p), plate: p => vPlateSave(p), exinfo: p => vExInfo(p.id), cardioadd: () => vCardioAdd(), cardioinfo: p => vCardioInfo(p), sess: p => vSession(p), next: () => vNext(), train: () => vTrain(),
   hrvinfo: p => vHrvInfo(p), labinfo: p => vLabInfo(p), person: p => vPersonEdit(p), recmark: p => vRecMark(p), recedit: p => vRecEdit(p), dayx: p => vDayDetail(p), log: p => vLog(p), weigh: p => vWeigh(p) };
-const PAGES = ['add', 'why', 'set', 'lab', 'beats', 'scan', 'strap', 'rec', 'person'];
-const FULL = ['set', 'lab', 'beats', 'scan', 'strap', 'rec', 'person'];
+const PAGES = ['add', 'why', 'set', 'lab', 'beats', 'scan', 'strap', 'rec', 'person', 'watch'];
+const FULL = ['set', 'lab', 'beats', 'scan', 'strap', 'rec', 'person', 'watch'];
 const scrollMem = {};
 const BUILD = (document.querySelector('script[src^="app.js"]')?.getAttribute('src').split('v=')[1]) || 'dev';
 
@@ -103,7 +103,7 @@ function render() {
   const key = base ? `${base.type}-${base.key}` : tab + (tab === 'food' ? day : '');
   try {
     const banner = (loadNote ? `<p class="flag banner">${loadNote} <button class="link" data-act="dismissnote" data-dismiss>OK</button></p>` : '') + (saveFailed ? '<p class="flag banner">Storage is full or blocked: changes are not being kept. Export a backup from You › Backup and data.</p>' : '');
-    paint($('#view'), banner + (adding ? vAdd(base.key) : base?.type === 'lab' ? vLab(base.key) : base?.type === 'beats' ? vBeatsGone(base.key) : base?.type === 'strap' ? vStrap(base.key) : base?.type === 'rec' ? vRec(base.key) : base?.type === 'person' ? vPerson(base.key) : base?.type === 'scan' ? vScan(base.key) : setting ? vSet(base.key) : VIEWS[tab]()), key !== screenKey);
+    paint($('#view'), banner + (adding ? vAdd(base.key) : base?.type === 'lab' ? vLab(base.key) : base?.type === 'beats' ? vBeatsGone(base.key) : base?.type === 'strap' ? vStrap(base.key) : base?.type === 'rec' ? vRec(base.key) : base?.type === 'person' ? vPerson(base.key) : base?.type === 'watch' ? vWatch(base.key) : base?.type === 'scan' ? vScan(base.key) : setting ? vSet(base.key) : VIEWS[tab]()), key !== screenKey);
     paint($('#sheet'), pending ? (pending.type === 'halftone' ? vHalftone(pending) : pending.type === 'opengym' ? vOpenGym(pending) : pending.type === 'strap' ? vStrapImport(pending) : vImport(pending)) : pop && POPS[pop.kind] ? part(POPS[pop.kind], pop) : overlay?.type === 'why' ? vWhy(overlay.key) : '', !$('#sheet .sheet'));
     screenKey = key;
   } catch (err) {
@@ -320,7 +320,7 @@ document.addEventListener('click', e => {
   if (ACT[a]) return ACT[a](el);
   const ta = todayAct(a, el);
   if (ta === 'nav') { e.preventDefault(); return; }
-  if (ta || scanAct(a, el) || trainAct(a, el) || foodAct(a, el) || setAct(a, el) || ogAct(a, el) || labAct(a, el) || stuAct(a, el) || recAct(a, el) || bxAct(a, el) || checkAct(a, el)) return;
+  if (ta || scanAct(a, el) || trainAct(a, el) || foodAct(a, el) || setAct(a, el) || ogAct(a, el) || labAct(a, el) || stuAct(a, el) || recAct(a, el) || bxAct(a, el) || checkAct(a, el) || wvAct(a, el)) return;
   if (a.startsWith('hr')) return hrAct(a, el);
   if (a.startsWith('w')) return watchAct(a);
 });
