@@ -283,8 +283,8 @@ function sanitize(raw) {
     cleared: ids(raw.cleared),
     hrv: dated(raw.hrv, cleanHrv),
     lab: dated(raw.lab, a => { const x = list(a, 30, cleanLab); return x.length ? x : null; }),
-    // The watch's heart rate through each day, in 5-minute steps (288 a day, 0 where there was none); recent days only.
-    hrd: dated(raw.hrd, a => Array.isArray(a) && a.length === 288 ? a.map(x => Math.round(num(x, 25, 230) || 0)) : null, 45),
+    // The watch's heart rate through each day, in 5-minute steps (288 a day, 0 where there was none); kept for a year, for the Watch page’s day curves and HR baselines.
+    hrd: dated(raw.hrd, a => Array.isArray(a) && a.length === 288 ? a.map(x => Math.round(num(x, 25, 230) || 0)) : null, 366),
     // Data you deleted that came from the watch or a scale: a later sync must not bring it back.
     gone: gone(raw.gone),
     cardio: dated(raw.cardio, a => { const x = list(a, 10, cleanCardio); return x.length ? x : null; }),
@@ -299,7 +299,7 @@ function sanitize(raw) {
       sync: num(meta.sync, 1e12, 1e13), fresh: cleanFresh(meta.fresh), backup: DATE.test(meta.backup) ? meta.backup : null,
       h9: h9 && str(h9.id, 64) ? { id: str(h9.id, 64), name: str(h9.name, 40) } : null,
       tgt: tg && num(tg.k, 800, 6000) != null && DATE.test(tg.at) ? { k: +tg.k, p: num(tg.p, 20, 400) || 0, at: tg.at, sig: str(tg.sig, 80) } : null,
-      welcomed: meta.welcomed === true, seq: num(meta.seq, 0, 1e12) || 0, ver: str(meta.ver, 12) || null, imported: str(meta.imported, 40) || null,
+      welcomed: meta.welcomed === true, seq: num(meta.seq, 0, 1e12) || 0, ver: str(meta.ver, 12) || null, wk: DATE.test(meta.wk) ? meta.wk : null, imported: str(meta.imported, 40) || null,
       // Reading back through Health Connect's history: the oldest day read so far, empty chunks in a row, and whether it is done.
       back: obj(meta.back) && DATE.test(meta.back.to) ? { to: meta.back.to, empty: num(meta.back.empty, 0, 99) || 0, done: meta.back.done === true, at: num(meta.back.at, 1e12, 1e13) } : null,
       og: obj(meta.og) && num(meta.og.at, 1e12, 1e13) != null ? { at: +meta.og.at, file: str(meta.og.file, 60), seen: str(meta.og.seen, 90) } : null,

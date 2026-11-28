@@ -320,7 +320,7 @@ document.addEventListener('click', e => {
   if (ACT[a]) return ACT[a](el);
   const ta = todayAct(a, el);
   if (ta === 'nav') { e.preventDefault(); return; }
-  if (ta || scanAct(a, el) || trainAct(a, el) || foodAct(a, el) || setAct(a, el) || ogAct(a, el) || labAct(a, el) || stuAct(a, el) || recAct(a, el) || bxAct(a, el) || checkAct(a, el) || wvAct(a, el)) return;
+  if (ta || scanAct(a, el) || trainAct(a, el) || foodAct(a, el) || setAct(a, el) || ogAct(a, el) || labAct(a, el) || stuAct(a, el) || recAct(a, el) || bxAct(a, el) || checkAct(a, el) || wvAct(a, el) || weekAct(a, el)) return;
   if (a.startsWith('hr')) return hrAct(a, el);
   if (a.startsWith('w')) return watchAct(a);
 });

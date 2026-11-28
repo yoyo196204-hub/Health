@@ -10,7 +10,7 @@
 //    Theil–Sen direction and its 95% interval. Recovery is compared only between sessions stopped at a similar heart
 //    rate (within 10 bpm of your usual), since it depends on how hard you were going (Buchheit 2009).
 // Calibrate keeps the watch honest: Bland–Altman agreement (bias and 95% limits) for resting mornings and shared
-// workouts, a check every 6 weeks, and a drift test after each new pair (the latest three against the line so far),
+// workouts, a check every 6 weeks, and a drift test after each new pair (the latest three against the line so far: their mean outside 1.96·σ/√3 and two of the three each outside the 95% limits, on the same side),
 // because watch firmware, strap fit and season change the wrist's error (Bent 2020).
 
 const CAL_DUE = 42;
@@ -88,10 +88,16 @@ function calState() {
     // The latest three against the correction made from the pairs before them.
     const old = P.ex.slice(0, -3), L = exLine(old.map(x => [x.w, x.s])), E = agreement(old.map(x => [x.w, x.s]));
     const fix = w => L.on ? L.m * w + L.b : w - E.bias, res = P.ex.slice(-3).map(x => x.s - fix(x.w)), off = mean(res);
-    const lim = L.on ? 1.96 * L.se : 1.96 * (E.sd || 0);
-    if (lim > 0) drift = { off, lim, out: Math.abs(off) > lim / Math.sqrt(3) * 1.5 };
+    // Drift needs both, so one odd session (a loose band, a cold wrist) never flags it:
+    //  1. the three together sit outside what chance allows for a mean of three: |mean| > 1.96·σ/√3;
+    //  2. at least two of the three are each outside the 95% limits, on the same side.
+    const sd = L.on ? L.se : (E.sd || 0), lim = 1.96 * sd;
+    if (sd > 0) {
+      const side = Math.sign(off), beyond = res.filter(r => Math.abs(r) > lim && Math.sign(r) === side).length;
+      drift = { off, lim, meanLim: 1.96 * sd / Math.sqrt(3), beyond, out: Math.abs(off) > 1.96 * sd / Math.sqrt(3) && beyond >= 2 };
+    }
   }
-  const due = !P.ex.length ? 'never' : age > CAL_DUE ? 'due' : drift?.out ? 'drift' : 'ok';
+  const due = !P.ex.length ? 'never' : drift?.out ? 'drift' : age > CAL_DUE ? 'due' : 'ok';
   return { C, P, lastEx, lastRest, age, drift, due };
 }
 // Bland–Altman: the difference (watch − strap) against the mean of the two, with the bias and its 95% limits.
@@ -116,8 +122,8 @@ function baPlot(P, C) {
 function stuCal() {
   const K = calState(), { C, P } = K;
   const status = ({ never: () => ['Not calibrated', 'No workout worn with both yet. Until then, watch workout heart rate is used as it reads.', 'bad'],
-    due: () => ['Check again', `The last shared workout was ${plural(K.age, 'day')} ago. Wrist error shifts with firmware, fit and season: one paired session every 6 weeks keeps the correction true.`, 'mid'],
-    drift: () => ['The watch has moved', `The last three shared workouts sit ${sign(K.drift?.off ?? 0, 1)} bpm off the correction, more than its error allows. Two or three more paired sessions will re-fit it.`, 'bad'],
+    due: () => ['Check overdue', `Last checked ${plural(K.age, 'day')} ago; the rule is every ${CAL_DUE / 7} weeks, because wrist error shifts with firmware, band fit and season. One paired cardio session.`, 'mid'],
+    drift: () => ['The watch has drifted', `The last three shared workouts average ${sign(K.drift.off, 1)} bpm off the correction (chance allows ±${r1(K.drift.meanLim)} for three), and ${K.drift.beyond} of them are each outside its ±${Math.round(K.drift.lim)} bpm limits. Two or three more paired sessions re-fit it.`, 'bad'],
     ok: () => ['Calibrated', `Last checked ${dateLabel(K.lastEx, { day: 'numeric', month: 'long' })}; due again around ${dateLabel(shift(K.lastEx, CAL_DUE), { day: 'numeric', month: 'long' })}.`, 'good'] })[K.due]();
   const row = (label, A, need) => `<tr><td>${label}</td><td>${A.n}</td><td>${A.bias == null ? `${need - A.n} more` : `${sign(A.bias, 1)} bpm`}</td><td>${A.lo == null ? DASH : `${sign(A.lo, 0)} to ${sign(A.hi, 0)}`}</td></tr>`;
   const steps = [['5 min', 'Stand or sit still'], ['10 min', 'Easy: you could sing'], ['10 min', 'Moderate: you can talk in sentences'], ['5 min', 'Hard: a few words at a time'], ['3 min', 'Stand still to recover']];

@@ -102,9 +102,9 @@ function patternsCard() {
     ${P.protein ? para(`Protein reached ${T.perMeal} g at <b>${P.protein.hit} of ${P.protein.tot}</b> main meals in two weeks${P.pAvg != null ? `; ${Math.round(P.pAvg)} g a day on average against ${T.protein}` : ''}.`) : ''}</section>`;
 }
 function vReview() {
-  const parts = [['energy', 'Energy'], ['body', 'Body'], ['long', 'Long game'], ['links', 'Links']];
+  const parts = [['energy', 'Energy'], ['week', 'Week'], ['body', 'Body'], ['long', 'Long game'], ['links', 'Links']];
   const nav = subnav('review', parts), on = SUB.review;
-  const body = on === 'body' ? part(bodyCard) : on === 'long' ? part(markersCard) : on === 'links' ? part(linksCard) : part(burnCard) + part(patternsCard);
+  const body = on === 'week' ? part(weekPart) : on === 'body' ? part(bodyCard) : on === 'long' ? part(markersCard) : on === 'links' ? part(linksCard) : part(burnCard) + part(patternsCard);
   return `${appbar('Insights', 'What your data says', `<button class="mini" data-act="shareweek" aria-label="Share this week">Share</button>`)}
     ${part(checkBanner)}${nav}${body}`;
 }
