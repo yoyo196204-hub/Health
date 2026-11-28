@@ -17,14 +17,56 @@ const HAPTIC_RANK = { press: 0, hold: 0, detent: 1, tick: 1, swipe: 2, inhale: 2
 let lastBuzz = { t: 0, r: -1 };
 function buzz(kind) {
   const mode = S?.settings?.haptics || 'full';
-  if (mode === 'off' || (mode === 'subtle' && (kind === 'tick' || kind === 'press' || kind === 'detent'))) return;
   const now = performance.now(), r = HAPTIC_RANK[kind] ?? 1;
   if (now - lastBuzz.t < 90 && r <= lastBuzz.r) return;
   // The press already answered this touch: the tick of the choice it makes would be a second buzz for one tap.
   if (kind === 'tick' && lastBuzz.r === 0 && now - lastBuzz.t < 320) return;
   lastBuzz = { t: now, r };
+  sfx(kind);
+  if (mode === 'off' || (mode === 'subtle' && (kind === 'tick' || kind === 'press' || kind === 'detent'))) return;
   if (NATIVE && nat('haptic', kind) === true) return;
   try { navigator.vibrate?.(HAPTIC[kind] || 8); } catch (e) { /* no vibration here */ }
+}
+// ---------- sounds ----------
+// Short tones made on the spot (no sound files), soft enough to sit under the haptic rather than over it: a two-note
+// rise for saved, a three-note chord for a finished session, a falling pair for a refusal, a low thump for a removal.
+// The strap has its own: a rising fifth when it connects, the same falling when it drops, a single bell when a
+// measurement starts, and on the breathing pacer a low note to breathe in and a lower one to breathe out, so the
+// pacer can be followed with the eyes closed.
+// Key moments (the default) plays the saves, finishes, refusals and strap cues; Every touch adds a faint tick.
+// Inside the app nothing plays unless the phone is on ring: vibrate and silent mean silent.
+const SFX = {
+  tick: [[1760, 0, .025, .018, 'sine']],
+  ok: [[880, 0, .14, .05], [1318.5, .06, .18, .045]],
+  done: [[1046.5, 0, .5, .045], [1318.5, .07, .5, .04], [1568, .14, .7, .04]],
+  warn: [[466, 0, .16, .05, 'triangle'], [370, .11, .22, .05, 'triangle']],
+  heavy: [[180, 0, .22, .07, 'sine', 90]],
+  swipe: [[1174.7, 0, .09, .025]],
+  connect: [[659.3, 0, .22, .045], [987.8, .09, .35, .045]],
+  lost: [[987.8, 0, .2, .045], [659.3, .1, .35, .045]],
+  start: [[1568, 0, .9, .035], [3136, 0, .5, .008]],
+  inhale: [[392, 0, 1.1, .03, 'sine', 523.3]], exhale: [[392, 0, 1.3, .028, 'sine', 293.7]],
+};
+const SFX_KEY = new Set(['ok', 'done', 'warn', 'heavy', 'connect', 'lost', 'start', 'inhale', 'exhale']);
+let actx = null, ringAt = 0, ringOk = true;
+function sfx(kind) {
+  const mode = S?.settings?.sound || 'key', notes = SFX[kind];
+  if (!notes || mode === 'off' || (mode === 'key' && !SFX_KEY.has(kind))) return;
+  if (NATIVE) { const now = Date.now(); if (now - ringAt > 3000) { ringAt = now; ringOk = nat('ringer') !== 'silent' && nat('ringer') !== 'vibrate'; } if (!ringOk) return; }
+  try {
+    actx ||= new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    const t0 = actx.currentTime + .005, out = actx.createGain();
+    out.gain.value = 1; out.connect(actx.destination);
+    for (const [f, at, len, vol, type = 'sine', to] of notes) {
+      const o = actx.createOscillator(), g = actx.createGain(), t = t0 + at;
+      o.type = type; o.frequency.setValueAtTime(f, t);
+      if (to) o.frequency.exponentialRampToValueAtTime(to, t + len * .8);
+      // A quick rise and an exponential fall: a struck tone, not a beep.
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .008); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+      o.connect(g); g.connect(out); o.start(t); o.stop(t + len + .02);
+    }
+  } catch (e) { /* no audio here */ }
 }
 // A light press under the finger the moment it lands on anything that navigates or acts, before the click.
 document.addEventListener('pointerdown', e => {
@@ -96,15 +138,19 @@ addEventListener('keydown', e => { if (e.key === 'Escape') { if (pop) closePop()
   let st = null;
   const NOGO = 'input, textarea, select, [data-fling], .callout, .banner, .chips, .seg.scroll, .cards, .todo, .wave, .trace, .orb, .rfbars, .bx, .scrub, .sheet, #tabs, #fab';
   const pageOpen = () => overlay && ['add', 'set', 'lab', 'beats'].includes(overlay.type);
+  // Android 15's back gesture (OxygenOS included) takes about 24 dp in from either edge, wider at its higher
+  // sensitivities: nothing of the app's starts there, rows included, so a back swipe never also deletes a row.
+  const EDGE = 28;
   document.addEventListener('touchstart', e => {
     st = null;
     if (e.touches.length !== 1) return;
     const t = e.touches[0], x = t.clientX, w = innerWidth;
+    if (x < EDGE || x > w - EDGE) return;
     const row = e.target.closest('[data-swipe]'), food = e.target.closest('.foods li[data-press]');
     if (e.target.closest('#toast')) return;   // the toast is flung in motion.js
     if (row && !e.target.closest('input, select, textarea')) { st = { kind: 'row', el: row, x0: x, y0: t.clientY, t0: performance.now() }; return; }
-    if (food && x > 22 && !e.target.closest('button')) { st = { kind: 'amount', el: food, x0: x, y0: t.clientY, t0: performance.now() }; return; }
-    if (x < 22 || x > w - 22 || pop || document.body.classList.contains('sheet-open') || e.target.closest(NOGO)) return;
+    if (food && !e.target.closest('button')) { st = { kind: 'amount', el: food, x0: x, y0: t.clientY, t0: performance.now() }; return; }
+    if (pop || document.body.classList.contains('sheet-open') || e.target.closest(NOGO)) return;
     if (HR.mode && !overlay) return;   // a live recording is never swiped away from
     st = { kind: pageOpen() ? 'back' : overlay ? null : tab === 'food' ? 'day' : TABS.includes(tab) ? 'tab' : tab === 'me' ? 'back' : null, x0: x, y0: t.clientY, t0: performance.now() };
     if (!st.kind) st = null;

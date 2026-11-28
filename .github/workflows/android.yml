@@ -27,6 +27,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the release notes are the commits since the last published release
 
       - uses: actions/setup-java@v4
         with:
@@ -45,6 +47,21 @@ jobs:
         run: |
           npm install --silent --no-audit --no-fund --prefix "$RUNNER_TEMP/pw" playwright-core
           CHROME="$(command -v google-chrome || command -v chromium-browser || command -v chromium)" NODE_PATH="$RUNNER_TEMP/pw/node_modules" node test/browser.js
+
+      # The app carries its own number, build date and what changed since the last release, shown under You › Updates
+      # and once after each update. Merge commits and the co-author lines are left out.
+      - name: Release notes into the app
+        run: |
+          last="$(git tag -l 'v3.*' --sort=-v:refname | head -1)"
+          range="${last:+$last..}HEAD"
+          git log --no-merges --format='%s' $range | head -40 > notes.txt
+          node -e '
+            const fs = require("fs"), n = +process.env.GITHUB_RUN_NUMBER;
+            const notes = fs.readFileSync("notes.txt", "utf8").split("\n").map(s => s.trim()).filter(s => s && !/^(Merge|Co-Authored|Claude-Session)/.test(s));
+            const R = { name: "3." + n, code: 100 + n, at: new Date().toISOString().slice(0, 10), notes, sha: process.env.GITHUB_SHA.slice(0, 7) };
+            fs.writeFileSync("release.js", "\x27use strict\x27;\nconst RELEASE = " + JSON.stringify(R) + ";\n(self.LOADED ||= []).push(\x27release.js\x27);\n");
+          '
+          cat release.js
 
       - name: Build
         env:

@@ -67,6 +67,7 @@ function amAuto() {
 function strapDisconnect() { if (NATIVE) nat('bleDisconnect'); else HR.gatt?.disconnect?.(); }
 function strapForget() { S.meta.h9 = null; save(); if (NATIVE) nat('bleForget'); strapDisconnect(); }
 function strapLost(msg) {
+  if (HR.conn === 'on') sfx('lost');
   if (HR.mode === 'workout') hrStop();
   else if (HR.mode && HR.mode !== 'breathe') { const m = HR.mode, kept = recKeepFailed(m); hrEnd(); HR.result = { type: m === 'morning' ? 'morning' : m, ok: false, why: `The strap disconnected during the recording, so no result was saved.${kept}` }; msg = ''; }
   Object.assign(HR, { conn: 'idle', bpm: null, ibpm: null, contact: null, gatt: null, live: null });
@@ -79,7 +80,7 @@ NEV.ble = e => {
   if (!e) return;
   if (e.battery != null) HR.battery = e.battery;
   if (e.state === 'connected') {
-    if (HR.conn !== 'on') { buzz('ok'); HR.amTry = Date.now(); }
+    if (HR.conn !== 'on') { buzz('ok'); sfx('connect'); HR.amTry = Date.now(); }
     Object.assign(HR, { conn: 'on', name: e.name || 'Strap' });
     if (e.id && S.meta.h9?.id !== e.id) { S.meta.h9 = { id: e.id, name: e.name || 'Strap' }; save(); }
   } else if (e.state === 'connecting' || e.state === 'scanning') HR.conn = 'connecting';
@@ -243,7 +244,7 @@ function keepAwake(on) {
   else { HR.lock?.release?.(); HR.lock = null; }
 }
 function hrStart(mode) {
-  Object.assign(HR, { mode, t0: Date.now(), last: Date.now(), z: [0, 0, 0, 0], sum: 0, n: 0, max: 0, tr: [], bin: [], a1: [], a1At: 0, msg: '', result: null });
+  Object.assign(HR, { mode, t0: Date.now(), last: Date.now(), z: [0, 0, 0, 0], sum: 0, n: 0, max: 0, tr: [], bin: [], a1: [], a1At: 0, msg: '', result: null, started: 0 });
   clearInterval(HR.tick);
   HR.tick = setInterval(hrTick, 1000);
   keepAwake(true);
@@ -256,7 +257,7 @@ function hrTick() {
   const silent = now - HR.last > 15000, off = HR.offSkin && now - HR.offSkin > 12000;
   if (HR.mode === 'morning') {
     if (silent || off) { const kept = recKeepFailed('morning'); hrEnd(); HR.result = { type: 'morning', ok: false, why: (off ? 'The strap lost skin contact for over 12 seconds. Wet the electrodes, tighten the strap and start again.' : 'Lost contact with the strap. Wet the electrodes and start again.') + kept }; buzz('warn'); return render(); }
-    if (Math.floor(el) === SETTLE) buzz('tick');
+    if (Math.floor(el) === SETTLE && !HR.started) { HR.started = 1; buzz('tick'); sfx('start'); }
     if (el >= SETTLE + S.settings.hrvDur) return hrMorningDone();
   } else if (HR.mode === 'workout') {
     HR.bin.push(now - HR.last < 5000 && !off ? HR.bpm : 0);
@@ -277,7 +278,7 @@ function hrTick() {
   if (HR.mode) recDraft();
   hrPaint();
 }
-function hrEnd() { HR.mode = null; clearInterval(HR.tick); HR.tick = null; keepAwake(false); }
+function hrEnd() { HR.started = 0; HR.mode = null; clearInterval(HR.tick); HR.tick = null; keepAwake(false); }
 
 // ---------- the recording behind every session ----------
 // Every session, of every kind, is kept whole in the recording store (rec.js): the packets from its start, each beat

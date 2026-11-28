@@ -1444,3 +1444,6 @@ html.still .baplot circle, html.still .calsteps li { animation: none; }
 .list .row .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 button.sm { min-height: 36px; padding: 0 12px; font-size: 13px; }
 .setpage section[id] { scroll-margin-top: 72px; }
+.list.notes li { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 0; }
+.list.notes .sub { margin: 0; }
+.callout.battery .rowb { margin: 8px 0; }

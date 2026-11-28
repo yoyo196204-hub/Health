@@ -124,7 +124,7 @@ function stuPeople() {
 function vStrap(part) {
   if (part && STU_PARTS.some(p => p[0] === part)) STU.part = part;
   const back = `<button class="nav" data-act="close" aria-label="Back">${ic('back')}</button>`;
-  const body = STU.part === 'sessions' ? part2(stuSessions) : STU.part === 'people' ? part2(stuPeople) : STU.part === 'trends' ? part2(stuTrends) : STU.part === 'cal' ? part2(stuCal) : `${part2(calNudge)}${part2(stuWearer)}${part2(stuLive)}`;
+  const body = STU.part === 'sessions' ? part2(stuSessions) : STU.part === 'people' ? part2(stuPeople) : STU.part === 'trends' ? part2(stuTrends) : STU.part === 'cal' ? part2(stuCal) : `${S.meta.h9 ? batteryBlock('A session keeps reading the strap with the screen off.') : ''}${part2(calNudge)}${part2(stuWearer)}${part2(stuLive)}`;
   return `${masthead('Strap', HR.conn === 'on' ? `${esc(HR.name || 'Strap')} · ${HR.bpm ?? DASH} bpm` : 'Polar H9 · every session, beat by beat', { before: back, after: why('metrics', 'The measures') })}
     ${part2(stuDevice)}${seg('stupart', STU_PARTS, STU.part, 'subnav2')}<div class="stu stu-${STU.part}">${body}</div>`;
 }

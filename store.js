@@ -19,7 +19,7 @@ const SETTINGS = {
   hrvDur: [[60, 120, 180, 300], 60], hrvPos: [['lying', 'sitting'], 'lying'],
   brPat: [['rf', 'sigh', 'box'], 'rf'], brRate: [[4.5, 5, 5.5, 6, 6.5, 7], 6], brMin: [[2, 3, 5, 10, 15, 20], 5], brHaptic: [['on', 'off'], 'on'],
   spDur: [[60, 120, 180, 300], 120], spPos: [['sitting', 'lying', 'standing'], 'sitting'],
-  haptics: [['full', 'subtle', 'off'], 'full'], motion: [['system', 'full', 'reduced'], 'system'], theme: [['system', 'light', 'dark'], 'system'],
+  haptics: [['full', 'subtle', 'off'], 'full'], sound: [['key', 'all', 'off'], 'key'], motion: [['system', 'full', 'reduced'], 'system'], theme: [['system', 'light', 'dark'], 'system'],
 };
 let loadNote = '', saveFailed = false, loadedMain = false, recovered = '';
 
@@ -299,7 +299,7 @@ function sanitize(raw) {
       sync: num(meta.sync, 1e12, 1e13), fresh: cleanFresh(meta.fresh), backup: DATE.test(meta.backup) ? meta.backup : null,
       h9: h9 && str(h9.id, 64) ? { id: str(h9.id, 64), name: str(h9.name, 40) } : null,
       tgt: tg && num(tg.k, 800, 6000) != null && DATE.test(tg.at) ? { k: +tg.k, p: num(tg.p, 20, 400) || 0, at: tg.at, sig: str(tg.sig, 80) } : null,
-      welcomed: meta.welcomed === true, seq: num(meta.seq, 0, 1e12) || 0, imported: str(meta.imported, 40) || null,
+      welcomed: meta.welcomed === true, seq: num(meta.seq, 0, 1e12) || 0, ver: str(meta.ver, 12) || null, imported: str(meta.imported, 40) || null,
       // Reading back through Health Connect's history: the oldest day read so far, empty chunks in a row, and whether it is done.
       back: obj(meta.back) && DATE.test(meta.back.to) ? { to: meta.back.to, empty: num(meta.back.empty, 0, 99) || 0, done: meta.back.done === true, at: num(meta.back.at, 1e12, 1e13) } : null,
       og: obj(meta.og) && num(meta.og.at, 1e12, 1e13) != null ? { at: +meta.og.at, file: str(meta.og.file, 60), seen: str(meta.og.seen, 90) } : null,

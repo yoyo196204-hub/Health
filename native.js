@@ -18,6 +18,22 @@ const HERE = location.origin + location.pathname.replace(/[^/]*$/, '');
 // Every build is published, signed with the app's permanent key, on the repository's Releases page.
 const APK = 'https://github.com/yoyo196204-hub/Health/releases/latest/download/health.apk';
 
+// ---------- running in the background ----------
+// OxygenOS (OnePlus) stops apps it thinks are idle to save battery, which can end a strap session with the screen off
+// or hold back a reminder. Exempting Health from battery optimisation stops that. Asked from the strap and the
+// reminders, never on its own; once allowed, nothing is shown.
+let batteryFreeAt = 0, batteryFreeV = true;
+function batteryFree() {
+  if (!NATIVE || typeof NATIVE.batteryFree !== 'function') return true;
+  if (Date.now() - batteryFreeAt > 5000) { batteryFreeAt = Date.now(); batteryFreeV = nat('batteryFree') !== false; }
+  return batteryFreeV;
+}
+function batteryBlock(why) {
+  if (batteryFree()) return '';
+  return `<div class="callout battery"><b>Let Health keep running</b><p class="sub">${why} The phone may stop it in the background to save battery. Allow it once and the phone leaves it alone; it uses no more battery than the session itself.</p>
+    <div class="rowb"><button class="solid" data-act="battask">Allow</button></div><p class="sub">If the phone still stops it: Settings › Apps › Health › Battery usage, turn on <b>Allow background activity</b>.</p></div>`;
+}
+
 // ---------- the vault ----------
 // Each write is read back by the app; a failure is retried and, if it keeps failing, shown at the top of the page.
 NEV.vault = r => { if (vaultDone(r)) render(); };
@@ -108,7 +124,7 @@ function backIn(P) {
   renderSoft();
   if (!S.meta.back.done) setTimeout(() => { if (!document.hidden) backStep(); }, 3000);
 }
-NEV.resume = () => { rollDay(); strapAuto(); if (!zeppBack()) autoSync(); autoBackup(); ogAuto(); renderSoft(); };
+NEV.resume = () => { batteryFreeAt = 0; rollDay(); strapAuto(); if (!zeppBack()) autoSync(); autoBackup(); ogAuto(); renderSoft(); };
 NEV.pause = () => { remindPlan(); flushMirror(); widgetPush(); };
 // The home-screen widget (TodayWidget.kt) shows today's three rings and the kcal left. The page hands it plain
 // values when the app goes to the background and after each sync; the widget does no sums of its own.

@@ -5,7 +5,7 @@
 const SETPAGES = {
   goal: ['Goal and targets', () => vSetGoal()], train: ['Training', () => vSetTrain()], profile: ['Profile', () => vSetProfile()],
   sources: ['Data sources', () => sourcesSection()], data: ['Backup and data', () => vSetData()], remind: ['Reminders', () => vSetRemind()], feel: ['Feel', () => vSetFeel()],
-  records: ['All your data', () => vRecords()],
+  records: ['All your data', () => vRecords()], update: ['Updates', () => vSetUpdate()],
   evid: ['The evidence', () => `<ul class="list evid">${Object.entries(EVID).map(([k, e]) => `<li><a href="#why-${k}"><span class="nm">${e.t} ${pill(e.lv)}</span><span class="sub">${e.g}</span></a></li>`).join('')}</ul>`],
 };
 function vMe() {
@@ -37,7 +37,8 @@ function vMe() {
       ${navrow('#set-checks', 'Data checks', checkLine(), ICON.check)}
       ${navrow('#set-data', 'Backup and data', bk, ICON.box)}
       ${navrow('#set-remind', 'Reminders', !NATIVE ? 'In the Android app' : remindOn() ? [S.settings.remAm !== 'off' && `morning ${S.settings.remAm}`, S.settings.remWk !== 'off' && `waist ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][+S.settings.remWk]}`, S.settings.remPm !== 'off' && `food ${S.settings.remPm}`].filter(Boolean).join(' · ') : 'Off', ICON.bell)}
-      ${navrow('#set-feel', 'Feel', `Haptics ${S.settings.haptics} · motion ${S.settings.motion} · ${S.settings.theme} theme`, ICON.hand)}
+      ${navrow('#set-feel', 'Feel', `Haptics ${S.settings.haptics} · sound ${({ key: 'key moments', all: 'every touch', off: 'off' })[S.settings.sound]} · motion ${S.settings.motion} · ${S.settings.theme} theme`, ICON.hand)}
+      ${navrow('#set-update', 'Updates', updateLine(), ICON.box)}
       ${navrow('#set-evid', 'The evidence', `${Object.keys(EVID).length} topics, each with its sources`, ICON.book)}
     </nav>
     ${standalone ? '' : sec('Use as an app in Chrome', installEvt ? '<button class="solid" data-act="install">Install</button>' : para('Open this page in Chrome itself, not inside another app. Tap ⋮ at the top right, then <b>Add to Home screen</b>.'))}
@@ -98,6 +99,7 @@ function vSetRemind() {
   const off = REMIND.allowed === false;
   const times = (k, list) => seg(k, [['off', 'Off'], ...list.map(t => [t, t])], s[k], 'scroll');
   return `${para('Each reminder is only sent if the thing is still undone: a morning check already done, or a waist measured this week, is not reminded about. Today also lists everything due.')}
+    ${batteryBlock('Reminders are set as alarms.')}
     ${off ? `<p class="flag">Notifications for Health are switched off on this phone.</p><div class="rowb"><button class="solid" data-act="remask">Allow notifications</button></div>` : ''}
     ${sec('Morning check and weigh-in', times('remAm', ['05:30', '06:00', '06:30', '07:00', '07:30', '08:00', '08:30', '09:00']) + para('At your usual waking time. The HRV range is built from these mornings, and the weight trend from the weigh-ins.'), { why: ['checkin', 'Why regularly'] })}
     ${sec('Waist, once a week', seg('remWk', [['off', 'Off'], ['1', 'Mon'], ['3', 'Wed'], ['5', 'Fri'], ['6', 'Sat'], ['0', 'Sun']], s.remWk, 'scroll') + para('Fifteen minutes after the morning reminder on that day, or at 08:15.'), { why: ['waist', 'Why the waist'] })}
@@ -110,8 +112,38 @@ function vSetFeel() {
   const s = S.settings;
   return `${sec('Haptics', seg('haptics', [['full', 'Full'], ['subtle', 'Subtle'], ['off', 'Off']], s.haptics) + para(s.haptics === 'off' ? 'No vibration at all.' : s.haptics === 'subtle' ? 'Only for finished sets, saves and warnings.' : 'A light tick for every change and each gesture threshold, a click when something is saved, a triple click when a check or session is finished, a double for a refusal.') +
       `<div class="rowb tight">${['tick', 'ok', 'done', 'warn'].map(k => `<button class="mini" data-act="trybuzz" data-v="${k}">${{ tick: 'Tick', ok: 'Saved', done: 'Finished', warn: 'Refused' }[k]}</button>`).join('')}</div>`)}
+    ${sec('Sound', seg('sound', [['key', 'Key moments'], ['all', 'Every touch'], ['off', 'Off']], s.sound) + para(s.sound === 'off' ? 'No sounds.' : `Soft tones for saved, finished and refused, the strap connecting or dropping out, a measurement starting, and breathing in and out on the pacer${s.sound === 'all' ? ', plus a faint tick for every change' : ''}. ${NATIVE ? 'Only when the phone is on ring.' : ''}`) +
+      `<div class="rowb tight">${[['ok', 'Saved'], ['done', 'Finished'], ['connect', 'Strap'], ['start', 'Start'], ['inhale', 'Breathe']].map(([k, l]) => `<button class="mini" data-act="trysound" data-v="${k}">${l}</button>`).join('')}</div>`)}
     ${sec('Motion', seg('motion', [['system', 'As the phone'], ['full', 'Full'], ['reduced', 'Reduced']], s.motion) + para('Screens slide and numbers count up. Reduced switches all of it off.'))}
     ${sec('Theme', seg('theme', [['system', 'As the phone'], ['light', 'Light'], ['dark', 'Dark']], s.theme))}`;
+}
+
+// ---------- updates ----------
+// The app has no internet permission, so it cannot look for a newer version by itself. Each build carries its own
+// number, date and what changed (release.js, written by the GitHub build); the newest is one tap away on GitHub, and
+// Android installs it over this one, keeping everything.
+const RELEASES = 'https://github.com/yoyo196204-hub/Health/releases';
+function buildAge() { return RELEASE?.at ? gapDays(RELEASE.at, todayKey()) : null; }
+function updateLine() {
+  const v = NATIVE ? APP.version : RELEASE?.name, age = buildAge();
+  return `${v ? `Version ${esc(v)}` : 'This version'}${RELEASE?.at ? ` · built ${dateLabel(RELEASE.at)}` : ''}${age != null && age >= 21 ? ' · likely a newer one' : ''}`;
+}
+function vSetUpdate() {
+  const R = RELEASE, age = buildAge();
+  const notes = R?.notes?.length ? `<ul class="list notes">${R.notes.map(n => { const [h, ...t] = n.split(': '); return `<li><span class="nm">${esc(t.length ? h : n)}</span>${t.length ? `<span class="sub">${esc(t.join(': '))}</span>` : ''}</li>`; }).join('')}</ul>` : para('This copy was not built by GitHub, so it has no list of changes.');
+  return `${sec('This version', table([trow('Version', esc((NATIVE ? APP.version : R?.name) || DASH)), trow('Built', R?.at ? dateLabel(R.at, { day: 'numeric', month: 'long', year: 'numeric' }) : DASH), ...(NATIVE && APP.installed ? [trow('Installed', dateLabel(dk(new Date(APP.installed)), { day: 'numeric', month: 'long', year: 'numeric' }))] : [])])
+      + (age != null && age >= 21 ? para(`Built ${plural(age, 'day')} ago: there is probably a newer version.`, 'flag') : ''))}
+    ${sec('What changed', notes)}
+    ${sec('Get the newest', `${para(NATIVE ? 'The app has no internet permission, so it never checks on its own. This opens the newest version in your browser; open the downloaded file and Android installs it over this one, keeping all your data. It is signed with the same key, so nothing else will install over it.' : 'In Chrome the app updates itself the next time it is opened online.')}
+      <div class="rowb"><a class="solid link" href="${APK}">Download the newest</a><a class="ghost link" href="${RELEASES}">All versions</a></div>`)}`;
+}
+// After an update: once, what changed.
+function updatedNotice() {
+  if (!RELEASE?.name || !NATIVE) return;
+  const was = S.meta.ver;
+  if (was === RELEASE.name) return;
+  S.meta.ver = RELEASE.name; save();
+  if (was) setTimeout(() => toast(`Updated to ${RELEASE.name}`, 7000, { label: 'What changed', fn: () => { location.hash = 'set-update'; } }), 1200);
 }
 
 // ---------- data sources ----------
@@ -247,8 +279,11 @@ function setAct(a, el) {
       remindPlan(); render(); return true;
     }
     case 'remask': nat('remindAsk'); return true;
+    case 'battask': nat('batteryAsk'); buzz('tick'); return true;
     case 'trybuzz': { const was = s.haptics; if (was === 'off') toast('Haptics are off'); buzz(v); return true; }
     case 'motion': return set('motion', v);
+    case 'sound': return set('sound', v);
+    case 'trysound': { const was = s.sound; if (was === 'off') toast('Sound is off'); else { if (v === 'inhale') setTimeout(() => sfx('exhale'), 1400); sfx(v); } return true; }
     case 'theme': s.theme = v; save(); applyTheme(); buzz('tick'); render(); return true;
     case 'cutm': CUT.months = +v; buzz('tick'); render(); return true;
     case 'welcomed': S.meta.welcomed = true; save(); buzz('tick'); render(); return true;

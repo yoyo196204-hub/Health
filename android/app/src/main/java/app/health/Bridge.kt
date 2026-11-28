@@ -15,7 +15,7 @@ class Bridge(private val a: MainActivity) {
         .put("zepp", a.zeppIntent() != null)
         .put("gb", a.gadgetbridgeIntent() != null)
         .put("ble", a.packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE))
-        .put("code", BuildConfig.VERSION_CODE)
+        .put("code", BuildConfig.VERSION_CODE).put("rotor", a.feel.rotor)
         .put("model", android.os.Build.MODEL).put("maker", android.os.Build.MANUFACTURER).put("sdk", android.os.Build.VERSION.SDK_INT)
         .put("installed", try { a.packageManager.getPackageInfo(a.packageName, 0).lastUpdateTime } catch (e: Exception) { 0L })
         .toString()
@@ -84,10 +84,6 @@ class Bridge(private val a: MainActivity) {
     @JavascriptInterface fun batteryFree(): Boolean = a.batteryFree()
     @JavascriptInterface fun batteryAsk() { a.askBattery() }
     @JavascriptInterface fun ringer(): String = a.ringer()
-    // Updates: the newest release opens in the browser, which downloads it; Android then offers to install it over this one.
-    @JavascriptInterface fun openUrl(url: String) = a.main.post {
-        if (url.startsWith("https://github.com/yoyo196204-hub/Health/")) try { a.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) } catch (e: Exception) { }
-    }
     @JavascriptInterface fun setTheme(dark: Boolean) { a.setTheme(dark) }
     @JavascriptInterface fun openZepp() = a.main.post { a.zeppIntent()?.let { try { a.startActivity(it) } catch (e: Exception) { } } }
     @JavascriptInterface fun openGadgetbridge() = a.main.post { a.gadgetbridgeIntent()?.let { try { a.startActivity(it) } catch (e: Exception) { } } }

@@ -415,6 +415,7 @@ dailyBackup();
 navigator.storage?.persist?.().catch(() => {});
 if (NATIVE) { document.documentElement.classList.add('native'); crashIn(); hcCheck(); backupInfo(); autoBackup(); ogInfo(); ogAuto(); remindStatus(); remindPlan(); strapAuto(); }
 if (recovered) save();
+updatedNotice();
 // In a browser, IndexedDB may hold a newer copy than localStorage (localStorage was full or cleared).
 idbNewer().then(n => { if (n) { S = n; loadNote = 'Restored your latest data from the browser’s second copy.'; save(); render(); } });
 recInit().catch(e => { logError(e); RSTORE.ready = true; });
