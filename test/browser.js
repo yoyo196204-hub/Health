@@ -767,7 +767,7 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
       return out;
     };
     const bad = [];
-    for (const h of ['today', 'food', 'recovery-rec', 'recovery-sleep', 'recovery-cardio', 'review-energy', 'review-body', 'review-long', 'review-links', 'me', 'set-train']) {
+    for (const h of ['today', 'food', 'recovery-rec', 'recovery-sleep', 'recovery-cardio', 'review-energy', 'review-week', 'review-body', 'review-long', 'review-links', 'me', 'set-train']) {
       await go(h); await page.evaluate(() => scrollTo(0, 0)); await page.waitForTimeout(200);
       bad.push(...(await page.evaluate(audit)).map(x => `${h}: ${x}`));
       // Scrolled to the end, the last thing on the page clears the tab bar, and the log button sits inside the bar.
@@ -781,6 +781,33 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     bad.push(...(await page.evaluate(audit)).map(x => `log sheet: ${x}`));
     await page.evaluate(() => closePop()); await page.waitForTimeout(400);
     assert.ok(!bad.length, bad.join(' | '));
+  });
+  await test('the app’s files: the newest copy wins on start, every save reaches them, and a restore point can be restored and undone', async () => {
+    const p2 = await ctx.newPage(), errs = [];
+    p2.on('pageerror', e => errs.push(e.message));
+    const base = seedV3(), vs = JSON.parse(JSON.stringify(base)), ls = JSON.parse(JSON.stringify(base));
+    vs.meta = Object.assign(vs.meta || {}, { seq: 50 }); vs.profile.h = 181; ls.meta = Object.assign(ls.meta || {}, { seq: 10 }); ls.profile.h = 170;
+    await p2.addInitScript(([v, l]) => {
+      localStorage.setItem('health.v1', l);
+      const st = { state: v, recs: {}, bin: {}, snap: null };
+      window.HealthNative = { info: () => '{"version":"t"}', vaultRead: () => st.state, vaultWrite: (j, q) => { st.state = j; setTimeout(() => window.__fromNative('vault', { ok: true, seq: q, bytes: j.length, at: Date.now() }), 5); },
+        vaultFlush: () => {}, vaultPoints: () => JSON.stringify([{ kind: 'day', name: '2026-01-01.json', at: Date.now() - 864e5, bytes: 10 }]), vaultPoint: () => v,
+        vaultStats: () => JSON.stringify({ state: st.state.length, saved: Date.now() }), snapWrite: j => { st.snap = j; return true; }, snapRead: () => st.snap,
+        recPut: (id, j) => { st.recs[id] = j; }, recDel: id => { delete st.recs[id]; }, recAll: () => '[' + Object.values(st.recs).join(',') + ']', recBin: () => '[]',
+        backupStatus: () => '{"folder":null}', haptic: () => true, hcStatus: () => {}, remindAllowed: () => false, remind: () => {}, ogStatus: () => '{}', widget: () => {}, crashTake: () => null, ringer: () => 'silent', batteryFree: () => true };
+      window.__vault = st;
+    }, [JSON.stringify(vs), JSON.stringify(ls)]);
+    await p2.goto(page.url().replace(/#.*$/, '')); await p2.waitForSelector('#view header');
+    assert.strictEqual(await p2.evaluate(() => S.profile.h), 181);
+    await p2.evaluate(() => { S.profile.h = 175; save(); }); await p2.waitForTimeout(500);
+    const r = await p2.evaluate(() => ({ ok: VAULT.ok, h: JSON.parse(window.__vault.state).profile.h, seq: JSON.parse(window.__vault.state).meta.seq }));
+    assert.deepStrictEqual([r.ok, r.h, r.seq > 50], [true, 175, true]);
+    await p2.evaluate(() => ACT_HOLD.ptrestore({ dataset: { v: 'day|2026-01-01.json' } }));
+    assert.strictEqual(await p2.evaluate(() => S.profile.h), 181);
+    await p2.evaluate(() => restoreSnapshot());
+    assert.strictEqual(await p2.evaluate(() => S.profile.h), 175);
+    assert.deepStrictEqual(errs, []);
+    await p2.close();
   });
   await test('no errors were thrown on any screen, and none were caught and logged', async () => {
     assert.deepStrictEqual(errors, []);

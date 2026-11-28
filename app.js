@@ -102,7 +102,7 @@ function render() {
   const adding = base?.type === 'add' && MEALS.some(m => m[0] === base.key), setting = FULL.includes(base?.type);
   const key = base ? `${base.type}-${base.key}` : tab + (tab === 'food' ? day : '');
   try {
-    const banner = (loadNote ? `<p class="flag banner">${loadNote} <button class="link" data-act="dismissnote" data-dismiss>OK</button></p>` : '') + (saveFailed ? '<p class="flag banner">Storage is full or blocked: changes are not being kept. Export a backup from You › Backup and data.</p>' : '');
+    const banner = (loadNote ? `<p class="flag banner">${loadNote} <button class="link" data-act="dismissnote" data-dismiss>OK</button></p>` : '') + (saveFailed ? `<p class="flag banner">${VH ? `Your changes could not be written to the app’s files (${esc(VAULT.err || 'unknown error')}). Free some space on the phone; the app keeps trying.` : 'Storage is full or blocked: changes are not being kept. Export a backup from You › Backup and data.'}</p>` : '');
     paint($('#view'), banner + (adding ? vAdd(base.key) : base?.type === 'lab' ? vLab(base.key) : base?.type === 'beats' ? vBeatsGone(base.key) : base?.type === 'strap' ? vStrap(base.key) : base?.type === 'rec' ? vRec(base.key) : base?.type === 'person' ? vPerson(base.key) : base?.type === 'watch' ? vWatch(base.key) : base?.type === 'scan' ? vScan(base.key) : setting ? vSet(base.key) : VIEWS[tab]()), key !== screenKey);
     paint($('#sheet'), pending ? (pending.type === 'halftone' ? vHalftone(pending) : pending.type === 'opengym' ? vOpenGym(pending) : pending.type === 'strap' ? vStrapImport(pending) : vImport(pending)) : pop && POPS[pop.kind] ? part(POPS[pop.kind], pop) : overlay?.type === 'why' ? vWhy(overlay.key) : '', !$('#sheet .sheet'));
     screenKey = key;
@@ -320,7 +320,7 @@ document.addEventListener('click', e => {
   if (ACT[a]) return ACT[a](el);
   const ta = todayAct(a, el);
   if (ta === 'nav') { e.preventDefault(); return; }
-  if (ta || scanAct(a, el) || trainAct(a, el) || foodAct(a, el) || setAct(a, el) || ogAct(a, el) || labAct(a, el) || stuAct(a, el) || recAct(a, el) || bxAct(a, el) || checkAct(a, el) || wvAct(a, el)) return;
+  if (ta || scanAct(a, el) || trainAct(a, el) || foodAct(a, el) || setAct(a, el) || ogAct(a, el) || labAct(a, el) || stuAct(a, el) || recAct(a, el) || bxAct(a, el) || checkAct(a, el) || wvAct(a, el) || weekAct(a, el)) return;
   if (a.startsWith('hr')) return hrAct(a, el);
   if (a.startsWith('w')) return watchAct(a);
 });
@@ -414,7 +414,10 @@ if (backfillMacros()) save();
 dailyBackup();
 navigator.storage?.persist?.().catch(() => {});
 if (NATIVE) { document.documentElement.classList.add('native'); crashIn(); hcCheck(); backupInfo(); autoBackup(); ogInfo(); ogAuto(); remindStatus(); remindPlan(); strapAuto(); }
-if (recovered === 'mirror') save();
+if (recovered) save();
+updatedNotice();
+// In a browser, IndexedDB may hold a newer copy than localStorage (localStorage was full or cleared).
+idbNewer().then(n => { if (n) { S = n; loadNote = 'Restored your latest data from the browser’s second copy.'; save(); render(); } });
 recInit().catch(e => { logError(e); RSTORE.ready = true; });
 route();
 fresh('fwd');

@@ -18,14 +18,25 @@ const HERE = location.origin + location.pathname.replace(/[^/]*$/, '');
 // Every build is published, signed with the app's permanent key, on the repository's Releases page.
 const APK = 'https://github.com/yoyo196204-hub/Health/releases/latest/download/health.apk';
 
-// ---------- the app's private copy ----------
-// Inside the app every save is also written, a moment later, to a file only this app can read. If the WebView's
-// storage is ever lost or damaged, the app starts from that copy instead of from nothing.
-function mirrorRead() {
-  if (!NATIVE || typeof NATIVE.mirrorRead !== 'function') return null;
-  try { const t = nat('mirrorRead'); return t ? sanitize(JSON.parse(t)) : null; } catch (e) { return null; }
+// ---------- running in the background ----------
+// OxygenOS (OnePlus) stops apps it thinks are idle to save battery, which can end a strap session with the screen off
+// or hold back a reminder. Exempting Health from battery optimisation stops that. Asked from the strap and the
+// reminders, never on its own; once allowed, nothing is shown.
+let batteryFreeAt = 0, batteryFreeV = true;
+function batteryFree() {
+  if (!NATIVE || typeof NATIVE.batteryFree !== 'function') return true;
+  if (Date.now() - batteryFreeAt > 5000) { batteryFreeAt = Date.now(); batteryFreeV = nat('batteryFree') !== false; }
+  return batteryFreeV;
 }
-function mirrorWrite(text) { if (NATIVE && typeof NATIVE.mirrorWrite === 'function') nat('mirrorWrite', text); }
+function batteryBlock(why) {
+  if (batteryFree()) return '';
+  return `<div class="callout battery"><b>Let Health keep running</b><p class="sub">${why} The phone may stop it in the background to save battery. Allow it once and the phone leaves it alone; it uses no more battery than the session itself.</p>
+    <div class="rowb"><button class="solid" data-act="battask">Allow</button></div><p class="sub">If the phone still stops it: Settings › Apps › Health › Battery usage, turn on <b>Allow background activity</b>.</p></div>`;
+}
+
+// ---------- the vault ----------
+// Each write is read back by the app; a failure is retried and, if it keeps failing, shown at the top of the page.
+NEV.vault = r => { if (vaultDone(r)) render(); };
 
 // ---------- Health Connect ----------
 const SYNC = { busy: false, err: '', status: null, got: null, at: 0, zepp: 0, timer: null };
@@ -113,15 +124,26 @@ function backIn(P) {
   renderSoft();
   if (!S.meta.back.done) setTimeout(() => { if (!document.hidden) backStep(); }, 3000);
 }
-NEV.resume = () => { rollDay(); strapAuto(); if (!zeppBack()) autoSync(); autoBackup(); ogAuto(); renderSoft(); };
+NEV.resume = () => { batteryFreeAt = 0; rollDay(); strapAuto(); if (!zeppBack()) autoSync(); autoBackup(); ogAuto(); renderSoft(); };
 NEV.pause = () => { remindPlan(); flushMirror(); widgetPush(); };
 // The home-screen widget (TodayWidget.kt) shows today's three rings and the kcal left. The page hands it plain
 // values when the app goes to the background and after each sync; the widget does no sums of its own.
+// The HRV widget (HrvWidget.kt): 28 mornings, the 7-day average under each, and the normal range. Only real
+// checks: a morning without one is left empty, never filled in.
+function hrvWidgetData() {
+  const days = range(28), V = hrvState(), last = Object.keys(S.hrv).sort().pop();
+  const pts = days.map(k => { const s = hrvState(k); return { v: S.hrv[k]?.rmssd ?? null, r: s.roll ?? null }; });
+  const stale = last && gapDays(last, todayKey()) > 3;
+  const line = !last ? 'No morning checks yet' : V.need ? `${plural(V.need, 'more morning')} to set your range` : !V.state ? 'Three checks in a week give the average'
+    : `${V.state === 'normal' ? 'Inside' : V.state === 'low' ? 'Below' : 'Above'} your range of ${Math.round(V.lo)}–${Math.round(V.hi)} ms${stale ? ` · last check ${dateLabel(last)}` : ''}`;
+  return { day: todayKey(), roll: V.roll ? Math.round(V.roll) : null, lo: V.lo ?? null, hi: V.hi ?? null, state: V.state || null, pts, line };
+}
 function widgetPush() {
   if (!NATIVE || typeof NATIVE.widget !== 'function') return;
   // Figures remembered from before midnight must not reach the widget as today's.
   if (typeof memoDay !== 'undefined' && memoDay !== todayKey()) memo.clear();
   try { nat('widget', JSON.stringify(widgetData())); } catch (e) { logError(e); }
+  if (typeof NATIVE.widgetHrv === 'function') try { nat('widgetHrv', JSON.stringify(hrvWidgetData())); } catch (e) { logError(e); }
 }
 // ---------- how fresh the watch data really is ----------
 // The newest moment any record from the watch app was written into Health Connect. That, not when this app last

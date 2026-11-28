@@ -21,6 +21,7 @@ function seg(act, items, cur, cls = '') { return `<div class="seg ${cls}">${item
 // A settings row that opens a page.
 function navrow(href, label, value = '', icon = '') { return `<a class="navrow" href="${href}">${icon ? `<span class="ic">${icon}</span>` : ''}<span class="grow"><span class="nm">${label}</span>${value ? `<span class="sub">${value}</span>` : ''}</span><span class="chev">›</span></a>`; }
 const ICON = {
+  update: '<svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19h14"/></svg>',
   gear: '<svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>',
   goal: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".6"/></svg>',
   lift: '<svg viewBox="0 0 24 24"><path d="M3 12h18M6 8v8M18 8v8M3.5 10v4M20.5 10v4"/></svg>',

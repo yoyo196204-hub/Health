@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity() {
     lateinit var files: Files
     lateinit var feel: Feel
     lateinit var og: OpenGym
+    lateinit var vault: Vault
     private lateinit var root: FrameLayout
 
     private var ready = false
@@ -74,6 +75,7 @@ class MainActivity : ComponentActivity() {
         Crash.install(this)
         shortcuts()
         health = HealthReader(this); strap = Strap(this); files = Files(this); feel = Feel(this); og = OpenGym(this)
+        vault = Vault(this) { e, j -> emit(e, j) }
         Remind.channel(this)
 
         // Draw edge to edge, and pad the page by the system bars and the keyboard so nothing hides behind them.
@@ -196,6 +198,25 @@ class MainActivity : ComponentActivity() {
         if (ready) emit("pause", "{}")
         super.onPause()
     }
+
+    // Whatever is still queued reaches the disk before the app can be stopped.
+    override fun onStop() {
+        vault.flush()
+        super.onStop()
+    }
+
+    /** OxygenOS stops apps in the background to save battery; exempting Health keeps strap sessions and reminders alive. */
+    fun batteryFree(): Boolean = (getSystemService(POWER_SERVICE) as android.os.PowerManager).isIgnoringBatteryOptimizations(packageName)
+    @SuppressLint("BatteryLife")
+    fun askBattery() = main.post {
+        val ask = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
+        try { startActivity(ask) } catch (e: Exception) {
+            try { startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } catch (e2: Exception) { }
+        }
+    }
+    /** Sounds play only when the phone is on ring, never on vibrate or silent. */
+    fun ringer(): String = when ((getSystemService(AUDIO_SERVICE) as android.media.AudioManager).ringerMode) {
+        android.media.AudioManager.RINGER_MODE_NORMAL -> "normal"; android.media.AudioManager.RINGER_MODE_VIBRATE -> "vibrate"; else -> "silent" }
 
     /** The page chose light or dark: match the status bar icons and the background behind the page. */
     fun setTheme(dark: Boolean) = main.post {

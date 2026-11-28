@@ -118,6 +118,8 @@ you log in openGym arrives with its name and the muscles it trains, from `opengy
 | A day in detail (tap a night, or Your day) | The watch's heart rate across 24 hours with sleep and workouts marked, the night stage by stage, and every number against your previous four weeks |
 | Strap (the strap button on Heart, or Strap in the log button) | Everything the Polar H9 does, in one place. **Live**: the strap now (connected, battery, skin contact, signal, how long since the last beat), who is wearing it, the heart rate beat by beat with RMSSD, SDNN and breathing over the last minute, and every kind of session started from here. **Sessions**: every recording ever made, of every kind and every person, by day, each with its heart rate as a line and how clean its beats were; filter by person and kind; swipe one left to delete it; open or export strap files. **People**: anyone else who wears the strap, each with their readings read only against their own |
 | A session (#rec-…, from Sessions or Full analysis after any session) | The recording in full. The beat explorer: one finger reads each beat (its clock time to the millisecond, RR, bpm, the change from the last, and what correction it needed, with Drop this beat or Use as recorded), a pinch zooms, the strip below moves the window, and Select drags out a stretch to zoom to, exclude, keep only, or mark. Gaps where beats were lost between strap and phone, excluded stretches and the settling minute are drawn as such. Then every measure for the whole and for what is on screen beside the person's own usual; minute by minute; through time (heart rate, RMSSD, α1, breathing, clean beats on one time axis, tap to go there); the signal (every correction, gaps, lost contact, your edits, each undoable); what the kind of session measures (stand-up: the rise, peak and 30:15 ratio; cardio: zones, TRIMP, first and second α1 thresholds, recovery; Live: each marked stretch); edit (whose it is, position, name, notes, marks); and files: a report page, the lossless strap file, the beats as CSV, RR for Kubios |
+| The week (Today on Sunday evening and Monday; any week in Insights › Week) | The week against the one before: weight trend, calories, protein and fibre on complete days, steps, sleep, resting heart rate, morning HRV, lifting and active minutes, each with the days it rests on (too few days says so instead of a number), a change called real only when its 95% interval (Welch) is clear of zero, and one focus for next week, the largest gap against its evidence |
+| Widgets | Today's three rings, and Morning HRV: four weeks of checks with the 7-day average against your normal range |
 | Data checks (You, and a line on Insights when something needs a look) | About twenty fixed-rule checks across every dataset: food energy against its own macros, sleep stages against the night's total, watch resting and workout heart rate against the strap (Bland–Altman), saved RMSSD against its own beats, steps against distance, active against total energy, duplicate workouts, load typos, wear time, and how fresh the watch data is. Each gives its numbers and lists the records that failed. Below them, the last 50 errors in the app itself, with Copy; kept only on the phone |
 | Pack by barcode (the log button, or the barcode button in Add food's search) | Type the number under the bars; as soon as it is whole the pack is looked up on the phone in 16,000 packaged foods from Open Food Facts (every Indian product with a nutrition panel, and the most-scanned ones worldwide) and in your own foods. It shows the panel per 100 g, and three things that matter on a fixed budget: protein per 100 kcal, energy density, and the share of energy from sugars, with ultra-processing (NOVA 4) said plainly; then what one serving is of what is left today. Choose amount opens the usual amount sheet. A pack that is not in the list is entered once from its label with its barcode, and is known from then on. Packs also come up by name in the food search, under their own heading. Fling the card away for the next |
 | Adding food | A switch between the four meals at the top; search that understands Marathi, Hindi and English names (roti, chawal, anda, chaas, aloo, kombdi…) and forgives a typo; chips for Usual, Recent (exactly as you last logged it), Plates (yours first), Quick add, Mine, and every group from home food to Pune street food, pizza and Chinese, bakery and Irani café, and upvas. Tap adds one (the list keeps its order while you add, so nothing jumps from under your finger); hold any food, or swipe it right, for any amount: steppers, a ruler you drag (a light detent each quarter; a flick keeps it rolling), or by weight, into any meal. The bar at the bottom shows the meal and the day as you go |
@@ -335,8 +337,15 @@ also holds what Zepp never exported.
 
 ## Your data
 
-- Saved on the phone, with a second private copy inside the app, yesterday's automatic backup, and the daily
-  file in your backup folder.
+- **In the Android app** your data is plain files in the app's private storage (`Vault.kt`), limited only by the
+  phone's free space. Android removes them only on uninstalling or **Clear storage**; clearing the cache and the
+  phone's cleaner leave them alone. Each save goes to a temporary file, is forced to the disk, read back and then
+  swapped in, so a crash keeps the last whole copy. The app keeps the end of each of the last 14 days and the start of
+  each month for two years as restore points, plus a copy before any save that would shrink the data by half; any of
+  them can be restored (with undo) from You › Backup and data › Restore. Strap recordings are one file each; a
+  deleted one sits in a bin for 30 days. A save counter means the newest copy always wins when the app starts.
+- **In a browser** localStorage and IndexedDB both hold it, and the browser is asked to keep them when space is low.
+- The daily file in your backup folder survives uninstalling, and a new phone.
 - Anything that removes data (removing old data, erasing, importing) keeps a copy first and offers Undo;
   the removals themselves need a press and hold.
 - You › All your data lists every record by kind: tap to change it, swipe left to delete it. Anything deleted that came
@@ -362,7 +371,9 @@ Plain JavaScript, no build step. Scripts load in this order:
 | `exercises.js` | The exercise library, programmes, home substitutes, shoulder rules, warm-up |
 | `opengym-ids.js` | openGym's exercise numbers with their names and muscles (see Credits) |
 | `body-data.js` | Muscle map outlines (from react-body-highlighter, MIT) |
-| `store.js` | Storage, schema and migration, snapshots, removing old data, Halftone import |
+| `store.js` | Storage (the vault in the app, localStorage and IndexedDB in a browser, newest copy wins), schema and migration, snapshots, removing old data, Halftone import |
+| `week.js` | The week in review: this week against the last, each change tested, and next week's one focus |
+| `release.js` | This build's version, date and changes, written by the GitHub build |
 | `model.js` | Nutrition, weight, heart, HRV, sleep and activity conclusions |
 | `energy.js` | The burn learned from scale and log (Kalman filter), body fat, the energy in a kilogram of change |
 | `insights.js` | Links in your own data, the Sleep Regularity Index, the recovery number, eating patterns, the day's headline |

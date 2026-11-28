@@ -1367,6 +1367,14 @@ test('error log: caught failures in a screen part and in a native event are logg
   assert.ok(fs.readFileSync(path.join(root, 'sw.js'), 'utf8').includes("'errlog.js'"));
 });
 
+test('one workout sent by two watch apps counts once, as the copy with more heart rate', c => {
+  const k = run(c, 'todayKey()'), t = run(c, `Date.parse('${k}T07:00')`);
+  run(c, `S.ex['${k}'] = [cleanEx({ s: ${t}, e: ${t + 36e5}, k: 'Running', src: 'Zepp', h: [[140, 3000]] }), cleanEx({ s: ${t + 6e4}, e: ${t + 36e5}, k: 'Running', src: 'Gadgetbridge', h: [[141, 1200], [150, 1200]] }), cleanEx({ s: ${t + 72e5}, e: ${t + 9e6}, k: 'Walking', src: 'Zepp', h: [] })]; memo.clear()`);
+  const ss = run(c, `sessions('${k}').map(s => s.app + ':' + s.kind)`);
+  assert.deepStrictEqual(ss, ['Gadgetbridge:Running', 'Zepp:Walking']);
+  assert.strictEqual(run(c, `S.ex['${k}'].length`), 3);
+});
+
 test('widget: the same three numbers as Today, as plain values, with kcal left or over and no night said as such', c => {
   const k = run(c, 'todayKey()');
   run(c, `S.food['${k}'] = [{ id: 'a', n: 'Rice', u: '1', k: 600, p: 12, m: 'lunch', q: 1 }]; for (let i = 1; i <= 28; i++) S.sleep[shift('${k}', -i)] = 8; S.sleep['${k}'] = 7.25; memo.clear()`);

@@ -15,6 +15,9 @@ class Bridge(private val a: MainActivity) {
         .put("zepp", a.zeppIntent() != null)
         .put("gb", a.gadgetbridgeIntent() != null)
         .put("ble", a.packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE))
+        .put("code", BuildConfig.VERSION_CODE).put("rotor", a.feel.rotor)
+        .put("model", android.os.Build.MODEL).put("maker", android.os.Build.MANUFACTURER).put("sdk", android.os.Build.VERSION.SDK_INT)
+        .put("installed", try { a.packageManager.getPackageInfo(a.packageName, 0).lastUpdateTime } catch (e: Exception) { 0L })
         .toString()
 
     // The error log: a crash from the last run, once, and Copy
@@ -26,6 +29,7 @@ class Bridge(private val a: MainActivity) {
 
     // The home-screen widget: today's figures, from the page
     @JavascriptInterface fun widget(json: String) { TodayWidget.push(a, json) }
+    @JavascriptInterface fun widgetHrv(json: String) { HrvWidget.push(a, json) }
 
     // Health Connect
     @JavascriptInterface fun hcStatus() = a.main.post { a.health.status() }
@@ -64,6 +68,23 @@ class Bridge(private val a: MainActivity) {
     @JavascriptInterface fun remindAsk() = a.main.post { a.askNotifications() }
     @JavascriptInterface fun mirrorRead(): String? = a.feel.mirrorRead()
     @JavascriptInterface fun mirrorWrite(json: String) { a.feel.mirrorWrite(json) }
+    // The vault: your data as files in the app's private storage (Vault.kt)
+    @JavascriptInterface fun vaultRead(): String? = a.vault.read()
+    @JavascriptInterface fun vaultWrite(json: String, seq: Double) { a.vault.write(json, seq.toLong()) }
+    @JavascriptInterface fun vaultFlush() { a.vault.flush() }
+    @JavascriptInterface fun vaultPoints(): String = a.vault.points()
+    @JavascriptInterface fun vaultPoint(kind: String, name: String): String? = a.vault.point(kind, name)
+    @JavascriptInterface fun vaultStats(): String = a.vault.stats()
+    @JavascriptInterface fun snapWrite(json: String): Boolean = a.vault.snapWrite(json)
+    @JavascriptInterface fun snapRead(): String? = a.vault.snapRead()
+    @JavascriptInterface fun recPut(id: String, json: String) { a.vault.recPut(id, json) }
+    @JavascriptInterface fun recDel(id: String) { a.vault.recDel(id) }
+    @JavascriptInterface fun recAll(): String = a.vault.recAll()
+    @JavascriptInterface fun recBin(): String = a.vault.binAll()
+    // The phone: battery-optimisation exemption, and whether it is on ring (sounds) 
+    @JavascriptInterface fun batteryFree(): Boolean = a.batteryFree()
+    @JavascriptInterface fun batteryAsk() { a.askBattery() }
+    @JavascriptInterface fun ringer(): String = a.ringer()
     @JavascriptInterface fun setTheme(dark: Boolean) { a.setTheme(dark) }
     @JavascriptInterface fun openZepp() = a.main.post { a.zeppIntent()?.let { try { a.startActivity(it) } catch (e: Exception) { } } }
     @JavascriptInterface fun openGadgetbridge() = a.main.post { a.gadgetbridgeIntent()?.let { try { a.startActivity(it) } catch (e: Exception) { } } }

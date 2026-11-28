@@ -1001,7 +1001,10 @@ html.still .dvdot { animation: none !important; }
 .batt::after { content: ''; position: absolute; left: 2px; top: 2px; bottom: 2px; width: calc((100% - 4px) * var(--b) / 100); border-radius: 1px; background: currentColor; }
 .device p.sub.small { margin: 10px 0 0; }
 .seg.subnav2 { position: sticky; top: calc(6px + env(safe-area-inset-top)); z-index: 4; margin: 10px 0 6px; box-shadow: 0 6px 18px -12px rgba(0, 0, 0, .35); }
-.seg.subnav2 button { padding: 9px 2px; font-size: 13px; letter-spacing: -.01em; }
+.seg.subnav2, .subnav .seg { container-type: inline-size; }
+/* Five labels of different lengths: each takes the room its label needs, and the type shrinks with the bar on narrow
+   phones (down to 11.5 px at 320 px wide), so no label is ever cut. */
+.seg.subnav2 button, .subnav .seg button { flex: 1 1 auto; padding: 9px 3px; font-size: clamp(11.5px, 3.6cqi, 13.5px); letter-spacing: -.01em; text-overflow: clip; }
 .stu { animation: fadein .22s var(--ease); }
 @keyframes fadein { from { opacity: 0; transform: translateY(6px); } }
 html.still .stu, html.still .selbar { animation: none; }
@@ -1433,3 +1436,46 @@ html.still .wvchart .ln, html.still .wvspark path { animation: none; stroke-dash
 .calnudge { text-decoration: none; color: inherit; box-shadow: var(--shadow), var(--hi), inset 3px 0 0 var(--mid); }
 html.still .baplot circle, html.still .calsteps li { animation: none; }
 @media (prefers-reduced-motion: reduce) { .baplot circle, .calsteps li { animation: none; } }
+
+/* ---------- Backup and data ---------- */
+.jumps { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 0 6px; margin: 0 0 4px; }
+.jumps::-webkit-scrollbar { display: none; }
+.savedline { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 14px; font-weight: 550; color: var(--ink); }
+.savedline svg { width: 18px; height: 18px; stroke: var(--good); fill: none; stroke-width: 2.2; flex: none; }
+.savedline .bad { color: var(--bad); }
+.list.points .row, .setpage .list .row { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
+.list .row .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+button.sm { min-height: 36px; padding: 0 12px; font-size: 13px; }
+.setpage section[id] { scroll-margin-top: 72px; }
+.list.notes li { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 0; }
+.list.notes .sub { margin: 0; }
+.callout.battery .rowb { margin: 8px 0; }
+
+/* ---------- the week in review ---------- */
+.wkrev { padding-bottom: 14px; }
+.wkrev h2 { margin: 2px 0 10px; }
+table.wk { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.wk td { padding: 9px 0; border-top: 1px solid var(--line); vertical-align: middle; }
+table.wk tr:first-child td { border-top: 0; }
+table.wk td:last-child { text-align: right; }
+table.wk td:last-child b { display: block; font-size: 15px; }
+table.wk td i { font-style: normal; font-weight: 500; color: var(--soft); font-size: 12px; }
+table.wk tr.muted td:first-child { color: var(--soft); }
+.wkchg { display: block; margin-top: 1px; font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--ink2); }
+.wkchg.same { color: var(--soft); font-weight: 500; }
+.wkchg.good { color: var(--good); } .wkchg.bad { color: var(--bad); }
+.wkfocus { margin: 14px 0 4px; padding: 12px 14px; border-radius: 14px; background: color-mix(in srgb, var(--accent) 10%, var(--bg3)); display: flex; flex-direction: column; gap: 3px; animation: open .35s var(--ease) both; }
+.wkfocus b { font-size: 16px; }
+.wkfocus .sub { margin: 0; }
+.wknav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 0 10px; font-weight: 600; font-size: 14.5px; }
+.wknav .fwd svg { transform: scaleX(-1); }
+.wknav .nav:disabled { opacity: .3; }
+html.still .wkfocus { animation: none; }
+.srct.odd { color: var(--bad); font-style: normal; }
+.pgs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.pg { font-style: normal; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 99px; background: var(--bg3); color: var(--ink2); }
+.pg.good { color: var(--good); background: color-mix(in srgb, var(--good) 12%, transparent); }
+.pg.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 11%, transparent); }
+.pg.mid { color: var(--mid); background: color-mix(in srgb, var(--mid) 14%, transparent); }
+.grouph { font: 650 12px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--soft); margin: 22px 4px 0; }
+.grouph + .group { margin-top: 8px; }

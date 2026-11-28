@@ -29,6 +29,13 @@ function runChecks() {
         const off = atwaterOff(f);
         if (off != null && f.k >= 20 && Math.abs(off) > 0.2) bad.push({ t: `Your food “${esc(f.n)}”: ${fmt(f.k)} kcal against ${fmt(atwater(f))} from its macros` });
       }
+      // Double taps: the same food, amount and meal saved twice within 30 seconds. Never removed on its own (two
+      // identical entries can be real); one tap removes the extra, with undo.
+      const dup = [];
+      for (const k of days) { const L = S.food[k] || []; L.forEach((e, i) => { if (e.t && L.some((x, j) => j < i && x.id === e.id && x.q === e.q && x.m === e.m && x.t && Math.abs(e.t - x.t) < 30000)) dup.push({ k, t: `${esc(e.n)}, ${esc(portion(e))}, saved twice ${Math.round(Math.abs(e.t - L.find((x, j) => j < i && x.id === e.id && x.t).t) / 1000)} s apart`, fix: 'fixdup', v: e.t }); }); }
+      out.push(chk('f-dup', 'Food', 'Nothing logged twice by a double tap', !n ? 'na' : dup.length ? 'look' : 'ok',
+        !n ? 'Nothing logged yet.' : dup.length ? `${plural(dup.length, 'entry', 'entries')} saved twice within 30 seconds.` : 'No entry repeated within 30 seconds.', dup,
+        'The same food, amount and meal saved twice within 30 seconds is almost always one tap registered twice. It is only flagged: remove it if it was.'));
       out.push(chk('f-prot', 'Food', 'Protein never exceeds the energy', !n ? 'na' : impossible.length ? 'bad' : 'ok',
         !n ? 'Nothing logged in the last 90 days.' : impossible.length ? `${plural(impossible.length, 'entry', 'entries')} with more energy in protein than in the whole food.` : `${fmt(n)} entries, all possible.`, impossible,
         '4 kcal per gram of protein: a food cannot hold more energy in its protein than in total. When it does, a number was typed in the wrong box.'));
@@ -153,7 +160,7 @@ function runChecks() {
       out.push(chk('a-kcal', 'Movement', 'Active energy within total energy', kcal.length ? 'bad' : 'ok', kcal.length ? `${plural(kcal.length, 'day')} with more active than total energy.` : 'Every day’s active energy is part of its total.', kcal));
       const over = [];
       for (const k of days) { const L = S.ex[k] || []; for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) { const o = overlapMs(L[i].s, L[i].e, L[j].s, L[j].e); if (o > 0.5 * Math.min(L[i].e - L[i].s, L[j].e - L[j].s)) over.push({ k, t: `${esc(L[i].k)} (${esc(L[i].src || '')}) and ${esc(L[j].k)} (${esc(L[j].src || '')}) overlap` }); } }
-      out.push(chk('a-dup', 'Movement', 'No workout recorded twice', over.length ? 'look' : 'ok', over.length ? `${plural(over.length, 'pair')} of workouts over half overlapping: likely one session from two apps.` : 'No overlapping workouts.', over));
+      out.push(chk('a-dup', 'Movement', 'No workout recorded twice', over.length ? 'look' : 'ok', over.length ? `${plural(over.length, 'pair')} of workouts over half overlapping: likely one session from two apps. Each pair counts once, as the one with more heart rate.` : 'No overlapping workouts.', over));
     }
     // ---------- lifting ----------
     {
@@ -180,6 +187,7 @@ function runChecks() {
         hist === false ? [{ t: 'Health Connect gives only the 30 days before access was allowed. To read further back, allow access to past data for Health in Health Connect’s settings.' }] : [],
         'Everything Health Connect holds is read once, back to its oldest day, and merged like any sync; days you typed keep what you typed.'));
     }
+    storageChecks(out);
     return out;
   });
 }
@@ -197,10 +205,25 @@ function checkSummary() {
 
 // ---------- the page ----------
 const CHECKW = { ok: 'Passed', look: 'Worth a look', bad: 'Does not add up', na: 'Not enough data' };
+// The copies of your data agree, and a copy exists outside the app.
+function storageChecks(out) {
+  if (typeof VH !== 'undefined' && VH) {
+    const V = vaultStats() || {};
+    out.push(chk('s-vault', 'Storage', 'Every change is on the disk', VAULT.ok === false ? 'bad' : 'ok', VAULT.ok === false ? `The last write failed: ${esc(VAULT.err)}. The app keeps retrying.` : `Last saved ${V.saved ? ago(V.saved) : 'not yet'}, ${bytes(V.state || 0)}, read back after writing.`, [], 'Each save goes to a new file that is forced to the disk and then swapped in, so a crash keeps the last whole copy. The size on the disk is compared with what was sent.'));
+    const pts = vaultPoints();
+    out.push(chk('s-points', 'Storage', 'Restore points are being kept', pts.length ? 'ok' : 'na', pts.length ? `${plural(pts.filter(x => x.kind === 'day').length, 'daily point')}, ${plural(pts.filter(x => x.kind === 'month').length, 'monthly one')}.` : 'The first is kept at the end of today.', [], 'The last state of each of the last 14 days and of each month for two years, in the app’s own files.'));
+    out.push(chk('s-out', 'Storage', 'A copy outside the app', BACKUP.folder ? (S.meta.backup && gapDays(S.meta.backup, todayKey()) <= 2 ? 'ok' : 'look') : 'bad',
+      !BACKUP.folder ? 'No backup folder chosen: uninstalling the app would lose everything.' : S.meta.backup ? `Daily to ${esc(BACKUP.folder)}, last ${dateLabel(S.meta.backup)}.` : 'Folder chosen; the first copy is written next time the app opens.', BACKUP.folder ? [] : [{ t: 'Choose a folder in Backup and data', href: '#set-data' }],
+      'Files inside the app go when it is uninstalled. The daily copy in a folder you chose survives that, and a new phone.'));
+  } else {
+    const kept = typeof persisted !== 'undefined' && persisted;
+    out.push(chk('s-web', 'Storage', 'The browser keeps your data', saveFailed ? 'bad' : kept ? 'ok' : 'look', saveFailed ? 'Changes are not being saved.' : kept ? 'Saved twice (localStorage and IndexedDB) and the browser promised to keep them.' : 'Saved, but the browser may clear it when space is short: export a backup now and then.'));
+  }
+}
 function vChecks() {
   const C = runChecks(), Sm = checkSummary(), groups = [...new Set(C.map(c => c.group))];
   const order = { bad: 0, look: 1, ok: 2, na: 3 };
-  const item = x => `<li>${x.k ? `<span class="num ckd">${dateLabel(x.k)}</span>` : ''}<span class="grow">${x.t}</span>${x.href ? `<a class="mini" href="${x.href}">Open</a>` : x.act ? `<button class="mini" data-act="${x.act}" data-k="${x.k}">Open</button>` : x.s ? `<button class="mini" data-act="checkrec" data-s="${x.s}" data-k="${x.k}">Open</button>` : ''}</li>`;
+  const item = x => `<li>${x.k ? `<span class="num ckd">${dateLabel(x.k)}</span>` : ''}<span class="grow">${x.t}</span>${x.fix ? `<button class="mini" data-act="${x.fix}" data-k="${x.k}" data-v="${x.v}">Remove</button>` : x.href ? `<a class="mini" href="${x.href}">Open</a>` : x.act ? `<button class="mini" data-act="${x.act}" data-k="${x.k}">Open</button>` : x.s ? `<button class="mini" data-act="checkrec" data-s="${x.s}" data-k="${x.k}">Open</button>` : ''}</li>`;
   return `${para(`${Sm.all} checks over the last ${CHECK_DAYS} days, by fixed rules. Each says what it compared and with what numbers; anything that fails lists the records, one tap from where to fix them.`)}
     ${stats([[Sm.bad, 'do not add up'], [Sm.look, 'worth a look'], [Sm.ok, 'passed'], [Sm.na, 'need more data']], 'ckstats')}
     ${groups.map(g => sec(g, `<ul class="checks">${C.filter(c => c.group === g).sort((a, b) => order[a.status] - order[b.status]).map(c => `<li class="ck ${c.status}">
@@ -227,6 +250,13 @@ SETPAGES.checks = ['Data checks', vChecks];
 function checkAct(a, el) {
   if (a === 'checkday') { const k = el.dataset.k; if (!DATE.test(k)) return true; day = k; location.hash = 'today'; return true; }
   if (a === 'errcopy') { errCopy(); return true; }
+  if (a === 'fixdup') {
+    const k = el.dataset.k, t = +el.dataset.v, L = S.food[k] || [], i = L.findIndex(e => e.t === t);
+    if (i < 0) return true;
+    const was = L[i]; L.splice(i, 1); save(); buzz('heavy'); render();
+    toast(`Removed the second ${was.n}`, 6000, { label: 'Undo', fn: () => { (S.food[k] ||= []).splice(i, 0, was); save(); render(); } });
+    return true;
+  }
   if (a === 'errclear') { errClear(); render(); return true; }
   if (a === 'checkrec') { if (DATE.test(el.dataset.k) && S[el.dataset.s]) openPop({ kind: 'recedit', s: el.dataset.s, k: el.dataset.k }); return true; }
   return false;

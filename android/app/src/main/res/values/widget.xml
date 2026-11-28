@@ -3,5 +3,7 @@
     <color name="widget_bg">#FFFFFF</color>
     <color name="widget_soft">#6B675F</color>
     <string name="widget_name">Today</string>
+    <string name="widget_hrv_name">Morning HRV</string>
+    <string name="widget_hrv_desc">Four weeks of morning HRV against your normal range</string>
     <string name="widget_desc">Recovery, food left and sleep, with the kcal left</string>
 </resources>

@@ -46,7 +46,7 @@ function plural(n, one, many = one + 's') { return `${n} ${n === 1 ? one : many}
 function hm(min) { const m = ((Math.round(min) % 1440) + 1440) % 1440; return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; }
 function dur(min) { min = Math.round(min); return min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}`; }
 function kg(x) { return x == null ? '' : String(Math.round(x * 100) / 100); }
-function bytes(n) { return n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${r1(n / 1048576)} MB`; }
+function bytes(n) { return n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : n < 1073741824 ? `${r1(n / 1048576)} MB` : `${r1(n / 1073741824)} GB`; }
 function clock(s) { s = Math.max(0, Math.round(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
 
 // ---------- statistics ----------

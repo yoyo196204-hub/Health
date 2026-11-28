@@ -192,7 +192,7 @@ function vToday() {
   const h = new Date().getHours(), greet = h < 5 ? 'Late night' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   return `${appbar(greet, dateLabel(todayKey(), { weekday: 'long', day: 'numeric', month: 'long' }), syncPill())}
     ${welcome()}${needsSyncLine() ? syncLine() : ''}
-    ${part(illCard)}${part(o2Card)}${part(trio)}${part(todoStrip)}${part(insightCard)}${part(fuelCard)}${part(bodyMove)}${part(nightCard)}${part(shoulderCard)}${part(trainCard)}`;
+    ${part(illCard)}${part(o2Card)}${part(trio)}${part(weekDue)}${part(todoStrip)}${part(insightCard)}${part(fuelCard)}${part(bodyMove)}${part(nightCard)}${part(shoulderCard)}${part(trainCard)}`;
 }
 
 // ---------- the log button ----------

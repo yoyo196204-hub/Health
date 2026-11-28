@@ -47,7 +47,33 @@ function offFood(id) {
   const food = { id, n: name.slice(0, 80), u: sg ? `1 serving (${Math.round(g)} ${unit})` : `100 ${unit}`, g, k: Math.round(x(k) * f * 10) / 10, p: r1((x(p) || 0) * f), fb: r1((x(fb) || 0) * f), cat: 'pack', src: 'label',
     bc: code, per100: { k: x(k), p: x(p), c: x(c), ft: x(ft), fb: x(fb), sug: x(sug), salt: x(salt) }, pack, nova: x(nova), ns, unit };
   if (x(c) != null && x(ft) != null) Object.assign(food, { c: r1(x(c) * f), ft: r1(x(ft) * f) });
+  const odd = panelOdd(food.per100);
+  if (odd) food.odd = odd;
   return food;
+}
+// A panel that cannot be right as printed or as typed into Open Food Facts: kept (it may be the only entry for your
+// pack) but marked, and listed after every pack whose panel adds up.
+function panelOdd(P) {
+  if (!P || P.k == null) return null;
+  if (P.k > 950) return 'more energy than pure fat';
+  if (P.k >= 20 && 4 * (P.p || 0) > P.k * 1.05) return 'more energy in protein than in total';
+  if (P.sug != null && P.c != null && P.sug > P.c + 0.5) return 'more sugar than carbs';
+  if ((P.p || 0) + (P.c || 0) + (P.ft || 0) > 102) return 'over 100 g of nutrients in 100 g';
+  return null;
+}
+// A pack's grade, read per 100 kcal so a small and a large pack compare fairly. Only what stands out is said:
+//  · protein 5 g or more per 100 kcal: as dense as dal or curd, worth its calories when protein is the target;
+//  · sugars over a quarter of the energy (WHO asks free sugars under a tenth of the day's energy; a label's "sugars"
+//    also counts milk and fruit sugar, so only a large share is called out);
+//  · NOVA group 4, ultra-processed: the class linked in cohorts and one controlled trial to eating more.
+function packGrade(f) {
+  const P = f.per100;
+  if (!P || !P.k || P.k < 20) return '';
+  const out = [], pk = (P.p || 0) / P.k * 100, sk = P.sug != null ? P.sug * 4 / P.k * 100 : null;
+  if (pk >= 5) out.push(`<i class="pg good">${r1(pk)} g protein / 100 kcal</i>`);
+  if (sk != null && sk >= 25) out.push(`<i class="pg bad">sugar ${Math.round(sk)}% of kcal</i>`);
+  if (f.nova === 4) out.push('<i class="pg mid">ultra-processed</i>');
+  return out.length ? `<span class="pgs">${out.join('')}</span>` : '';
 }
 // A pack at a portion you name, from its panel per 100 g: the Kirana shelf's plain names and usual amounts.
 function offPortion(code, n, g) {
@@ -71,7 +97,7 @@ function offSearch(q, n = 12) {
   const alts = words.map(w => [w, ...String(FOOD_ALIAS[w] || '').split(' ').filter(a => a.length > 1)]);
   const hits = [];
   for (const [hay, code] of OFF.rows) {
-    if (alts.every(a => a.some(w => hay.includes(w)))) hits.push([(hay.startsWith(words[0]) ? 0 : 2) + (code.startsWith('890') ? 0 : 1) + hay.length / 200 + (alts.every((a, i) => hay.includes(words[i])) ? 0 : 0.5), code]);
+    if (alts.every(a => a.some(w => hay.includes(w)))) hits.push([(hay.startsWith(words[0]) ? 0 : 2) + (offFood('b' + code)?.odd ? 10 : 0) + (code.startsWith('890') ? 0 : 1) + hay.length / 200 + (alts.every((a, i) => hay.includes(words[i])) ? 0 : 0.5), code]);
     if (hits.length > 4000) break;
   }
   // The same pack entered many times over (each size, each scan) shows once: its best-ranked entry.

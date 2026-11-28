@@ -33,6 +33,12 @@ class Feel(private val a: MainActivity) {
     private val THUD = if (Build.VERSION.SDK_INT >= 31) VibrationEffect.Composition.PRIMITIVE_THUD else -1
     private val LOW = if (Build.VERSION.SDK_INT >= 31) VibrationEffect.Composition.PRIMITIVE_LOW_TICK else -1
     private val has: Set<Int> = supported()
+    /**
+     * A rotor (ERM) motor, as in the OnePlus Nord CE 5: no haptic primitives and no amplitude control. It spins up in
+     * 20–40 ms, so very short pulses are not felt and close ones blur into one buzz. Such phones get the maker's own
+     * tuned clicks, and the patterns below use longer pulses with wider gaps.
+     */
+    val rotor: Boolean = vib != null && has.isEmpty() && !amp
     private fun supported(): Set<Int> {
         val v = vib ?: return emptySet()
         if (Build.VERSION.SDK_INT < 30) return emptySet()
@@ -72,14 +78,15 @@ class Feel(private val a: MainActivity) {
             "ok" -> compose(Triple(CLICK, 1f, 0), Triple(TICK, 0.6f, 50)) ?: predefined(VibrationEffect.EFFECT_CLICK) ?: VibrationEffect.createOneShot(16, 210)
             "done" -> compose(Triple(RISE, 0.5f, 0), Triple(CLICK, 1f, 20), Triple(CLICK, 0.8f, 90), Triple(CLICK, 1f, 110))
                 ?: compose(Triple(CLICK, 0.7f, 0), Triple(CLICK, 0.85f, 90), Triple(CLICK, 1f, 110))
-                ?: wave(longArrayOf(0, 18, 70, 18, 70, 36), intArrayOf(0, 200, 0, 230, 0, 255))
+                ?: if (rotor) VibrationEffect.createWaveform(longArrayOf(0, 32, 120, 32, 120, 48), -1)
+                else wave(longArrayOf(0, 18, 70, 18, 70, 36), intArrayOf(0, 200, 0, 230, 0, 255))
             "warn" -> compose(Triple(THUD, 1f, 0), Triple(CLICK, 1f, 80)) ?: compose(Triple(CLICK, 1f, 0), Triple(CLICK, 1f, 70))
                 ?: predefined(VibrationEffect.EFFECT_DOUBLE_CLICK) ?: wave(longArrayOf(0, 30, 55, 30), intArrayOf(0, 255, 0, 255))
             "heavy" -> compose(Triple(THUD, 1f, 0), Triple(CLICK, 1f, 30)) ?: predefined(VibrationEffect.EFFECT_HEAVY_CLICK) ?: VibrationEffect.createOneShot(30, 255)
             // The pacer: a swell for breathing in, a falling ease for breathing out, a soft low tick on a hold.
-            "inhale" -> compose(Triple(RISE, 1f, 0)) ?: wave(longArrayOf(0, 60, 60, 60, 60, 60), intArrayOf(0, 40, 80, 120, 170, 220))
+            "inhale" -> compose(Triple(RISE, 1f, 0)) ?: if (rotor) VibrationEffect.createWaveform(longArrayOf(0, 24, 140, 36), -1) else wave(longArrayOf(0, 60, 60, 60, 60, 60), intArrayOf(0, 40, 80, 120, 170, 220))
             "exhale" -> compose(Triple(FALL, 1f, 0), Triple(LOW, 0.5f, 120)) ?: compose(Triple(FALL, 1f, 0))
-                ?: wave(longArrayOf(0, 60, 60, 60, 60), intArrayOf(0, 200, 140, 80, 30))
+                ?: if (rotor) VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE) else wave(longArrayOf(0, 60, 60, 60, 60), intArrayOf(0, 200, 140, 80, 30))
             "hold" -> compose(Triple(LOW, 1f, 0)) ?: compose(Triple(TICK, 0.5f, 0)) ?: VibrationEffect.createOneShot(8, 90)
             else -> compose(Triple(TICK, 0.6f, 0)) ?: VibrationEffect.createOneShot(8, 100)
         }
