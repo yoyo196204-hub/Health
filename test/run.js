@@ -359,7 +359,7 @@ test('every food has a unique id, a known category, and calories that match its 
     if (f.per) {
       const [k, p, cb, ft, fb] = f.per, e = 4 * p + 4 * cb + 9 * ft + 2 * fb;
       assert.ok(Math.abs(e - k) / Math.max(e, k) <= 0.2, `${f.id}: panel ${k} kcal vs ${Math.round(e)} from its macros`);
-      assert.ok(Math.abs(f.k - k * f.g / 100) <= 0.5 && Math.abs(f.p - p * f.g / 100) <= 0.05, `${f.id}: serving is not its panel scaled`);
+      assert.ok(Math.abs(f.k - k * f.g / 100) <= 0.5 && Math.abs(f.p - p * f.g / 100) <= 0.05 + 1e-9, `${f.id}: serving is not its panel scaled`);
     } else assert.ok(f.c == null && f.ft == null, `${f.id}: a maker-stated food must not invent carbs or fat`);
   }
   assert.strictEqual(run(c, 'allFoods().length'), ids.size);

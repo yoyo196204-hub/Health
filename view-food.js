@@ -232,6 +232,11 @@ function addRows(meal) {
     }
     return ADDORDER.ids.map(food).filter(Boolean).map(f => row(f, S.custom.includes(f))).join('');
   }
+  if (cat === 'kirana') {
+    if (!OFF) return '<li class="empty sub">Opening the pack list…</li>';
+    return KIRANA.map(([h, items]) => { const fs = items.map(([c, n, g]) => offPortion(c, n, g)).filter(Boolean); return fs.length ? `<li class="subhead"><span class="eyebrow">${h}</span></li>${fs.map(f => row(f)).join('')}` : ''; }).join('')
+      + '<li class="subhead"><span class="eyebrow">Each pack’s own printed panel · <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a>. Any other pack: search its name, or type its barcode.</span></li>';
+  }
   return allFoods().filter(f => f.cat === cat).map(f => row(f, f.cat === 'mine')).join('');
 }
 function addFoot(meal) {

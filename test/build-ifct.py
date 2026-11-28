@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+"""Indian staples from IFCT 2017 (ICMR-NIN), for data.js: python3 test/build-ifct.py path/to/index.csv
+The table is the npm package @ifct2017/compositions (index.csv; MIT, the data is NIN's IFCT 2017). Each line printed
+is a PANELS entry: protein, available carbohydrate, fat and dietary fibre per 100 g exactly as IFCT gives them; energy
+is left to panelKcal (the FAO factors IFCT itself uses), as the library's other IFCT foods are."""
+import csv, sys
+# code, id, name (Marathi first, as the shop says it), household unit, grams, category
+PICK = [
+ ('A011','if_pohe','Pohe, raw (rice flakes)','1 katori (50 g)',50,'staples'),
+ ('A014','if_ukda','Ukda tandul (parboiled rice), raw','100 g',100,'staples'),
+ ('A013','if_brown','Rice, brown, raw','100 g',100,'staples'),
+ ('A018','if_maida','Maida (refined flour)','100 g',100,'staples'),
+ ('A020','if_gahu','Gahu (whole wheat grain)','100 g',100,'staples'),
+ ('A021','if_dalia','Dalia (broken wheat), raw','1 katori (40 g)',40,'staples'),
+ ('A022','if_rava','Rava / suji (semolina), raw','1 katori (40 g)',40,'staples'),
+ ('A023','if_shevaya','Shevaya (vermicelli), raw','1 katori (40 g)',40,'staples'),
+ ('A001','if_rajgira','Rajgira (amaranth seed)','100 g',100,'staples'),
+ ('A004','if_jav','Jav (barley)','100 g',100,'staples'),
+ ('A006','if_makka','Makka (dry maize)','100 g',100,'staples'),
+ ('A009','if_quinoa','Quinoa, raw','100 g',100,'staples'),
+ ('B001','if_chanadal','Chana dal, raw','100 g',100,'staples'),
+ ('B002','if_kalachana','Kala chana (whole), raw','100 g',100,'staples'),
+ ('B003','if_udiddal','Udid dal, raw','100 g',100,'staples'),
+ ('B004','if_udid','Udid, whole, raw','100 g',100,'staples'),
+ ('B010','if_moongdal','Moong dal, raw','100 g',100,'staples'),
+ ('B012','if_kulith','Kulith (horse gram), raw','100 g',100,'staples'),
+ ('B013','if_masoordal','Masoor dal, raw','100 g',100,'staples'),
+ ('B016','if_matki','Matki (moth bean), raw','100 g',100,'staples'),
+ ('B006','if_chavli','Chavli (cowpea), raw','100 g',100,'staples'),
+ ('B009','if_val','Val / pavta (field bean), raw','100 g',100,'staples'),
+ ('B017','if_vatana','Vatana (dried peas), raw','100 g',100,'staples'),
+ ('B025','if_soybean','Soybean, raw','100 g',100,'staples'),
+ ('H005','if_kaju','Kaju (cashew)','10 pieces (15 g)',15,'staples'),
+ ('H018','if_pista','Pista','1 handful (15 g)',15,'staples'),
+ ('H021','if_akrod','Akrod (walnut)','4 halves (15 g)',15,'staples'),
+ ('H006','if_khobra','Khobra (dry coconut)','1 tbsp grated (10 g)',10,'staples'),
+ ('H007','if_naral','Ola naral (fresh coconut)','1/4 cup grated (25 g)',25,'staples'),
+ ('H011','if_til','Til (white sesame)','1 tbsp (10 g)',10,'staples'),
+ ('H014','if_javas','Javas / alsi (flax seeds)','1 tbsp (10 g)',10,'staples'),
+ ('H020','if_sunflower','Sunflower seeds','1 tbsp (10 g)',10,'staples'),
+ ('H008','if_halim','Halim (garden cress seeds)','1 tsp (5 g)',5,'staples'),
+ ('I001','if_gul','Gul (jaggery)','1 piece (10 g)',10,'staples'),
+ ('E064','if_chinch','Chinch (tamarind pulp)','1 tsp (10 g)',10,'staples'),
+ ('L001','if_mhais','Mhashiche doodh (buffalo milk)','1 glass (200 ml)',200,'staples'),
+ ('L002','if_gay','Gayiche doodh (cow milk)','1 glass (200 ml)',200,'staples'),
+ ('L004','if_khava','Khava (khoa)','30 g',30,'staples'),
+ ('T005','if_shengtel','Shengdana tel (groundnut oil)','1 tsp (5 g)',5,'staples'),
+ ('T012','if_sunoil','Sunflower oil','1 tsp (5 g)',5,'staples'),
+ ('T008','if_ricebran','Rice bran oil','1 tsp (5 g)',5,'staples'),
+ ('T001','if_khobreltel','Khobrel tel (coconut oil)','1 tsp (5 g)',5,'staples'),
+ ('T004','if_tiltel','Tilache tel (sesame oil)','1 tsp (5 g)',5,'staples'),
+ ('T014','if_dalda','Vanaspati / Dalda','1 tsp (5 g)',5,'staples'),
+ ('F006','if_batata','Batata (potato), raw','1 medium (150 g)',150,'market'),
+ ('G017','if_kanda','Kanda (onion), raw','1 medium (100 g)',100,'market'),
+ ('D075','if_tomato','Tomato, raw','1 medium (100 g)',100,'market'),
+ ('D056','if_bhendi','Bhendi (okra), raw','100 g',100,'market'),
+ ('D031','if_vangi','Vangi (brinjal), raw','100 g',100,'market'),
+ ('D036','if_flower','Flower (cauliflower), raw','100 g',100,'market'),
+ ('C015','if_kobi','Kobi (cabbage), raw','100 g',100,'market'),
+ ('C020','if_methi','Methi (fenugreek leaves), raw','1 judi (100 g)',100,'market'),
+ ('C033','if_palak','Palak (spinach), raw','1 judi (100 g)',100,'market'),
+ ('D039','if_gavar','Gavar (cluster beans), raw','100 g',100,'market'),
+ ('D049','if_farasbi','Farasbi (French beans), raw','100 g',100,'market'),
+ ('D061','if_matar','Matar (fresh peas), raw','100 g',100,'market'),
+ ('D046','if_shevga','Shevgyachya shenga (drumstick), raw','100 g',100,'market'),
+ ('D007','if_dudhi','Dudhi (bottle gourd), raw','100 g',100,'market'),
+ ('D004','if_karle','Karle (bitter gourd), raw','100 g',100,'market'),
+ ('D066','if_bhopla','Lal bhopla (pumpkin), raw','100 g',100,'market'),
+ ('F002','if_gajar','Gajar (carrot), raw','1 medium (80 g)',80,'market'),
+ ('F001','if_beet','Beet, raw','100 g',100,'market'),
+ ('F016','if_shingada','Shingada (water chestnut)','100 g',100,'market'),
+ ('J001','if_mushroom','Mushroom (button), raw','100 g',100,'market'),
+ ('N001','if_chleg','Chicken leg, skinless, raw','100 g',100,'market'),
+ ('O003','if_mutton','Mutton (goat leg), raw','100 g',100,'market'),
+ ('P034','if_bangda','Bangda (mackerel), raw','100 g',100,'market'),
+ ('P057','if_paplet','Paplet (white pomfret), raw','100 g',100,'market'),
+ ('P007','if_bombil','Bombil (Bombay duck), raw','100 g',100,'market'),
+ ('S008','if_kolambi','Kolambi (prawns), raw','100 g',100,'market'),
+ ('Q001','if_khekda','Khekda (crab), raw','100 g',100,'market'),
+ ('R001','if_tisrya','Tisrya (clams), raw','100 g',100,'market'),
+]
+rows = list(csv.DictReader(open(sys.argv[1], encoding='utf-8')))
+col = lambda name: next(c for c in rows[0] if c.endswith('; ' + name))
+by = {r[col('code')]: r for r in rows}
+f = lambda r, k: round(float(r[col(k)] or 0), 2)
+for code, id, n, u, g, cat in PICK:
+    r = by[code]
+    print(f"  ['{id}', '{n}', '{u}', {g}, '{cat}', 'ifct', 'IFCT 2017 {code}', [null, {f(r,'protcnt')}, {f(r,'choavldf')}, {f(r,'fatce')}, {f(r,'fibtg')}]],")
