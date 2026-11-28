@@ -1001,6 +1001,7 @@ html.still .dvdot { animation: none !important; }
 .batt::after { content: ''; position: absolute; left: 2px; top: 2px; bottom: 2px; width: calc((100% - 4px) * var(--b) / 100); border-radius: 1px; background: currentColor; }
 .device p.sub.small { margin: 10px 0 0; }
 .seg.subnav2 { position: sticky; top: calc(6px + env(safe-area-inset-top)); z-index: 4; margin: 10px 0 6px; box-shadow: 0 6px 18px -12px rgba(0, 0, 0, .35); }
+.seg.subnav2 button { padding: 9px 2px; font-size: 13px; letter-spacing: -.01em; }
 .stu { animation: fadein .22s var(--ease); }
 @keyframes fadein { from { opacity: 0; transform: translateY(6px); } }
 html.still .stu, html.still .selbar { animation: none; }
@@ -1413,3 +1414,22 @@ html.still .wvbody, html.still .wvchart .b, html.still .wvwk i { animation: none
 html.still .wvchart .ln, html.still .wvspark path { animation: none; stroke-dashoffset: 0; }
 @media (prefers-reduced-motion: reduce) { .wvbody, .wvchart .b, .wvwk i { animation: none; } .wvchart .ln, .wvspark path { animation: none; stroke-dashoffset: 0; } }
 .wvnav { padding: 2px 16px; } .wvnav .navrow { margin: 0; border: 0; }
+
+/* ---------- the strap's Trends and Calibrate (strap-trends.js) ---------- */
+.k.dash { height: 0; border-top: 2px dashed var(--soft); border-radius: 0; }
+.baplot .zero { stroke: var(--line2); }
+.baplot .bias { stroke: var(--accent); stroke-width: 2; }
+.baplot .loa { stroke: var(--soft); stroke-dasharray: 4 4; }
+.baplot circle { fill: var(--heart); opacity: .75; animation: bapop .4s var(--spring) both; animation-delay: var(--d); transform-box: fill-box; transform-origin: center; }
+.baplot circle.hollow { fill: var(--bg2); stroke: var(--heart); stroke-width: 1.4; }
+@keyframes bapop { from { transform: scale(0); opacity: 0; } }
+.calstat { box-shadow: var(--shadow), var(--hi), inset 4px 0 0 var(--c, var(--soft)); }
+.calstat.good { --c: var(--good); } .calstat.mid { --c: var(--mid); } .calstat.bad { --c: var(--bad); }
+.calstat h2 { margin: 4px 0 6px; color: var(--c); }
+.calsteps { list-style: none; margin: 4px 0 12px; padding: 0; display: grid; gap: 6px; counter-reset: s; }
+.calsteps li { display: grid; grid-template-columns: 26px 56px 1fr; align-items: center; gap: 8px; padding: 9px 12px; border-radius: var(--r1); background: var(--bg3); counter-increment: s; animation: wvin .35s var(--ease) both; animation-delay: var(--d); }
+.calsteps li::before { content: counter(s); display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--move); color: var(--bg2); font: 700 12px var(--sans); }
+.calsteps b { font-size: 13.5px; } .calsteps span { color: var(--ink2); font-size: 13.5px; }
+.calnudge { text-decoration: none; color: inherit; box-shadow: var(--shadow), var(--hi), inset 3px 0 0 var(--mid); }
+html.still .baplot circle, html.still .calsteps li { animation: none; }
+@media (prefers-reduced-motion: reduce) { .baplot circle, .calsteps li { animation: none; } }

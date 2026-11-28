@@ -679,7 +679,7 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
     await page.fill('#q', 'masoor'); await page.waitForTimeout(500);
     const heads = await page.evaluate(() => [...document.querySelectorAll('#rows .subhead')].map(e => e.textContent.trim()));
     assert.match(heads[0] || '', /^Indian recipes · INDB$/);
-    const iid = await page.evaluate(() => document.querySelector('#rows li[data-id^="i"]')?.dataset.id);
+    const iid = await page.evaluate(() => [...document.querySelectorAll('#rows li[data-id]')].map(e => e.dataset.id).find(id => /^i(ASC|BFP|OSR)\d{3}$/.test(id)));
     assert.ok(/^i(ASC|BFP|OSR)\d{3}$/.test(iid || ''), `an INDB recipe: ${iid}`);
     await page.tap(`#rows li[data-id="${iid}"] .grow`); await page.waitForTimeout(300);
     const r = await page.evaluate(id => (S.food[todayKey()] || []).find(x => x.id === id), iid);
@@ -696,6 +696,51 @@ const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', png: 
   });
   // Nothing drawn on a screen may sit on top of text: no two runs of text overlap, and no icon, button, meter or
   // input covers text it does not contain. Rings (text in the middle of a drawn circle) are what they are.
+  await test('kirana shelf: packs by shop shelf under plain names, and a tap logs exactly what the row shows', async () => {
+    await go('add-snack'); await page.waitForTimeout(800);
+    await page.tap('.chips button[data-c="kirana"]'); await page.waitForFunction(() => document.querySelector('#rows li[data-id="b8901719100956"]'), null, { timeout: 15000 });
+    const heads = await page.$$eval('#rows .subhead .eyebrow', e => e.map(x => x.textContent));
+    assert.ok(heads.includes('Biscuits & bread') && heads.includes('Milk & dairy'), heads.join('|'));
+    await page.tap('#rows li[data-id="b8901719100956"] .add'); await page.waitForTimeout(300);
+    const e = await page.evaluate(() => S.food[todayKey()].find(x => x.id === 'b8901719100956'));
+    assert.strictEqual(e.n, 'Parle-G'); assert.strictEqual(e.g, 25); assert.ok(Math.abs(e.k - 113.5) < 1, String(e.k));
+    await page.evaluate(() => { S.food[todayKey()] = S.food[todayKey()].filter(x => x.id !== 'b8901719100956'); save(); });
+    await page.tap('.chips button[data-c="staples"]'); await page.waitForTimeout(300);
+    assert.ok(await page.$('#rows li[data-id="if_kulith"]'), 'kulith on the staples shelf');
+    await page.fill('#q', 'suji'); await page.waitForTimeout(400);
+    assert.strictEqual(await page.$eval('#rows .nm', x => x.textContent), 'Rava / suji (semolina), raw');
+    await page.fill('#q', ''); await go('today');
+  });
+  await test('watch page: every figure by week, month and year, read by finger, its change said with an interval', async () => {
+    await page.evaluate(() => { for (let i = 1; i <= 120; i++) { const k = shift(todayKey(), -i); S.wx[k] = Object.assign({}, S.wx[k], { hv: 40 + (i % 9), wm: 900 }); } save(); });
+    await go('watch'); await shot('watch');
+    assert.ok(await page.$('.wvrow[href="#watch-steps"]'), 'steps listed');
+    await page.tap('button[data-act="wvcat"][data-v="heart"]'); await page.waitForTimeout(300);
+    await page.tap('.wvrow[href="#watch-hrv"]'); await page.waitForTimeout(600);
+    for (const r of ['week', 'month', 'year', 'all']) {
+      await page.tap(`button[data-act="wvrange"][data-v="${r}"]`); await page.waitForTimeout(300);
+      assert.ok(await page.$('.wvchart'), `chart on ${r}`);
+    }
+    await page.tap('button[data-act="wvrange"][data-v="month"]'); await page.waitForTimeout(300);
+    const box = await page.$eval('.wvchart .hit', h => { const r = h.getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; });
+    await page.mouse.move(box[0] + box[2] * 0.5, box[1] + box[3] / 2);
+    const read = await page.$eval('.wvread', x => x.textContent);
+    assert.ok(/\d+ ms/.test(read) && !/mean of/.test(read), read);
+    const txt = await page.$eval('#view', x => x.textContent);
+    assert.ok(/95% interval/.test(txt), 'the change carries its interval');
+    await shot('watch-hrv'); await go('today');
+  });
+  await test('strap: trends read HRV against your own normal, and calibration says when the watch was last checked', async () => {
+    await go('strap-trends'); await page.waitForTimeout(400);
+    assert.ok(/Morning HRV/.test(await page.$eval('#view', x => x.textContent)));
+    await shot('strap-trends');
+    await go('strap-cal'); await page.waitForTimeout(400);
+    const t = await page.$eval('.calstat h2', x => x.textContent);
+    assert.ok(['Not calibrated', 'Check again', 'Calibrated', 'The watch has moved'].includes(t), t);
+    await page.tap('button[data-act="stucal"]'); await page.waitForTimeout(400);
+    assert.strictEqual(await page.evaluate(() => [STU.part, STU.run].join()), 'live,workout');
+    await shot('strap-cal'); await go('today');
+  });
   await test('no text is covered by other text or by anything drawn, on any main screen or the log sheet', async () => {
     const audit = () => {
       const out = [], scope = document.querySelector('#sheet .sheet') || document.getElementById('view');
