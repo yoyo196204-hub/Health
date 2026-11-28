@@ -18,14 +18,9 @@ const HERE = location.origin + location.pathname.replace(/[^/]*$/, '');
 // Every build is published, signed with the app's permanent key, on the repository's Releases page.
 const APK = 'https://github.com/yoyo196204-hub/Health/releases/latest/download/health.apk';
 
-// ---------- the app's private copy ----------
-// Inside the app every save is also written, a moment later, to a file only this app can read. If the WebView's
-// storage is ever lost or damaged, the app starts from that copy instead of from nothing.
-function mirrorRead() {
-  if (!NATIVE || typeof NATIVE.mirrorRead !== 'function') return null;
-  try { const t = nat('mirrorRead'); return t ? sanitize(JSON.parse(t)) : null; } catch (e) { return null; }
-}
-function mirrorWrite(text) { if (NATIVE && typeof NATIVE.mirrorWrite === 'function') nat('mirrorWrite', text); }
+// ---------- the vault ----------
+// Each write is read back by the app; a failure is retried and, if it keeps failing, shown at the top of the page.
+NEV.vault = r => { if (vaultDone(r)) render(); };
 
 // ---------- Health Connect ----------
 const SYNC = { busy: false, err: '', status: null, got: null, at: 0, zepp: 0, timer: null };

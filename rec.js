@@ -4,7 +4,9 @@
 // recording and never change it. One store for every kind (morning check, spot check, Live, cardio, the Lab) and for
 // every person who wears the strap.
 //
-// Where it lives: IndexedDB (no practical size limit, and asked to be kept by the browser), with every recording also
+// Where it lives: inside the Android app, one file per recording in the app's private storage (the vault, Vault.kt),
+// which nothing but uninstalling or "Clear storage" removes; a deleted recording sits in a bin there for 30 days.
+// IndexedDB keeps a second copy (no practical size limit, and asked to be kept by the browser), with every recording also
 // held in memory once loaded. Without IndexedDB (an old browser, the engine tests) it falls back to localStorage,
 // then to memory alone. Writes made before the store has opened are queued, never lost. Backups and exports carry
 // every recording; an import merges them by id, keeping the newer edit of each.
@@ -113,7 +115,10 @@ function recList(f = {}) {
 function lsAll() { try { const a = JSON.parse(localStorage.getItem(REC_LS) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
 function lsWrite() { try { localStorage.setItem(REC_LS, JSON.stringify(recAll())); return true; } catch (e) { return false; } }
 function idbReq(rq) { return new Promise((ok, no) => { rq.onsuccess = () => ok(rq.result); rq.onerror = () => no(rq.error); }); }
+const RVH = typeof VH !== 'undefined' ? VH : null;
+function recFile(op, x) { if (!RVH) return; try { op === 'put' ? RVH.recPut(x.id, JSON.stringify(x)) : RVH.recDel(x); } catch (e) { recFail(e); } }
 function recDbWrite(ops) {
+  for (const [op, x] of ops) recFile(op, x);
   if (RSTORE.mode === 'idb' && RSTORE.db) {
     try {
       const tx = RSTORE.db.transaction('recs', 'readwrite'), st = tx.objectStore('recs');
@@ -162,6 +167,11 @@ async function recInit() {
   } catch (e) {
     try { localStorage.getItem('x'); RSTORE.mode = 'ls'; rows = lsAll(); } catch (e2) { RSTORE.mode = 'mem'; }
   }
+  // The vault's files are the main copy in the app: anything only one side has is copied to the other.
+  let files = [];
+  if (RVH) { try { files = JSON.parse(RVH.recAll()) || []; } catch (e) { files = []; logError?.(new Error('Recordings in the app’s files could not be read')); } }
+  const inFiles = new Map(files.map(x => [x?.id, x?.at || 0]));
+  rows = rows.concat(files);
   for (const x of rows) {
     const r = cleanRec(x);
     if (!r) continue;
@@ -173,6 +183,7 @@ async function recInit() {
   const q = RSTORE.queue.splice(0);
   if (q.length) recDbWrite(q);
   if (RSTORE.mode === 'ls' && rows.length) lsWrite();
+  if (RVH) for (const r of RSTORE.map.values()) if (!inFiles.has(r.id) || inFiles.get(r.id) < r.at) recFile('put', r);
   recSettleDrafts();
   recMigrate();
   memo.clear();

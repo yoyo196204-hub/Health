@@ -299,7 +299,7 @@ function sanitize(raw) {
       sync: num(meta.sync, 1e12, 1e13), fresh: cleanFresh(meta.fresh), backup: DATE.test(meta.backup) ? meta.backup : null,
       h9: h9 && str(h9.id, 64) ? { id: str(h9.id, 64), name: str(h9.name, 40) } : null,
       tgt: tg && num(tg.k, 800, 6000) != null && DATE.test(tg.at) ? { k: +tg.k, p: num(tg.p, 20, 400) || 0, at: tg.at, sig: str(tg.sig, 80) } : null,
-      welcomed: meta.welcomed === true, imported: str(meta.imported, 40) || null,
+      welcomed: meta.welcomed === true, seq: num(meta.seq, 0, 1e12) || 0, imported: str(meta.imported, 40) || null,
       // Reading back through Health Connect's history: the oldest day read so far, empty chunks in a row, and whether it is done.
       back: obj(meta.back) && DATE.test(meta.back.to) ? { to: meta.back.to, empty: num(meta.back.empty, 0, 99) || 0, done: meta.back.done === true, at: num(meta.back.at, 1e12, 1e13) } : null,
       og: obj(meta.og) && num(meta.og.at, 1e12, 1e13) != null ? { at: +meta.og.at, file: str(meta.og.file, 60), seen: str(meta.og.seen, 90) } : null,
@@ -310,40 +310,132 @@ function sanitize(raw) {
 }
 
 // ---------- reading and writing ----------
+// Inside the Android app the data lives in the vault: plain files in the app's private storage (Vault.kt), limited
+// only by the phone's free space, written atomically, with a restore point for each of the last 14 days and each
+// month. localStorage is kept as a quick second copy while it fits. In a browser, localStorage is the main copy and
+// IndexedDB a second one, and the browser is asked to keep both even when space runs low.
+// Every save carries a counter (meta.seq): on start the newest readable copy wins, so a copy that missed the last
+// save can never overwrite one that has it.
+const VH = typeof window !== 'undefined' && window.HealthNative && typeof window.HealthNative.vaultRead === 'function' ? window.HealthNative : null;
+const SEQ = { hi: 0 };
+const VAULT = { on: !!VH, ok: null, at: 0, bytes: 0, err: '', seq: 0, timer: null, src: '', fails: 0 };
 function readKey(key) {
   const raw = localStorage.getItem(key);
   return raw == null ? undefined : sanitize(JSON.parse(raw));
 }
-// Main copy first, then the app's private mirror, then yesterday's automatic backup.
-// Unreadable data is set aside, never silently discarded.
+function vaultText() { try { return VH ? VH.vaultRead() : null; } catch (e) { return null; } }
 function load() {
-  let main;
+  let main, vault;
   try {
     try { main = readKey(KEY); }
     catch (e) { try { localStorage.setItem(KEY + '.corrupt', String(localStorage.getItem(KEY)).slice(0, 4e6)); } catch (_) { /* no room */ } main = null; }
-    if (main) { loadedMain = true; return main; }
-    const mirror = typeof mirrorRead === 'function' ? mirrorRead() : null;
-    if (mirror) { recovered = 'mirror'; loadNote = main === null ? 'Saved data was damaged. Restored the app’s own copy from your last session.' : ''; return mirror; }
-    try {
-      const bak = readKey(KEY + '.bak');
-      if (bak) { recovered = 'bak'; loadNote = 'Saved data was unreadable. Restored the automatic backup from the day before.'; return bak; }
-    } catch (e) { /* the backup is damaged too */ }
-    if (main === null) loadNote = 'Saved data was unreadable and has been set aside. Import your last backup from You (the face at the top) › Backup and data.';
-  } catch (e) { loadNote = 'This browser is blocking storage. Nothing you enter will be kept.'; }
+  } catch (e) { main = undefined; }
+  if (VH) {
+    const t = vaultText();
+    if (t) try { vault = sanitize(JSON.parse(t)); } catch (e) { vault = null; logError?.(new Error('The vault copy could not be read')); }
+  }
+  // The newest of the two; on a tie the vault, which is written atomically.
+  if (vault && (!main || (vault.meta.seq || 0) >= (main.meta.seq || 0))) { loadedMain = true; VAULT.src = 'vault'; VAULT.seq = vault.meta.seq || 0; SEQ.hi = Math.max(VAULT.seq, main?.meta.seq || 0); if (main === null) loadNote = 'This phone’s quick copy was damaged; the app’s own files were complete, so nothing was lost.'; return vault; }
+  if (main) { loadedMain = true; VAULT.src = 'local'; SEQ.hi = Math.max(main.meta.seq || 0, vault?.meta.seq || 0); if (VH && vault !== undefined) recovered = 'local'; return main; }
+  try {
+    const bak = readKey(KEY + '.bak');
+    if (bak) { recovered = 'bak'; loadNote = 'Saved data was unreadable. Restored the automatic backup from the day before.'; return bak; }
+  } catch (e) { /* the backup is damaged too */ }
+  if (main === null || vault === null) loadNote = 'Saved data was unreadable and has been set aside. Restore a point from You › Backup and data, or import your last backup.';
+  else if (main === undefined && !VH) { try { localStorage.getItem('x'); } catch (e) { loadNote = 'This browser is blocking storage. Nothing you enter will be kept.'; } }
   return sanitize({});
 }
-let mirrorTimer = null;
 function save() {
   memo.clear();   // cached figures depend on the data
+  // Always higher than any copy seen, even after an import or an undo brings in an older counter.
+  S.meta.seq = SEQ.hi = Math.max(S.meta.seq || 0, SEQ.hi, VAULT.seq || 0) + 1;
   let text;
-  try { text = JSON.stringify(S); localStorage.setItem(KEY, text); saveFailed = false; }
-  catch (e) { if (!saveFailed) toast('Storage is full or blocked. Export a backup from You › Backup and data now.', 5000); saveFailed = true; }
-  // Inside the app, a second copy in private storage, written a moment after the last change.
-  if (typeof mirrorWrite === 'function' && text) { clearTimeout(mirrorTimer); mirrorTimer = setTimeout(() => mirrorWrite(text), 1200); }
+  try { text = JSON.stringify(S); } catch (e) { logError?.(e); return; }
+  let local = true;
+  try { localStorage.setItem(KEY, text); } catch (e) { local = false; }
+  if (VH) {
+    // The vault is the main copy: a full localStorage only means the quick copy lags. The start always picks the newest.
+    if (!local) try { localStorage.removeItem(KEY); } catch (e) { /* nothing to free */ }
+    clearTimeout(VAULT.timer);
+    VAULT.timer = setTimeout(vaultPush, 250);
+    saveFailed = VAULT.ok === false && VAULT.fails > 2;
+  } else {
+    idbQueue(text, S.meta.seq);
+    if (!local && !saveFailed && !IDBS.ok) toast('Storage is full or blocked. Export a backup from You › Backup and data now.', 5000);
+    saveFailed = !local && !IDBS.ok;
+  }
 }
-function flushMirror() { if (mirrorTimer) { clearTimeout(mirrorTimer); mirrorTimer = null; if (typeof mirrorWrite === 'function') mirrorWrite(JSON.stringify(S)); } }
-// Once a day, before anything is written, keep a copy of the last good state.
+function vaultPush() { VAULT.timer = null; try { VH.vaultWrite(JSON.stringify(S), S.meta.seq || 0); } catch (e) { VAULT.ok = false; VAULT.err = String(e.message || e); VAULT.fails++; } }
+// Called when the app goes to the background: everything queued reaches the disk now.
+function flushMirror() {
+  if (VH) { if (VAULT.timer) { clearTimeout(VAULT.timer); vaultPush(); } try { VH.vaultFlush(); } catch (e) { /* nothing queued */ } }
+  else idbFlush();
+}
+// The vault's answer to each write: it reads the file back and reports its size.
+function vaultDone(r) {
+  if (!r || r.rec) { if (r?.rec) { VAULT.err = `A recording could not be written: ${r.err}`; logError?.(new Error(VAULT.err)); } return; }
+  const was = VAULT.ok;
+  VAULT.ok = !!r.ok; VAULT.at = r.at || Date.now(); if (r.bytes) VAULT.bytes = r.bytes;
+  if (r.ok) { VAULT.fails = 0; VAULT.err = ''; VAULT.seq = r.seq; if (saveFailed) { saveFailed = false; return true; } vaultSettle(); }
+  else { VAULT.fails++; VAULT.err = r.err || 'write failed'; logError?.(new Error(`Saving to the app’s files failed: ${VAULT.err}`));
+    if (VAULT.fails === 3) { saveFailed = true; return true; }
+    setTimeout(vaultPush, 1000 * VAULT.fails); }
+  return was !== VAULT.ok;
+}
+// Once the vault holds a verified copy, the old browser-side copies are no longer needed: they are removed to leave
+// localStorage room for the quick copy. Only after a write the vault confirmed, never before.
+function vaultSettle() {
+  try {
+    if (localStorage.getItem(KEY + '.vault') === '1') return;
+    for (const k of [KEY + '.bak', KEY + '.bak.date', SNAP]) localStorage.removeItem(k);
+    localStorage.setItem(KEY + '.vault', '1');
+  } catch (e) { /* best effort */ }
+}
+function vaultStats() { try { return VH ? JSON.parse(VH.vaultStats()) : null; } catch (e) { return null; } }
+function vaultPoints() { try { return VH ? JSON.parse(VH.vaultPoints()) : []; } catch (e) { return []; } }
+// A restore point, read and checked before anything is replaced.
+function vaultPoint(kind, name) {
+  try { const t = VH?.vaultPoint(kind, name); return t ? sanitize(JSON.parse(t)) : null; } catch (e) { return null; }
+}
+
+// ---------- the browser's second copy: IndexedDB ----------
+const IDBS = { db: null, ok: false, text: null, seq: 0, timer: null };
+function idbOpen() {
+  if (IDBS.db || typeof indexedDB === 'undefined') return Promise.resolve(IDBS.db);
+  return new Promise(res => {
+    try {
+      const rq = indexedDB.open('health-state', 1);
+      rq.onupgradeneeded = () => rq.result.createObjectStore('kv');
+      rq.onsuccess = () => { IDBS.db = rq.result; IDBS.ok = true; res(IDBS.db); };
+      rq.onerror = () => res(null);
+    } catch (e) { res(null); }
+  });
+}
+function idbQueue(text, seq) { IDBS.text = text; IDBS.seq = seq; clearTimeout(IDBS.timer); IDBS.timer = setTimeout(idbFlush, 800); }
+async function idbFlush() {
+  clearTimeout(IDBS.timer); IDBS.timer = null;
+  if (IDBS.text == null) return;
+  const db = await idbOpen(), text = IDBS.text, seq = IDBS.seq;
+  IDBS.text = null;
+  if (!db) { IDBS.ok = false; return; }
+  try { const tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put({ seq, text, at: Date.now() }, 'state'); tx.onerror = () => { IDBS.ok = false; }; } catch (e) { IDBS.ok = false; }
+}
+// On start in a browser: if IndexedDB has a newer copy than localStorage (localStorage was full or cleared), use it.
+async function idbNewer() {
+  if (VH) return null;
+  const db = await idbOpen();
+  if (!db) return null;
+  return new Promise(res => {
+    try {
+      const rq = db.transaction('kv').objectStore('kv').get('state');
+      rq.onsuccess = () => { const v = rq.result; if (!v || (v.seq || 0) <= (S.meta.seq || 0)) return res(null); try { res(sanitize(JSON.parse(v.text))); } catch (e) { res(null); } };
+      rq.onerror = () => res(null);
+    } catch (e) { res(null); }
+  });
+}
+// Once a day, before anything is written, keep a copy of the last good state (the browser only: the vault keeps its own).
 function dailyBackup() {
+  if (VH) return;
   try {
     const t = todayKey();
     if (!loadedMain || localStorage.getItem(KEY + '.bak.date') === t) return;
@@ -359,21 +451,28 @@ function setManual(stream, k, v) {
 }
 
 // ---------- snapshots: every destructive action can be undone ----------
-function snapshot(why) {
-  try { localStorage.setItem(SNAP, JSON.stringify({ at: Date.now(), why: str(why, 80), data: S })); return true; }
-  catch (e) { return false; }
+// In the app the copy is a file in the vault (no size limit); in a browser it is in localStorage.
+let snapCache;
+function snapPut(o) {
+  const t = JSON.stringify(o);
+  snapCache = undefined;
+  if (VH) { try { return VH.snapWrite(t) === true; } catch (e) { return false; } }
+  try { localStorage.setItem(SNAP, t); return true; } catch (e) { return false; }
 }
-function snapInfo() {
-  try { const s = JSON.parse(localStorage.getItem(SNAP) || 'null'); return s && num(s.at, 1e12, 1e13) ? { at: s.at, why: str(s.why, 80) } : null; }
-  catch (e) { return null; }
+function snapGet() {
+  if (snapCache !== undefined) return snapCache;
+  try { snapCache = JSON.parse((VH ? VH.snapRead() : localStorage.getItem(SNAP)) || 'null'); } catch (e) { snapCache = null; }
+  return snapCache;
 }
+function snapshot(why) { return snapPut({ at: Date.now(), why: str(why, 80), data: S }); }
+function snapInfo() { const s = snapGet(); return s && num(s.at, 1e12, 1e13) ? { at: s.at, why: str(s.why, 80) } : null; }
 function restoreSnapshot() {
   try {
-    const s = JSON.parse(localStorage.getItem(SNAP) || 'null');
+    const s = snapGet();
     if (!s || !obj(s.data)) return false;
-    const before = S;
-    S = sanitize(s.data); save();
-    localStorage.setItem(SNAP, JSON.stringify({ at: Date.now(), why: 'Before undo', data: before }));
+    const before = S, seq = S.meta.seq || 0;
+    S = sanitize(s.data); S.meta.seq = seq; save();
+    snapPut({ at: Date.now(), why: 'Before undo', data: before });
     return true;
   } catch (e) { return false; }
 }

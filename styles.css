@@ -1433,3 +1433,14 @@ html.still .wvchart .ln, html.still .wvspark path { animation: none; stroke-dash
 .calnudge { text-decoration: none; color: inherit; box-shadow: var(--shadow), var(--hi), inset 3px 0 0 var(--mid); }
 html.still .baplot circle, html.still .calsteps li { animation: none; }
 @media (prefers-reduced-motion: reduce) { .baplot circle, .calsteps li { animation: none; } }
+
+/* ---------- Backup and data ---------- */
+.jumps { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 0 6px; margin: 0 0 4px; }
+.jumps::-webkit-scrollbar { display: none; }
+.savedline { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 14px; font-weight: 550; color: var(--ink); }
+.savedline svg { width: 18px; height: 18px; stroke: var(--good); fill: none; stroke-width: 2.2; flex: none; }
+.savedline .bad { color: var(--bad); }
+.list.points .row, .setpage .list .row { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
+.list .row .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+button.sm { min-height: 36px; padding: 0 12px; font-size: 13px; }
+.setpage section[id] { scroll-margin-top: 72px; }
