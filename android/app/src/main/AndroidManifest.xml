@@ -93,6 +93,14 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_today_info" />
         </receiver>
 
+        <!-- The HRV widget: four weeks of morning checks against your normal range. -->
+        <receiver android:name=".HrvWidget" android:exported="false" android:label="@string/widget_hrv_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_hrv_info" />
+        </receiver>
+
         <!-- Health Connect shows this when you ask why the app wants access. -->
         <activity
             android:name=".PrivacyActivity"

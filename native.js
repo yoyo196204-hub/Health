@@ -128,11 +128,22 @@ NEV.resume = () => { batteryFreeAt = 0; rollDay(); strapAuto(); if (!zeppBack())
 NEV.pause = () => { remindPlan(); flushMirror(); widgetPush(); };
 // The home-screen widget (TodayWidget.kt) shows today's three rings and the kcal left. The page hands it plain
 // values when the app goes to the background and after each sync; the widget does no sums of its own.
+// The HRV widget (HrvWidget.kt): 28 mornings, the 7-day average under each, and the normal range. Only real
+// checks: a morning without one is left empty, never filled in.
+function hrvWidgetData() {
+  const days = range(28), V = hrvState(), last = Object.keys(S.hrv).sort().pop();
+  const pts = days.map(k => { const s = hrvState(k); return { v: S.hrv[k]?.rmssd ?? null, r: s.roll ?? null }; });
+  const stale = last && gapDays(last, todayKey()) > 3;
+  const line = !last ? 'No morning checks yet' : V.need ? `${plural(V.need, 'more morning')} to set your range` : !V.state ? 'Three checks in a week give the average'
+    : `${V.state === 'normal' ? 'Inside' : V.state === 'low' ? 'Below' : 'Above'} your range of ${Math.round(V.lo)}–${Math.round(V.hi)} ms${stale ? ` · last check ${dateLabel(last)}` : ''}`;
+  return { day: todayKey(), roll: V.roll ? Math.round(V.roll) : null, lo: V.lo ?? null, hi: V.hi ?? null, state: V.state || null, pts, line };
+}
 function widgetPush() {
   if (!NATIVE || typeof NATIVE.widget !== 'function') return;
   // Figures remembered from before midnight must not reach the widget as today's.
   if (typeof memoDay !== 'undefined' && memoDay !== todayKey()) memo.clear();
   try { nat('widget', JSON.stringify(widgetData())); } catch (e) { logError(e); }
+  if (typeof NATIVE.widgetHrv === 'function') try { nat('widgetHrv', JSON.stringify(hrvWidgetData())); } catch (e) { logError(e); }
 }
 // ---------- how fresh the watch data really is ----------
 // The newest moment any record from the watch app was written into Health Connect. That, not when this app last

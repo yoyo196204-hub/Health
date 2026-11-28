@@ -484,7 +484,11 @@ function sessions(k) {
     const H = hrProfile(), C = calibration(), fix = C.lineOn || C.exOn;
     const strap = (S.cardio[k] || []).map((c, i) => Object.assign({ src: c.m ? 'manual' : 'strap', i, kind: (KINDS.find(x => x[0] === c.kind) || KINDS[KINDS.length - 1])[1], t: c.t, dur: c.dur, avg: c.avg ?? null, max: c.max ?? null, z: c.z, eff: c.eff },
       c.m ? { load: null, noLoad: 'typed, no heart rate' } : c.tr ? trimpOf(c.tr.filter(Boolean).map(b => [b, 5]), H) : { load: null, noLoad: 'no heart-rate trace kept' }));
-    const watch = (S.ex[k] || []).filter(w => !strap.some(c => c.t && overlapMs(c.t, c.t + c.dur * 1000, w.s, w.e) > 0.5 * Math.min(c.dur * 1000, w.e - w.s))).map(w => {
+    // One session sent by two watch apps (Zepp and Gadgetbridge, or the watch and openGym) is counted once: of any two
+    // overlapping by more than half, the one with more heart rate is kept. The other stays stored, only not counted.
+    const exs = (S.ex[k] || []).slice().sort((a, b) => (b.og ? 1e9 : 0) + b.h.length - ((a.og ? 1e9 : 0) + a.h.length)), kept = [];
+    for (const w of exs) if (!kept.some(x => overlapMs(x.s, x.e, w.s, w.e) > 0.5 * Math.min(x.e - x.s, w.e - w.s))) kept.push(w);
+    const watch = kept.filter(w => !strap.some(c => c.t && overlapMs(c.t, c.t + c.dur * 1000, w.s, w.e) > 0.5 * Math.min(c.dur * 1000, w.e - w.s))).map(w => {
       const z = [0, 0, 0, 0], d = (w.e - w.s) / 1000;
       let sum = 0, secs = 0, max = 0;
       for (const [b, s] of w.h) { const c = watchFix(b, C); z[zoneOf(c, H)] += s; sum += c * s; secs += s; max = Math.max(max, c); }

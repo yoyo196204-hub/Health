@@ -433,6 +433,7 @@ function hrMorningDone() {
     hrEnd();
     if (me) { S.hrv[k] = cleanHrv(Object.assign(hrvRecord(m), { t: Date.now(), pos: S.settings.hrvPos, rr: rr.filter(x => x > 270 && x < 2200).slice(0, 600) })); save(); }
     buzz('done');
+    if (me && typeof widgetPush === 'function') setTimeout(widgetPush, 0);   // the HRV widget shows the new morning at once
     HR.result = { type: 'morning', ok: true, k, m, replaced: me && !!before, rid: rec?.id, who: WEAR.who };
   } else {
     const kept = recKeepFailed('morning');

@@ -29,6 +29,7 @@ class Bridge(private val a: MainActivity) {
 
     // The home-screen widget: today's figures, from the page
     @JavascriptInterface fun widget(json: String) { TodayWidget.push(a, json) }
+    @JavascriptInterface fun widgetHrv(json: String) { HrvWidget.push(a, json) }
 
     // Health Connect
     @JavascriptInterface fun hcStatus() = a.main.post { a.health.status() }
